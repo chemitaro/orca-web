@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+// テスト用の偽の orca。argv の最初の語で動きを変える。
+const [mode, ...rest] = process.argv.slice(2);
+switch (mode) {
+  case 'env':
+    process.stdout.write(JSON.stringify({ env: process.env, cwd: process.cwd() }));
+    break;
+  case 'sleep':
+    setTimeout(() => process.stdout.write('late'), Number(rest[0] ?? 5000));
+    break;
+  case 'echo':
+    process.stdout.write(JSON.stringify({ argv: rest }));
+    process.stderr.write('note');
+    break;
+  case 'fail':
+    process.stderr.write('boom');
+    process.exitCode = Number(rest[0] ?? 2);
+    break;
+  case 'stdout':
+    process.stdout.write(rest.join(' '));
+    process.exitCode = Number(process.env.FAKE_EXIT ?? 0);
+    break;
+  default:
+    process.stderr.write(`unknown mode ${mode}`);
+    process.exitCode = 64;
+}

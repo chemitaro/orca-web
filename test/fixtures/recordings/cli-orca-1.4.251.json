@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "kind": "cli",
+  "entries": [
+    {
+      "argv": ["--version"],
+      "exitCode": 0,
+      "stdout": "1.4.251\n",
+      "stderr": "",
+      "delayMs": 0
+    },
+    {
+      "argv": ["status", "--json"],
+      "exitCode": 0,
+      "stdout": "{\"id\": \"local-status\", \"ok\": true, \"result\": {\"target\": {\"kind\": \"local\"}, \"app\": {\"running\": true, \"pid\": 101, \"desktopWindowStatus\": \"available\"}, \"runtime\": {\"state\": \"ready\", \"reachable\": true, \"connectionState\": \"connected\", \"runtimeId\": \"uuid-1\", \"appVersion\": \"1.4.251\", \"capabilities\": [\"runtime.status.compat.v1\", \"session-tabs.authoritative-inventory.v1\", \"terminal.prompt-delivery.v1\", \"native-chat.text-attachment-read.v1\", \"orchestration.contract.v1\"]}, \"graph\": {\"state\": \"ready\"}}, \"_meta\": {\"runtimeId\": \"uuid-1\"}}",
+      "stderr": "",
+      "delayMs": 0
+    },
+    {
+      "argv": ["agent-context", "--json"],
+      "exitCode": 0,
+      "stdout": "{\"schemaVersion\": 1, \"commandCount\": 12, \"commands\": [{\"path\": [\"status\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\"], \"positionalArgs\": [], \"repeatableFlags\": []}, {\"path\": [\"agent-context\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\"], \"positionalArgs\": [], \"repeatableFlags\": []}, {\"path\": [\"repo\", \"list\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\"], \"positionalArgs\": [], \"repeatableFlags\": []}, {\"path\": [\"worktree\", \"list\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\", \"limit\"], \"positionalArgs\": [], \"repeatableFlags\": []}, {\"path\": [\"worktree\", \"ps\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\", \"limit\", \"agent-wait\"], \"positionalArgs\": [], \"repeatableFlags\": []}, {\"path\": [\"terminal\", \"list\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\", \"worktree\", \"limit\"], \"positionalArgs\": [], \"repeatableFlags\": []}, {\"path\": [\"terminal\", \"switch\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\", \"terminal\"], \"positionalArgs\": [], \"repeatableFlags\": []}, {\"path\": [\"terminal\", \"send\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\", \"terminal\", \"text\", \"enter\", \"interrupt\", \"wait-submit\", \"retry-request\"], \"positionalArgs\": [], \"repeatableFlags\": []}, {\"path\": [\"orchestration\", \"run-list\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\"], \"positionalArgs\": [], \"repeatableFlags\": []}, {\"path\": [\"orchestration\", \"task-list\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\", \"run\", \"full\"], \"positionalArgs\": [], \"repeatableFlags\": []}, {\"path\": [\"orchestration\", \"worker-list\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\", \"run\", \"full\"], \"positionalArgs\": [], \"repeatableFlags\": []}, {\"path\": [\"orchestration\", \"worker-show\"], \"aliases\": [], \"flags\": [\"help\", \"json\", \"pairing-code\", \"environment\", \"dispatch\", \"full\"], \"positionalArgs\": [], \"repeatableFlags\": []}]}",
+      "stderr": "",
+      "delayMs": 0
+    }
+  ]
+}
