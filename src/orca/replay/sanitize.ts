@@ -56,10 +56,22 @@ const SAFE_REMAINDER = /^[A-Za-z0-9._:/-]*$/;
 const MAX_ENUM_CHARS = 40;
 const IDENTIFIER_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const ID_PLACEHOLDER = '$ID';
+/** Orca の時刻の文字列（SQLite の `YYYY-MM-DD HH:MM:SS` と ISO 8601）。本文や ID を含まないので残す。 */
+const TIMESTAMP = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/;
 
 /** 仮名と短い列挙の値と区切りだけでできた文字列か。仮名にしていない ID、パス、自由な文は false。 */
 export function isSafeString(value: string): boolean {
-  if (value === '' || value === ID_PLACEHOLDER) return true;
+  if (value === '' || value === ID_PLACEHOLDER || TIMESTAMP.test(value)) return true;
+  if (value.startsWith('[')) {
+    // 仮名にした値だけの JSON の配列の文字列（Task の deps など）。
+    try {
+      const items: unknown = JSON.parse(value);
+      if (Array.isArray(items))
+        return items.every((item) => typeof item === 'string' && item !== value && isSafeString(item));
+    } catch {
+      // JSON でなければ、ほかの文と同じに調べる。
+    }
+  }
   if (value.includes('orca://pair')) return false;
   if (new RegExp(UUID.source, 'i').test(value)) return false;
   if (new RegExp(HEX.source).test(value)) return false;

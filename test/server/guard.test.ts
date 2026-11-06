@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { inspect } from 'node:util';
-import { loadConfig } from '../../src/server/config.ts';
-import { checkHost, checkSameOriginPost, checkToken, TokenStore } from '../../src/server/guard.ts';
+import { checkHost, checkSameOriginWrite, checkToken, TokenStore } from '../../src/server/guard.ts';
 
-const config = loadConfig({ ORCA_WEB_PORT: '8791', ORCA_WEB_TAILSCALE_IP: '100.64.1.2' });
+const hosts = new Set(['127.0.0.1:8791', 'localhost:8791', '100.64.1.2:8791']);
 
 const post = (headers: Record<string, string | undefined>) => ({
   method: 'POST',
@@ -20,36 +19,38 @@ const post = (headers: Record<string, string | undefined>) => ({
 const rejected = (r: { ok: boolean }, status: number, error: string) =>
   assert.deepEqual(r, { ok: false, status, error });
 
-test('checkHost は許す Host との完全一致だけを通す', () => {
-  for (const host of ['127.0.0.1:8791', '100.64.1.2:8791']) {
-    assert.deepEqual(checkHost({ headers: { host } }, config), { ok: true });
+test('checkHost は許す Host との完全一致だけを通し、ほかは 421', () => {
+  for (const host of ['127.0.0.1:8791', 'localhost:8791', '100.64.1.2:8791']) {
+    assert.deepEqual(checkHost({ headers: { host } }, hosts), { ok: true });
   }
   for (const host of [
-    'localhost:8791',
     '127.0.0.1',
     '127.0.0.1:8792',
     'evil.example:8791',
     '127.0.0.1:8791.evil',
+    'LOCALHOST:8791',
     '',
   ]) {
-    rejected(checkHost({ headers: { host } }, config), 403, 'host_rejected');
+    rejected(checkHost({ headers: { host } }, hosts), 421, 'misdirected_host');
   }
-  rejected(checkHost({ headers: {} }, config), 403, 'host_rejected');
+  rejected(checkHost({ headers: {} }, hosts), 421, 'misdirected_host');
 });
 
-test('checkSameOriginPost はそろった同じオリジンの JSON の POST を通す（Tailscale の Host でも）', () => {
-  assert.deepEqual(checkSameOriginPost(post({}), config), { ok: true });
-  assert.deepEqual(checkSameOriginPost(post({ 'content-type': 'application/json; charset=utf-8' }), config), {
+test('checkSameOriginWrite はそろった同じオリジンの JSON の書き込みを、決めた method だけで通す', () => {
+  assert.deepEqual(checkSameOriginWrite(post({}), 'POST'), { ok: true });
+  assert.deepEqual(checkSameOriginWrite({ ...post({}), method: 'PUT' }, 'PUT'), { ok: true });
+  assert.deepEqual(checkSameOriginWrite(post({ 'content-type': 'application/json; charset=utf-8' }), 'POST'), {
     ok: true,
   });
-  assert.deepEqual(checkSameOriginPost(post({ 'sec-fetch-site': undefined }), config), { ok: true });
-  assert.deepEqual(checkSameOriginPost(post({ host: '100.64.1.2:8791', origin: 'http://100.64.1.2:8791' }), config), {
+  assert.deepEqual(checkSameOriginWrite(post({ 'sec-fetch-site': undefined }), 'POST'), { ok: true });
+  assert.deepEqual(checkSameOriginWrite(post({ host: '100.64.1.2:8791', origin: 'http://100.64.1.2:8791' }), 'POST'), {
     ok: true,
   });
 });
 
-test('checkSameOriginPost は GET、JSON でない型、Origin の欠け・null・別の値、cross-site を拒む', () => {
-  rejected(checkSameOriginPost({ ...post({}), method: 'GET' }, config), 405, 'method_not_allowed');
+test('checkSameOriginWrite は違う method、JSON でない型、Origin の欠け・null・別の値、cross-site を拒む', () => {
+  rejected(checkSameOriginWrite({ ...post({}), method: 'GET' }, 'POST'), 405, 'method_not_allowed');
+  rejected(checkSameOriginWrite(post({}), 'PUT'), 405, 'method_not_allowed');
   for (const type of [
     undefined,
     'text/plain',
@@ -57,7 +58,7 @@ test('checkSameOriginPost は GET、JSON でない型、Origin の欠け・null�
     'multipart/form-data',
     'application/jsonx',
   ]) {
-    rejected(checkSameOriginPost(post({ 'content-type': type }), config), 415, 'unsupported_media_type');
+    rejected(checkSameOriginWrite(post({ 'content-type': type }), 'POST'), 415, 'unsupported_media_type');
   }
   for (const origin of [
     undefined,
@@ -65,13 +66,14 @@ test('checkSameOriginPost は GET、JSON でない型、Origin の欠け・null�
     'http://127.0.0.1:47800',
     'http://127.0.0.1:8792',
     'https://127.0.0.1:8791',
+    'http://localhost:8791',
     'http://100.64.1.2:8791',
     'http://evil.example',
   ]) {
-    rejected(checkSameOriginPost(post({ origin }), config), 403, 'origin_rejected');
+    rejected(checkSameOriginWrite(post({ origin }), 'POST'), 403, 'origin_rejected');
   }
   for (const site of ['cross-site', 'same-site', 'none']) {
-    rejected(checkSameOriginPost(post({ 'sec-fetch-site': site }), config), 403, 'origin_rejected');
+    rejected(checkSameOriginWrite(post({ 'sec-fetch-site': site }), 'POST'), 403, 'origin_rejected');
   }
 });
 

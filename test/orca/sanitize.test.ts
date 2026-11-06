@@ -46,6 +46,20 @@ test('Pseudonymizer は自由な文を text-N にし、同じ文は同じ仮名�
   assert.equal(p.value(1730000000000, 'updatedAt'), 1730000000000);
 });
 
+test('Pseudonymizer は Orca の時刻の文字列（SQLite と ISO 8601）を残し、時刻に似た文は残さない', () => {
+  const p = new Pseudonymizer();
+  assert.equal(p.value('2026-11-06 09:00:00', 'created_at'), '2026-11-06 09:00:00');
+  assert.equal(p.value('2026-11-06T09:00:00.123Z', 'observedAt'), '2026-11-06T09:00:00.123Z');
+  assert.match(String(p.value('2026-11-06 09:00:00 meeting notes', 'created_at')), /^text-\d+$/);
+});
+
+test('Pseudonymizer は、仮名にした値だけの JSON の配列の文字列（Task の deps）を残す', () => {
+  const p = new Pseudonymizer();
+  assert.equal(p.value('[]', 'deps'), '[]');
+  assert.equal(p.value('["task_6ab3c4d5e6f7"]', 'deps'), '["task_hex-1"]');
+  assert.match(String(p.value('["please fix the bug"]', 'deps')), /^text-\d+$/);
+});
+
 test('sanitizeRecording は秘密の項目を消し、stdout の JSON の中を仮名化し、stderr を自由な文にする', () => {
   const raw: CliRecording = {
     version: 1,

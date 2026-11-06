@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { isTerminal, parseTabsSnapshot } from '../orca/open-target.ts';
 import { wireOrca } from '../orca/wiring.ts';
-import { DEFAULT_ORCA_CLI } from '../server/config.ts';
+import { DEFAULT_ORCA_BIN } from '../server/config.ts';
 import { diffTabs, pickSameRepoTarget, tabKeys } from './live-open.ts';
 
 const SETTLE_MS = 2_000;
@@ -21,7 +21,7 @@ async function main(): Promise<void> {
   if (values.route !== undefined && values.route !== 'tab-activate' && values.route !== 'worktree-activate') {
     throw new Error('--route must be tab-activate or worktree-activate');
   }
-  const orca = wireOrca({ executable: process.env.ORCA_WEB_ORCA_CLI || DEFAULT_ORCA_CLI });
+  const orca = wireOrca({ executable: process.env.ORCA_BIN || DEFAULT_ORCA_BIN });
   const toplevel = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
   const picked = pickSameRepoTarget(await orca.readCli.json(['worktree', 'list']), toplevel, selector);
   if (!picked.ok) throw new Error(`refused: ${picked.reason}`);

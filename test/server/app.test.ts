@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
-import { createServer, type IncomingMessage, request, type ServerResponse } from 'node:http';
+import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import type { OpenOutcome, OpenRequest } from '../../src/orca/open.ts';
-import { createAppHandler } from '../../src/server/app.ts';
-import { loadConfig } from '../../src/server/config.ts';
+import { createAppServer } from '../../src/server/app.ts';
 import { TokenStore } from '../../src/server/guard.ts';
 
 interface Harness {
@@ -40,21 +39,18 @@ async function withApp(
     worktreeId: r.worktree,
   }),
 ): Promise<void> {
-  let handler: (req: IncomingMessage, res: ServerResponse) => void = () => {};
-  const server = createServer((req, res) => handler(req, res));
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address() as AddressInfo;
-  const config = loadConfig({ ORCA_WEB_PORT: String(port), ORCA_WEB_SPECDOCK_ORIGINS: 'http://127.0.0.1:47800' });
   const tokens = new TokenStore();
   const opened: OpenRequest[] = [];
-  handler = createAppHandler({
-    config,
+  const server = createAppServer({
     tokens,
+    readOrigins: ['http://127.0.0.1:47800'],
     open: async (r) => {
       opened.push(r);
       return open(r);
     },
   });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
   const host = `127.0.0.1:${port}`;
   const send = ({ method = 'GET', path, headers = {}, body }: SendOptions): Promise<Reply> =>
     new Promise((resolve, reject) => {
@@ -121,7 +117,7 @@ test('URL として不正な request-target は 400 を返し、サーバーは�
   });
 });
 
-test('すべての道で、許していない Host と Host の欠けを 403 で拒む（DNS rebinding）', async () => {
+test('すべての道で、許していない Host と Host の欠けを拒む（DNS rebinding）', async () => {
   await withApp(async (h) => {
     for (const path of [
       '/api/health',
@@ -131,14 +127,19 @@ test('すべての道で、許していない Host と Host の欠けを 403 で
       '/api/open',
       '/nope',
     ]) {
-      for (const host of [`localhost:${h.port}`, `evil.example:${h.port}`, '127.0.0.1', `127.0.0.1:${h.port}.evil`]) {
+      for (const host of [
+        `evil.example:${h.port}`,
+        '127.0.0.1',
+        `127.0.0.1:${h.port + 1}`,
+        `127.0.0.1:${h.port}.evil`,
+      ]) {
         const res = await h.send({
           method: path.startsWith('/api/') && path !== '/api/health' ? 'POST' : 'GET',
           path,
           headers: { ...writeHeaders(h), host },
         });
-        assert.equal(res.status, 403, `${path} ${host}`);
-        assert.equal(res.json().error, 'host_rejected');
+        assert.equal(res.status, 421, `${path} ${host}`);
+        assert.equal(res.json().error, 'misdirected_host');
       }
     }
     // Host のない HTTP/1.1 の要求は、Node が道の前に 400 で拒む。
@@ -403,4 +404,50 @@ test('部品のファイルは固定の対応だけで返り、ほかのパス�
     }
     assert.equal((await h.send({ method: 'POST', path: '/embed/open-button' })).status, 405);
   });
+});
+
+test('状態の画面も frame-ancestors に SpecDock のオリジンだけを持ち、SpecDock のオリジンがなければ none', async () => {
+  await withApp(async (h) => {
+    const index = await h.send({ path: '/' });
+    assert.equal(index.status, 200);
+    assert.match(String(index.headers['content-security-policy']), /frame-ancestors http:\/\/127\.0\.0\.1:47800(;|$)/);
+    assert.equal(index.headers['referrer-policy'], 'same-origin');
+    const writer = await h.send({ path: '/write.js' });
+    assert.equal(writer.status, 200);
+    assert.equal(writer.headers['content-type'], 'text/javascript; charset=utf-8');
+  });
+  const server = createAppServer({ readOrigins: [] });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  try {
+    for (const path of ['/', '/embed/open-button']) {
+      const res = await fetch(`http://127.0.0.1:${port}${path}`);
+      assert.match(res.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'(;|$)/, path);
+      await res.arrayBuffer();
+    }
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test('開く処理がないサーバーでは、そろった /api/open は 503 で何もしない', async () => {
+  const server = createAppServer({});
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  const origin = `http://127.0.0.1:${port}`;
+  const headers = { origin, 'content-type': 'application/json' };
+  try {
+    const t = (await (await fetch(`${origin}/api/token`, { method: 'POST', headers, body: '{}' })).json()) as {
+      token: string;
+    };
+    const res = await fetch(`${origin}/api/open`, {
+      method: 'POST',
+      headers: { ...headers, 'x-orca-web-token': t.token },
+      body: JSON.stringify({ worktree: 'w' }),
+    });
+    assert.equal(res.status, 503);
+    assert.deepEqual(await res.json(), { ok: false, error: 'open_unavailable' });
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });

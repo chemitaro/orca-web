@@ -3,7 +3,6 @@
 import { randomBytes } from 'node:crypto';
 import type { IncomingHttpHeaders } from 'node:http';
 import { inspect } from 'node:util';
-import type { AppConfig } from './config.ts';
 
 export interface RequestLike {
   method?: string | undefined;
@@ -17,10 +16,10 @@ const reject = (status: number, error: string): GuardResult => ({ ok: false, sta
 
 export const TOKEN_HEADER = 'x-orca-web-token';
 
-/** Host の見出しが、許す Host（`<アドレス>:<port>`）のどれかと完全一致するか。すべての要求に当てる。 */
-export function checkHost(req: RequestLike, config: Pick<AppConfig, 'allowedHosts'>): GuardResult {
+/** Host の見出しが、許す Host（`<名前>:<port>`）のどれかと完全一致するか。道の振り分けの前に、すべての要求に当てる。 */
+export function checkHost(req: RequestLike, allowedHosts: ReadonlySet<string>): GuardResult {
   const host = req.headers.host;
-  return typeof host === 'string' && config.allowedHosts.includes(host) ? OK : reject(403, 'host_rejected');
+  return typeof host === 'string' && allowedHosts.has(host) ? OK : reject(421, 'misdirected_host');
 }
 
 function mediaType(value: string | undefined): string {
@@ -28,17 +27,15 @@ function mediaType(value: string | undefined): string {
 }
 
 /**
- * 同じオリジンからの JSON の POST か。Origin は要求の Host の orca-web 自身のオリジン（`http://<Host>`）と完全一致を求める。
+ * 同じオリジンからの JSON の書き込みか。method が決めたもの、Content-Type が JSON、
+ * Origin が要求の Host の orca-web 自身のオリジン（`http://<Host>`）と完全一致、Sec-Fetch-Site があれば same-origin。
  * checkHost を通った後に呼ぶ。
  */
-export function checkSameOriginPost(req: RequestLike, config: Pick<AppConfig, 'allowedHosts'>): GuardResult {
-  if (req.method !== 'POST') return reject(405, 'method_not_allowed');
+export function checkSameOriginWrite(req: RequestLike, method: 'POST' | 'PUT'): GuardResult {
+  if (req.method !== method) return reject(405, 'method_not_allowed');
   if (mediaType(req.headers['content-type']) !== 'application/json') return reject(415, 'unsupported_media_type');
   const host = req.headers.host;
-  const origin = req.headers.origin;
-  if (typeof host !== 'string' || !config.allowedHosts.includes(host) || origin !== `http://${host}`) {
-    return reject(403, 'origin_rejected');
-  }
+  if (typeof host !== 'string' || req.headers.origin !== `http://${host}`) return reject(403, 'origin_rejected');
   const site = req.headers['sec-fetch-site'];
   if (site !== undefined && site !== 'same-origin') return reject(403, 'origin_rejected');
   return OK;
