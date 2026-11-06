@@ -215,11 +215,47 @@ test('summarizeLive はモデルと推論の有無、スリープの見え方、
   assert.equal(s.linking.psAgentsMatchedToTab, 3);
   assert.equal(s.linking.agentStatusPaneKeyAgrees, 2);
   assert.deepEqual(s.linking.providerSessions, { present: 2, distinct: 2, shared: 0 });
-  assert.deepEqual(s.transcript, { attempted: 2, ok: 1, withMessages: 1, failedByCode: { session_not_found: 1 } });
+  assert.deepEqual(s.transcript, {
+    attempted: 2,
+    ok: 1,
+    withMessages: 1,
+    okByAgent: { claude: 1 },
+    failedByCode: { session_not_found: 1 },
+  });
 });
 
 test('summarizeLive の出力に、本文、題名、パス、ID が出ない', async () => {
   const { observation } = await collect();
   const text = JSON.stringify(summarizeLive(observation));
   for (const leak of ['text-', 'uuid-', '/p-', 'hex-', 'term_']) assert.ok(!text.includes(leak), leak);
+});
+
+test('agentType も launchAgent もないタブの会話は読まない（provider のキーの名前をエージェント名に使わない）', async () => {
+  const unknownTab = {
+    type: 'terminal',
+    id: 'uuid-50',
+    parentTabId: 'uuid-50',
+    leafId: 'uuid-51',
+    status: 'ready',
+    terminal: 'term_uuid-52',
+    agentStatus: { state: 'done', paneKey: 'uuid-50:uuid-51', providerSession: { key: 'session_id', id: 'uuid-53' } },
+  };
+  const rec: RpcRecording = {
+    version: 1,
+    kind: 'rpc',
+    exchanges: [{ method: 'session.tabs.list', chunks: [line({ worktree: WT1, tabs: [unknownTab] })], end: 'close' }],
+  };
+  const cliRec: CliRecording = {
+    ...cli,
+    entries: cli.entries.map((e) =>
+      e.argv[0] === 'worktree' && e.argv[1] === 'list' ? { ...e, stdout: ok({ worktrees: [{ id: WT1 }] }) } : e,
+    ),
+  };
+  const transport = new ReplayRpcTransport(rec);
+  const o = await collectLive({
+    cli: new ReadOnlyOrcaCli(new OrcaCli(new ReplayCliRunner(cliRec))),
+    rpc: new ReadOnlyRpc(transport),
+  });
+  assert.deepEqual(o.transcripts, []);
+  assert.ok(summarizeLive(o).modelEffort.unknown);
 });

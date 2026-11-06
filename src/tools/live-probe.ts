@@ -149,7 +149,7 @@ export async function collectLive(deps: CollectDeps): Promise<LiveObservation> {
   const seen = new Set<string>();
   for (const tab of tabs.flatMap((t) => t.tabs)) {
     const provider = tab.agent?.provider;
-    const agent = tab.agent?.agentType ?? provider?.key ?? null;
+    const agent = tab.agent?.agentType ?? tab.launchAgent ?? null;
     if (!provider?.id || !agent || seen.has(`${agent}:${provider.id}`)) continue;
     seen.add(`${agent}:${provider.id}`);
     const params: Rec = { agent, sessionId: provider.id };
@@ -226,7 +226,7 @@ export function summarizeLive(o: LiveObservation) {
   for (const { tab } of terminalTabs) {
     const a = tab.agent;
     if (!a) continue;
-    const name = a.agentType ?? 'unknown';
+    const name = a.agentType ?? tab.launchAgent ?? 'unknown';
     const m = modelEffort[name] ?? {
       agentTabs: 0,
       workers: 0,
@@ -308,7 +308,11 @@ export function summarizeLive(o: LiveObservation) {
 
   // 4. 会話の読み取り
   const failedByCode: Record<string, number> = {};
-  for (const t of o.transcripts) if (!t.ok) bump(failedByCode, t.code ?? 'unknown');
+  const okByAgent: Record<string, number> = {};
+  for (const t of o.transcripts) {
+    if (t.ok) bump(okByAgent, t.agent);
+    else bump(failedByCode, t.code ?? 'unknown');
+  }
 
   return {
     counts: {
@@ -343,6 +347,7 @@ export function summarizeLive(o: LiveObservation) {
       attempted: o.transcripts.length,
       ok: o.transcripts.filter((t) => t.ok).length,
       withMessages: o.transcripts.filter((t) => t.ok && t.messageCount > 0).length,
+      okByAgent,
       failedByCode,
     },
   };
