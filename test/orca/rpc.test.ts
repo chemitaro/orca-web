@@ -84,6 +84,60 @@ test('分割された行と keepalive の行から、正しい結果を得る', 
   }
 });
 
+/** 要求を受けたら、間隔ごとに keepalive の行を送り、最後に応答を返すソケット。keepalive なしなら黙って待つ。 */
+async function slowServer(sub: string, options: { keepaliveEveryMs: number | null; answerAfterMs: number }) {
+  const { createServer } = await import('node:net');
+  const socketPath = path.join(sub, 'k.sock');
+  const server = createServer((socket) => {
+    socket.setEncoding('utf8');
+    socket.once('data', (line: string) => {
+      const { id } = JSON.parse(line.split('\n')[0] ?? '{}') as { id: string };
+      const timer =
+        options.keepaliveEveryMs === null
+          ? null
+          : setInterval(() => socket.write('{"_keepalive":true}\n'), options.keepaliveEveryMs);
+      setTimeout(() => {
+        if (timer) clearInterval(timer);
+        if (!socket.destroyed) socket.end(ok({ late: true }).split('$ID').join(id));
+      }, options.answerAfterMs);
+      socket.on('close', () => {
+        if (timer) clearInterval(timer);
+      });
+    });
+    socket.on('error', () => socket.destroy());
+  });
+  await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+  await writeFile(
+    path.join(sub, 'orca-runtime.json'),
+    JSON.stringify({ runtimeId: 'rt-1', transports: [{ kind: 'unix', endpoint: socketPath }], authToken: TOKEN }),
+  );
+  return server;
+}
+
+test('keepalive の行は時間切れを延ばし、時間切れより遅い応答も受ける（FQG-002）', async () => {
+  const sub = await mkdtemp(path.join(dir, 'k-'));
+  const server = await slowServer(sub, { keepaliveEveryMs: 60, answerAfterMs: 450 });
+  try {
+    const rpc = new UnixSocketRpc(new RuntimeLocator({ userDataDir: sub }), { timeoutMs: 200 });
+    const outcome = await rpc.call('session.tabs.listAll', null);
+    assert.deepEqual(outcome, { ok: true, result: { late: true }, runtimeId: 'rt-1' });
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test('keepalive がなければ、同じ遅い応答は時間切れになる（FQG-002 の対照）', async () => {
+  const sub = await mkdtemp(path.join(dir, 'k-'));
+  const server = await slowServer(sub, { keepaliveEveryMs: null, answerAfterMs: 450 });
+  try {
+    const rpc = new UnixSocketRpc(new RuntimeLocator({ userDataDir: sub }), { timeoutMs: 200 });
+    const outcome = await rpc.call('session.tabs.listAll', null);
+    assert.equal(!outcome.ok && outcome.kind, 'timeout');
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
 test('ok: false の応答は orca-error と Orca の code で返す（method_not_found）', async () => {
   const frame = { id: '$ID', ok: false, error: { code: 'method_not_found', message: 'Unknown method: x' }, _meta: {} };
   const { server, rpc } = await setup([

@@ -62,6 +62,17 @@ function raw(
   });
 }
 
+/** 同じオリジンから書き込みの短期のトークンを得る（画面と同じ手順）。 */
+async function writeToken(base: string): Promise<string> {
+  const res = await fetch(`${base}/api/token`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: base },
+    body: '{}',
+  });
+  assert.equal(res.status, 200);
+  return ((await res.json()) as { token: string }).token;
+}
+
 async function fixturePoller(): Promise<StatePoller> {
   return new StatePoller({ reader: await staticReader(), capabilities: async () => report(), now: () => ms(40) });
 }
@@ -146,7 +157,7 @@ test('GET /api/fields が項目の一覧と選択を返し、PUT で保存した
       assert.deepEqual(body.settings, { source: 'default', error: null });
       const put = await fetch(`${base}/api/settings/fields`, {
         method: 'PUT',
-        headers: { 'content-type': 'application/json', origin: base },
+        headers: { 'content-type': 'application/json', origin: base, 'x-orca-web-token': await writeToken(base) },
         body: JSON.stringify({ selected: ['agent.model', 'worktree.branch'] }),
       });
       assert.equal(put.status, 200);
@@ -164,10 +175,11 @@ test('GET /api/fields が項目の一覧と選択を返し、PUT で保存した
 test('PUT は知らない識別子、重複、JSON でない本文、大きすぎる本文を 400 で拒み、ファイルは変わらない', async () => {
   await withSettings(async (settings, file) => {
     await withServer({ settings }, async (base) => {
+      const token = await writeToken(base);
       const put = (body: string) =>
         fetch(`${base}/api/settings/fields`, {
           method: 'PUT',
-          headers: { 'content-type': 'application/json', origin: base },
+          headers: { 'content-type': 'application/json', origin: base, 'x-orca-web-token': token },
           body,
         });
       for (const body of [
@@ -187,7 +199,7 @@ test('PUT は知らない識別子、重複、JSON でない本文、大きす�
   });
 });
 
-test('PUT は Origin がない、別のオリジン（SpecDock も）、JSON でない Content-Type、許していない Host を拒む', async () => {
+test('PUT は Origin がない、別のオリジン（SpecDock も）、JSON でない Content-Type、許していない Host、トークンのない要求を拒む', async () => {
   await withSettings(async (settings, file) => {
     await withServer({ settings, readOrigins: [SPECDOCK] }, async (base, port) => {
       const body = JSON.stringify({ selected: ['agent.model'] });
@@ -197,6 +209,8 @@ test('PUT は Origin がない、別のオリジン（SpecDock も）、JSON で
         [{ 'content-type': 'application/json', origin: 'http://evil.example' }, 403],
         [{ 'content-type': 'text/plain', origin: base }, 415],
         [{ 'content-type': 'application/json', origin: 'http://evil.example', host: 'evil.example' }, 421],
+        [{ 'content-type': 'application/json', origin: base }, 401],
+        [{ 'content-type': 'application/json', origin: base, 'x-orca-web-token': 'x'.repeat(43) }, 401],
       ];
       for (const [headers, status] of cases) {
         const res = await raw(port, { method: 'PUT', path: '/api/settings/fields', headers, body });
@@ -219,7 +233,7 @@ test('保存に失敗したら 500 と理由を返し、選択は変わらず、
   await withServer({ settings }, async (base) => {
     const res = await fetch(`${base}/api/settings/fields`, {
       method: 'PUT',
-      headers: { 'content-type': 'application/json', origin: base },
+      headers: { 'content-type': 'application/json', origin: base, 'x-orca-web-token': await writeToken(base) },
       body: JSON.stringify({ selected: ['agent.model'] }),
     });
     assert.equal(res.status, 500);
@@ -240,7 +254,7 @@ test('部品のない口は 503、知らないメソッドは 405', async () => 
   });
 });
 
-test('静的な画面の口は表の4つのファイルだけを配り、ほかのパスは 404', async () => {
+test('静的な画面の口は表のファイルだけを配り、ほかのパスは 404', async () => {
   await withServer({}, async (base, port) => {
     const index = await fetch(`${base}/`);
     assert.equal(index.status, 200);

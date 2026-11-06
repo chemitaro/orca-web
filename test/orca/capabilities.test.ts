@@ -159,6 +159,21 @@ test('runtime の ID が食い違うと、書き込みの機能が使えず、�
   assert.equal(report.features.readTabs.available, true);
 });
 
+test('RPC の応答の _meta.runtimeId だけが食い違っても、書き込みの機能が使えない（FQG-001）', async () => {
+  const rpc = editRpc((method, frame) => {
+    if (method === 'session.tabs.listAll') frame._meta = { runtimeId: 'uuid-other' };
+  });
+  const { report } = await probe(undefined, rpc, 'uuid-1');
+  assert.equal(report.runtimeId, 'uuid-1');
+  assert.equal(report.runtimeIdConsistent, false);
+  assert.ok(report.features.openExistingTab.missing.includes('runtime-id:consistent'));
+  assert.ok(report.features.sendGuarded.missing.includes('runtime-id:consistent'));
+  assert.equal(report.features.readTabs.available, true);
+
+  const { report: same } = await probe(undefined, undefined, 'uuid-1');
+  assert.equal(same.runtimeIdConsistent, true);
+});
+
 test('Orca が動いていないとき、connection が unreachable で、runtime を要る機能が理由つきで使えない', async () => {
   const cli = load<CliRecording>('cli-orca-1.4.251.json');
   const status = cli.entries.find((e) => e.argv[0] === 'status');

@@ -1,8 +1,11 @@
 // 状態の画面。/api/fields と /api/state を読み、選んだ項目だけを表に描く。5秒ごとに /api/state を読み直す。
 // 文字はすべて textContent で入れる（Orca の題名などは信頼しないデータ）。
 import { buildView, MISSING_LABELS } from './view.js';
+import { createWriter } from './write.js';
 
 const POLL_MS = 5_000;
+/** 書き込み（項目の選択の保存）は、同じオリジンの短期のトークンで送る。 */
+const writer = createWriter();
 
 const els = {
   status: document.querySelector('#status'),
@@ -147,13 +150,8 @@ els.save.addEventListener('click', async () => {
   const chosen = [...els.fieldList.querySelectorAll('input[type=checkbox]:checked')].map((b) => b.value);
   els.saveStatus.textContent = '保存中…';
   try {
-    const res = await fetch('/api/settings/fields', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ selected: chosen }),
-    });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.message ?? body.error ?? String(res.status));
+    const { status, body } = await writer.send('/api/settings/fields', 'PUT', { selected: chosen });
+    if (status !== 200) throw new Error(body.message ?? body.error ?? String(status));
     selected = body.selected;
     els.saveStatus.textContent = '保存しました';
     render();
