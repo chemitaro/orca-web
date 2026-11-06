@@ -209,3 +209,20 @@ test('CLI の誤りと形の違いは、種類と短い文の誤りになる', a
   const show = await r.workerLaunch('ctx_hex-9');
   assert.deepEqual(!show.ok && show.error, { kind: 'orca-error', message: 'not_found: no such dispatch' });
 });
+
+test('JSON でない stdout は、取得元の誤りの文に出ない（FQG-001）', async () => {
+  const leak = 'PRIVATE raw orca output';
+  const rec: CliRecording = {
+    version: 1,
+    kind: 'cli',
+    entries: [
+      { argv: ['repo', 'list', '--json'], exitCode: 0, stdout: leak, stderr: '', delayMs: 0 },
+      { argv: ['worktree', 'list', '--limit', '10000', '--json'], exitCode: 1, stdout: leak, stderr: '', delayMs: 0 },
+    ],
+  };
+  const { reader: r } = reader(rec);
+  const repos = await r.repos();
+  const wts = await r.worktrees();
+  assert.deepEqual(!repos.ok && repos.error, { kind: 'invalid-json', message: 'stdout is not JSON (23 bytes)' });
+  assert.deepEqual(!wts.ok && wts.error, { kind: 'exit-nonzero', message: 'exited with code 1' });
+});

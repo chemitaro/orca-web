@@ -24,6 +24,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** JSON でない stdout の文。中身は Orca の生の出力なので、誤りの文に入れない（長さだけ）。 */
+const notJson = (r: CliResult): string => `stdout is not JSON (${Buffer.byteLength(r.stdout)} bytes)`;
+
+/** 非ゼロの終了の文。Orca の誤りの説明として stderr だけを使い、stdout は使わない。 */
+const nonZero = (r: CliResult): string => clip(r.stderr) || `exited with code ${r.exitCode}`;
+
 function processFailure(r: CliResult): CliOutcome<never> | null {
   if (r.timedOut) return { ok: false, kind: 'timeout', message: `timed out after ${r.durationMs}ms` };
   if (r.spawnError !== undefined) return { ok: false, kind: 'spawn-failed', message: clip(r.spawnError) };
@@ -53,10 +59,8 @@ export class OrcaCli {
     try {
       parsed = JSON.parse(r.stdout);
     } catch {
-      if (r.exitCode !== 0) {
-        return { ok: false, kind: 'exit-nonzero', exitCode: r.exitCode, message: clip(r.stderr || r.stdout) };
-      }
-      return { ok: false, kind: 'invalid-json', exitCode: r.exitCode, message: clip(r.stdout) };
+      if (r.exitCode !== 0) return { ok: false, kind: 'exit-nonzero', exitCode: r.exitCode, message: nonZero(r) };
+      return { ok: false, kind: 'invalid-json', exitCode: r.exitCode, message: notJson(r) };
     }
     if (!isRecord(parsed) || typeof parsed.ok !== 'boolean') {
       return { ok: false, kind: 'invalid-json', exitCode: r.exitCode, message: 'stdout is not an Orca JSON envelope' };
@@ -73,7 +77,7 @@ export class OrcaCli {
       return outcome;
     }
     if (r.exitCode !== 0) {
-      return { ok: false, kind: 'exit-nonzero', exitCode: r.exitCode, message: clip(r.stderr || 'non-zero exit') };
+      return { ok: false, kind: 'exit-nonzero', exitCode: r.exitCode, message: nonZero(r) };
     }
     return { ok: true, result: parsed.result as T, durationMs: r.durationMs };
   }
@@ -83,13 +87,11 @@ export class OrcaCli {
     const r = await this.#run([...args, '--json']);
     const failed = processFailure(r);
     if (failed) return failed;
-    if (r.exitCode !== 0) {
-      return { ok: false, kind: 'exit-nonzero', exitCode: r.exitCode, message: clip(r.stderr || r.stdout) };
-    }
+    if (r.exitCode !== 0) return { ok: false, kind: 'exit-nonzero', exitCode: r.exitCode, message: nonZero(r) };
     try {
       return { ok: true, result: JSON.parse(r.stdout) as T, durationMs: r.durationMs };
     } catch {
-      return { ok: false, kind: 'invalid-json', exitCode: r.exitCode, message: clip(r.stdout) };
+      return { ok: false, kind: 'invalid-json', exitCode: r.exitCode, message: notJson(r) };
     }
   }
 
@@ -98,9 +100,7 @@ export class OrcaCli {
     const r = await this.#run(['--version']);
     const failed = processFailure(r);
     if (failed) return failed;
-    if (r.exitCode !== 0) {
-      return { ok: false, kind: 'exit-nonzero', exitCode: r.exitCode, message: clip(r.stderr || r.stdout) };
-    }
+    if (r.exitCode !== 0) return { ok: false, kind: 'exit-nonzero', exitCode: r.exitCode, message: nonZero(r) };
     const line = r.stdout.split('\n')[0]?.trim() ?? '';
     if (!line) return { ok: false, kind: 'invalid-json', exitCode: r.exitCode, message: 'empty version output' };
     return { ok: true, result: line, durationMs: r.durationMs };

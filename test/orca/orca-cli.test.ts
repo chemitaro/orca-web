@@ -112,3 +112,25 @@ test('出力の超過は output-too-large で返す', async () => {
   const outcome = await new OrcaCli(runnerReturning({ exitCode: null, outputOverflow: true })).json(['status']);
   assert.equal(!outcome.ok && outcome.kind, 'output-too-large');
 });
+
+test('誤りの文に Orca の生の stdout を入れない（json・document・version）', async () => {
+  const leak = 'PRIVATE stdout line with /Users/someone/secret-plan';
+  const cases = [
+    await new OrcaCli(runnerReturning({ stdout: leak })).json(['status']),
+    await new OrcaCli(runnerReturning({ exitCode: 3, stdout: leak })).json(['status']),
+    await new OrcaCli(runnerReturning({ stdout: leak })).document(['agent-context']),
+    await new OrcaCli(runnerReturning({ exitCode: 3, stdout: leak })).document(['agent-context']),
+    await new OrcaCli(runnerReturning({ exitCode: 3, stdout: leak })).version(),
+  ];
+  for (const outcome of cases) {
+    assert.equal(outcome.ok, false);
+    assert.ok(!outcome.ok && !outcome.message.includes('PRIVATE'), !outcome.ok ? outcome.message : '');
+  }
+  const [invalid, nonzero] = cases;
+  assert.equal(!invalid?.ok && invalid?.message, `stdout is not JSON (${Buffer.byteLength(leak)} bytes)`);
+  assert.equal(!nonzero?.ok && nonzero?.message, 'exited with code 3');
+  const withStderr = await new OrcaCli(runnerReturning({ exitCode: 3, stdout: leak, stderr: 'bad flag' })).json([
+    'status',
+  ]);
+  assert.equal(!withStderr.ok && withStderr.message, 'bad flag', 'stderr は Orca の誤りの説明として使う');
+});

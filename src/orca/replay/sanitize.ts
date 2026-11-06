@@ -54,20 +54,29 @@ const PSEUDONYM = /^(?:uuid|hex|p|text)-\d+$/;
 const PSEUDONYM_ANY = /(?:uuid|hex|p|text)-\d+/g;
 const SAFE_REMAINDER = /^[A-Za-z0-9._:/-]*$/;
 const MAX_ENUM_CHARS = 40;
+/** 配列の要素の ID で、仮名を除いた残り（`task_` などの接頭辞）の長さの上限。 */
+const MAX_ID_REMAINDER_CHARS = 16;
 const IDENTIFIER_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const ID_PLACEHOLDER = '$ID';
 /** Orca の時刻の文字列（SQLite の `YYYY-MM-DD HH:MM:SS` と ISO 8601）。本文や ID を含まないので残す。 */
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/;
 
+/** 仮名を1つ以上含み、仮名を除いた残りが短い区切りの文字だけの文字列（`task_hex-1` など）。 */
+function isPseudonymizedId(item: unknown): boolean {
+  if (typeof item !== 'string' || !new RegExp(PSEUDONYM_ANY.source).test(item)) return false;
+  const remainder = item.replace(PSEUDONYM_ANY, '');
+  return remainder.length <= MAX_ID_REMAINDER_CHARS && SAFE_REMAINDER.test(remainder);
+}
+
 /** 仮名と短い列挙の値と区切りだけでできた文字列か。仮名にしていない ID、パス、自由な文は false。 */
 export function isSafeString(value: string): boolean {
   if (value === '' || value === ID_PLACEHOLDER || TIMESTAMP.test(value)) return true;
   if (value.startsWith('[')) {
-    // 仮名にした値だけの JSON の配列の文字列（Task の deps など）。
+    // 仮名にした値だけの JSON の配列の文字列（Task の deps など）。各要素は仮名を含む短い ID に限る。
+    // 短い語の並び（["fix","the","bug"]）は、文を語に分けたものでありうるので、ここでは安全としない。
     try {
       const items: unknown = JSON.parse(value);
-      if (Array.isArray(items))
-        return items.every((item) => typeof item === 'string' && item !== value && isSafeString(item));
+      if (Array.isArray(items) && items.every(isPseudonymizedId)) return true;
     } catch {
       // JSON でなければ、ほかの文と同じに調べる。
     }

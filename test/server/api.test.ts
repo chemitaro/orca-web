@@ -296,3 +296,27 @@ test('loadConfig は ORCA_WEB_READ_ORIGINS で許すオリジンを変え、不�
   assert.throws(() => loadConfig({ PORT: 'x' }), /PORT/);
   assert.equal(loadConfig({ ORCA_WEB_SETTINGS_FILE: '/tmp/x.json' }).settingsFile, '/tmp/x.json');
 });
+
+test('GET /api/state だけが見る人を知らせる（noteViewer）。/api/fields、preflight、拒んだ Origin では知らせない（FQG-003）', async () => {
+  const doc = await (await fixturePoller()).snapshot();
+  let viewers = 0;
+  const poller = {
+    noteViewer: () => {
+      viewers += 1;
+    },
+    snapshot: async () => doc,
+  };
+  await withSettings(async (settings) => {
+    await withServer({ poller, settings, readOrigins: [SPECDOCK] }, async (base) => {
+      assert.equal((await fetch(`${base}/api/state`)).status, 200);
+      assert.equal(viewers, 1);
+      assert.equal((await fetch(`${base}/api/state`, { headers: { origin: SPECDOCK } })).status, 200);
+      assert.equal(viewers, 2);
+      assert.equal((await fetch(`${base}/api/fields`)).status, 200);
+      const preflight = await fetch(`${base}/api/state`, { method: 'OPTIONS', headers: { origin: SPECDOCK } });
+      assert.equal(preflight.status, 204);
+      assert.equal((await fetch(`${base}/api/state`, { headers: { origin: 'http://evil.example' } })).status, 403);
+      assert.equal(viewers, 2);
+    });
+  });
+});

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import type { CliRecording, Recording, RpcRecording } from '../../src/orca/replay/recording.ts';
-import { assertRecordingSafe, Pseudonymizer, sanitizeRecording } from '../../src/orca/replay/sanitize.ts';
+import { assertRecordingSafe, isSafeString, Pseudonymizer, sanitizeRecording } from '../../src/orca/replay/sanitize.ts';
 
 const HOME = '/Users/someone';
 const U1 = '0b9c1f2e-1111-4a2b-8c3d-aaaaaaaaaaaa';
@@ -182,5 +182,15 @@ test('手で書いた fixture の録画は、すべて assertRecordingSafe を�
   for (const file of files) {
     const recording = JSON.parse(await readFile(new URL(file, dir), 'utf8')) as Recording;
     assert.doesNotThrow(() => assertRecordingSafe(recording), file);
+  }
+});
+
+test('JSON の配列の規則は、仮名を含む要素だけを安全とし、短い語の並びを安全としない（FQG-002）', () => {
+  for (const words of ['["fix","the","bug"]', '["deploy","prod"]', '["a"]', '["task_","x"]']) {
+    assert.equal(isSafeString(words), false, words);
+    assert.match(String(new Pseudonymizer().value(words, 'deps')), /^text-\d+$/, words);
+  }
+  for (const safe of ['[]', '["task_hex-1"]', '["task_hex-1","task_hex-2"]', '["uuid-3"]']) {
+    assert.equal(isSafeString(safe), true, safe);
   }
 });
