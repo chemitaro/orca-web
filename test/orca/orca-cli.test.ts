@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { CliResult, CliRunner } from '../../src/orca/cli.ts';
-import { OrcaCli } from '../../src/orca/orca-cli.ts';
+import { OrcaCli, ReadOnlyOrcaCli } from '../../src/orca/orca-cli.ts';
 
 function runnerReturning(result: Partial<CliResult>, seen: string[][] = []): CliRunner {
   return {
@@ -70,4 +70,40 @@ test('version は --version の1行目を返す', async () => {
   const outcome = await new OrcaCli(runnerReturning({ stdout: '1.4.251\n' }, seen)).version();
   assert.deepEqual(seen, [['--version']]);
   assert.deepEqual(outcome, { ok: true, result: '1.4.251', durationMs: 1 });
+});
+
+test('ReadOnlyOrcaCli は読むコマンドだけを呼び、ほかのコマンドは呼ばずに誤りにする', async () => {
+  const seen: string[][] = [];
+  const cli = new ReadOnlyOrcaCli(new OrcaCli(runnerReturning({ stdout: '{"ok":true,"result":{}}' }, seen)));
+  assert.equal((await cli.json(['worktree', 'ps'])).ok, true);
+  assert.equal((await cli.json(['orchestration', 'worker-show', '--dispatch', 'ctx_1', '--full'])).ok, true);
+  for (const args of [
+    ['terminal', 'switch', '--terminal', 'term_1'],
+    ['terminal', 'send', '--terminal', 'term_1', '--text', 'hi'],
+    ['worktree', 'rm'],
+    ['status', '--pairing-code', 'x'],
+    ['status', '--environment', 'remote'],
+  ]) {
+    await assert.rejects(cli.json(args), /not a read-only command|not allowed/);
+  }
+  assert.deepEqual(seen, [
+    ['worktree', 'ps', '--json'],
+    ['orchestration', 'worker-show', '--dispatch', 'ctx_1', '--full', '--json'],
+  ]);
+});
+
+test('document は --json の封筒のない JSON（agent-context）をそのまま返す', async () => {
+  const seen: string[][] = [];
+  const cli = new OrcaCli(runnerReturning({ stdout: '{"schemaVersion":1,"commands":[]}' }, seen));
+  assert.deepEqual(await cli.document(['agent-context']), {
+    ok: true,
+    result: { schemaVersion: 1, commands: [] },
+    durationMs: 1,
+  });
+  assert.deepEqual(seen, [['agent-context', '--json']]);
+  const bad = await new OrcaCli(runnerReturning({ stdout: 'nope' })).document(['agent-context']);
+  assert.equal(!bad.ok && bad.kind, 'invalid-json');
+  const ro = new ReadOnlyOrcaCli(new OrcaCli(runnerReturning({ stdout: '{}' })));
+  assert.equal((await ro.document(['agent-context'])).ok, true);
+  await assert.rejects(ro.document(['terminal', 'send']), /not a read-only command/);
 });

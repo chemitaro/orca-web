@@ -71,6 +71,21 @@ export class OrcaCli {
     return { ok: true, result: parsed.result as T, durationMs: r.durationMs };
   }
 
+  /** `orca <args> --json` の、封筒のない JSON（`agent-context` など）を返す。 */
+  async document<T = unknown>(args: readonly string[]): Promise<CliOutcome<T>> {
+    const r = await this.#run([...args, '--json']);
+    const failed = processFailure(r);
+    if (failed) return failed;
+    if (r.exitCode !== 0) {
+      return { ok: false, kind: 'exit-nonzero', exitCode: r.exitCode, message: clip(r.stderr || r.stdout) };
+    }
+    try {
+      return { ok: true, result: JSON.parse(r.stdout) as T, durationMs: r.durationMs };
+    } catch {
+      return { ok: false, kind: 'invalid-json', exitCode: r.exitCode, message: clip(r.stdout) };
+    }
+  }
+
   /** `orca --version` の1行目。 */
   async version(): Promise<CliOutcome<string>> {
     const r = await this.#run(['--version']);
@@ -82,5 +97,57 @@ export class OrcaCli {
     const line = r.stdout.split('\n')[0]?.trim() ?? '';
     if (!line) return { ok: false, kind: 'invalid-json', exitCode: r.exitCode, message: 'empty version output' };
     return { ok: true, result: line, durationMs: r.durationMs };
+  }
+}
+
+/** 読むコマンドの一覧（コマンドの語の並び）。ここにないコマンドは ReadOnlyOrcaCli から呼べない。 */
+export const READ_COMMANDS: readonly (readonly string[])[] = [
+  ['status'],
+  ['agent-context'],
+  ['repo', 'list'],
+  ['worktree', 'list'],
+  ['worktree', 'ps'],
+  ['terminal', 'list'],
+  ['orchestration', 'run-list'],
+  ['orchestration', 'task-list'],
+  ['orchestration', 'worker-list'],
+  ['orchestration', 'worker-show'],
+];
+
+/** 接続先を変えるフラグ。読むコマンドでも渡さない。 */
+const FORBIDDEN_FLAGS = ['--pairing-code', '--environment'];
+
+function isReadCommand(args: readonly string[]): boolean {
+  return READ_COMMANDS.some((cmd) => cmd.every((word, i) => args[i] === word) && !args[cmd.length]?.match(/^[a-z]/));
+}
+
+function refuse(args: readonly string[]): Error | null {
+  if (!isReadCommand(args)) return new Error(`orca ${args.slice(0, 2).join(' ')} is not a read-only command`);
+  if (args.some((a) => FORBIDDEN_FLAGS.some((f) => a === f || a.startsWith(`${f}=`)))) {
+    return new Error('connection-changing flags are not allowed');
+  }
+  return null;
+}
+
+/** 読むコマンドだけを呼べる OrcaCli。一覧にないコマンドは呼ばずに例外にする（呼び出し側の誤り）。 */
+export class ReadOnlyOrcaCli {
+  readonly #cli: OrcaCli;
+
+  constructor(cli: OrcaCli) {
+    this.#cli = cli;
+  }
+
+  json<T = unknown>(args: readonly string[]): Promise<CliOutcome<T>> {
+    const refused = refuse(args);
+    return refused ? Promise.reject(refused) : this.#cli.json<T>(args);
+  }
+
+  document<T = unknown>(args: readonly string[]): Promise<CliOutcome<T>> {
+    const refused = refuse(args);
+    return refused ? Promise.reject(refused) : this.#cli.document<T>(args);
+  }
+
+  version(): Promise<CliOutcome<string>> {
+    return this.#cli.version();
   }
 }

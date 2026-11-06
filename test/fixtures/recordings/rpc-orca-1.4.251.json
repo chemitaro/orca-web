@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "kind": "rpc",
+  "exchanges": [
+    {
+      "method": "session.tabs.listAll",
+      "params": null,
+      "chunks": [
+        "{\"id\": \"$ID\", \"ok\": true, \"result\": {\"snapshots\": [{\"worktree\": \"uuid-2::/p-1/p-2/p-3\", \"publicationEpoch\": \"uuid-3\", \"snapshotVersion\": 4, \"activeGroupId\": \"uuid-4\", \"activeTabId\": \"uuid-5\", \"activeTabType\": \"terminal\", \"tabs\": [{\"type\": \"terminal\", \"id\": \"uuid-5\", \"title\": \"text-1\", \"parentTabId\": \"uuid-5\", \"leafId\": \"uuid-6\", \"ptyId\": \"hex-1\", \"isActive\": true, \"status\": \"ready\", \"terminal\": \"term_uuid-7\", \"agentStatus\": {\"state\": \"working\", \"prompt\": \"text-2\", \"updatedAt\": 1762400000000, \"stateStartedAt\": 1762399990000, \"agentType\": \"claude\", \"model\": \"claude-opus-5-5\", \"paneKey\": \"uuid-5:uuid-6\", \"stateHistory\": [], \"providerSession\": {\"key\": \"claude\", \"id\": \"uuid-8\", \"effort\": \"high\"}}}, {\"type\": \"terminal\", \"id\": \"uuid-9\", \"title\": \"text-3\", \"parentTabId\": \"uuid-9\", \"leafId\": \"uuid-10\", \"ptyId\": null, \"isActive\": false, \"status\": \"pending-handle\", \"terminal\": null, \"launchAgent\": \"codex\"}, {\"type\": \"markdown\", \"id\": \"uuid-11\", \"title\": \"text-4\", \"isActive\": false}]}], \"authoritative\": true}, \"_meta\": {\"runtimeId\": \"uuid-1\"}}\n"
+      ],
+      "end": "close"
+    },
+    {
+      "method": "nativeChat.readSession",
+      "params": {},
+      "chunks": [
+        "{\"id\": \"$ID\", \"ok\": false, \"error\": {\"code\": \"invalid_argument\", \"message\": \"text-5\"}, \"_meta\": {\"runtimeId\": \"uuid-1\"}}\n"
+      ],
+      "end": "close"
+    }
+  ]
+}
