@@ -84,10 +84,18 @@ terminal のタブ 89件の組み合わせ：
 
 ## Verification
 
-（コードのレビューと最終品質ゲートの後に書く）
+- 仕様のレビュー（spec-review、spec-reviewer opus / medium）：round 1 は P1 1・P2 4（本文の残る録画を検査が拒む規則とテストがない、ほか）。直して round 2 で pass（P0・P1 0、P3 1）。
+- コードのレビュー（code-review、code-reviewer sonnet / high、standards と spec の2人、範囲 bb53171..3a96e01）：どちらも pass。spec は指摘 0。standards は P2 1（不正な request-target でサーバーが落ちる）・P3 2（出力の超過を起動の失敗として返す、`--record` が出力先を作らず片方だけ書きうる）。3件とも 9489460 で直した（テストつき）。
+- 最終品質ゲート（final-quality-gate、quality-gate-reviewer opus / high、1人、ChatGPT なし）：campaign `iss-00005-fqg-1`、試み1で **合格**。合格したコミットは `9489460c80489af0caacda59c8c020263d8e70f5`。
+  - レビューのレーン：status pass、coverage complete（functional-correctness、requirements-closure、test-adequacy）、P0 0・P1 0・P2 0・P3 3。
+  - テストのレーン（同じコミット）：`npm run lint` exit 0、`npm test` exit 0（65件すべて成功）、`npm run build` exit 0。
+  - P3（情報のみ）：FQG-001 RPC の `_meta.runtimeId` の食い違いを確かめるテストがない。FQG-002 keepalive が時間切れを延ばすことを確かめるテストがない。FQG-003 AGENTS.md が、すでにある RPC の境界などを「後の手順で足します」と書いている。
+- 実機：`npm run probe:live`（読むだけ）を 2026-11-06 にこの Mac の Orca 1.4.251 で走らせた。結果は上の「実機の確かめ」。
+- CI（GitHub Actions）：PR で確かめる（結果は PR に残る）。
 
 ## Residual Risks / Follow-ups
 
 - 内部の RPC は非公開。Orca の版が変わったら `npm run probe:live` を走らせ直し、録画を取り直す。
 - 構造化 Chat のタブ（`agent-session`、1件）のモデルと推論（`agentSession.options`）は、この Issue では確かめていない。
-- 仮名化は、短い列挙の形の値（40文字以下の英数字と記号）を残す。自由な文の項目の名前の一覧で先に置き換え、検査を通した録画も人が読んでからコミットする。
+- 仮名化は、短い列挙の形の値（40文字以下の英数字と記号）を残す。手元の実機の録画では、repo の名前、projectId、ブランチ名、家のディレクトリを repo とした行の repo の名前（アカウント名）が残った。実機の録画はコミットしていない。コミットするときは人が読んでから、または自由な文の項目の一覧を足してから。
+- 最終品質ゲートの P3 の3件（FQG-001〜003）は、後の Issue で直す候補。
