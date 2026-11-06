@@ -34,8 +34,11 @@ design: {
 			- 環境変数は許した名前（`HOME`、`USER`、`LOGNAME`、`LANG`、`LC_ALL`、`LC_CTYPE`、`TMPDIR`、`PATH`）だけを親から写す（`buildManagedEnv`）。`ORCA_` で始まる名前は、許した名前に足されても渡さない。
 			- `OrcaCli` は CliRunner の上で `--json` のコマンドを呼び、`{ ok: true, result }`、`{ ok: false, error: { code, message } }` の Orca の封筒を解いて、
 			  `CliOutcome`（`ok`、`orca-error`、`exit-nonzero`、`timeout`、`invalid-json`、`spawn-failed`）の型の結果で返す。stderr と stdout の文は、長さを切って誤りの文に入れる。
+			- 読むコマンドの一覧（`READ_COMMANDS`：`--version`、`status`、`agent-context`、`repo list`、`worktree list`、`worktree ps`、`terminal list`、
+			  `orchestration run-list`、`orchestration task-list`、`orchestration worker-list`、`orchestration worker-show`）を持ち、この Issue の呼び出し口の
+			  `ReadOnlyOrcaCli` は、一覧にないコマンド（`terminal switch`、`terminal send` など）を呼ばずに誤りにする。
 			"""
-		satisfies: ["R-02", "F-02"]
+		satisfies: ["R-02", "R-06", "F-02"]
 	}
 	"D-03": {
 		title: "RPC の境界（RpcTransport）"
@@ -50,12 +53,12 @@ design: {
 			- 読み取りの RPC の名前の一覧（`READ_METHODS`：`session.tabs.list`、`session.tabs.listAll`、`nativeChat.readSession`）を持ち、
 			  この Issue の呼び出し口は `ReadOnlyRpc` で、一覧にない名前を送らずに誤りにする。
 			"""
-		satisfies: ["R-03", "F-02"]
+		satisfies: ["R-03", "R-06", "F-02"]
 	}
 	"D-04": {
 		title: "機能の確かめ（probeCapabilities）"
 		text: """
-			- 入力は OrcaCli と RpcTransport。`orca --version`、`orca status --json`、`orca agent-context --json`、`session.tabs.listAll`、
+			- 入力は ReadOnlyOrcaCli と ReadOnlyRpc（読むものだけを呼べる口）。`orca --version`、`orca status --json`、`orca agent-context --json`、`session.tabs.listAll`、
 			  `nativeChat.readSession`（空の引数で呼び、`invalid_argument` なら口がある、`method_not_found` なら無い）を確かめる。
 			- 結果の `CapabilityReport` は `{ checkedAt, cliVersion, appVersion, runtimeId, runtimeIdConsistent, connection, features }`。
 			  `connection` は `connected` か `unreachable`（理由つき）。`features` は機能ごとに `{ available, satisfied[], missing[], deferred[] }`。
@@ -81,24 +84,30 @@ design: {
 			  RPC は `{ kind: "rpc", exchanges: [{ method, params, chunks: string[], end: "close" | "hold" }] }`（`chunks` は届いた順の生の文字列で、分割、keepalive、不正な JSON を表す）。
 			- 再生：`ReplayCliRunner` は argv が一致する録画を順に返し（遅延も再現）、一致しなければ誤り。RPC は、テストの中で一時の Unix ソケットの
 			  `ReplayRpcServer` を立て、要求ごとに `chunks` を送り、`end` に従って閉じる。実物の `UnixSocketRpc` をそのまま検査できる。
-			  RpcTransport を直接置き換える `ReplayRpcTransport` も持つ。
-			- 録画：`RecordingCliRunner` と `RecordingRpcTransport` が実物を包んで記録し、書き出す前に `sanitizeRecording` と `assertRecordingSafe` を通す。
-			- 仮名化（`Pseudonymizer`、1つの録画で1つ）：
+			  RpcTransport を直接置き換える `ReplayRpcTransport` も持つ（`chunks` を同じ解き方で解く）。
+			- 録画：`RecordingCliRunner` は CliRunner を包み、argv、終了コード、stdout、stderr、所要時間を記録する。`RecordingRpcTransport` は RpcTransport を包み、
+			  解いた応答を1つの行（`{ id, ok, result | error, _meta }` の1つの chunk）として記録する。分割、keepalive、不正な JSON、接続断は、実機からは録らず、手で書いた録画で表す。
+			  どちらも書き出す前に `sanitizeRecording` と `assertRecordingSafe` を通す。
+			- 仮名化（`Pseudonymizer`、1つの録画で1つ）。CLI の stdout と RPC の chunk は、JSON の行として読めれば中を仮名化して書き戻す。
 			  - 秘密の項目（`authToken`、`token`、`pairingCode` など、名前で判定）は消す。`orca://pair` を含む文字列は伏せる。
-			  - 自由な文の項目（`prompt`、`preview`、`lastAssistantMessage`、`toolInput`、`title`、`taskTitle`、`spec`、`result`、`objective`、`comment`、`messages` の本文など）は
-			    `text-N` に置き換える（同じ文は同じ仮名）。
-			  - 絶対パスは区切りごとに `p-N` に置き換える（`/Users/a/w/r` と `/Users/a/w/r/x` は、仮名でも前方一致が保たれる）。
-			  - ID（UUID、`term_`、`task_`、`ctx_`、`run_` などの接頭辞つき、長い16進、`repoId::path` の合成）は種類ごとの仮名（`uuid-N`、`term_N` など）に置き換える。
-			  - 上のどれでもない文字列は、短い列挙の値（例 `working`、`claude`、`terminal`。英小文字、数字、`.`、`-`、`_`、`:` だけで40文字以下）だけを残し、ほかは `text-N` にする。
-			  - オブジェクトのキーも、ID やパスなら同じ規則で置き換える。
-			- 検査（`assertRecordingSafe`）：authToken の値、利用者の家のパス、`orca://pair`、秘密の項目の名前が残れば、書き出さずに誤り。
+			  - 自由な文の項目（`prompt`、`preview`、`lastAssistantMessage`、`toolInput`、`title`、`taskTitle`、`spec`、`result`（task の）、`objective`、`comment`、`messages` の本文など）は
+			    `text-N` に置き換える（同じ文は同じ仮名）。stderr も自由な文として扱う。
+			  - ほかの文字列は、中の部分を置き換える：UUID は `uuid-N`、8文字以上の16進は `hex-N`、絶対パスは区切りごとに `p-N`（`/Users/a/w/r` と `/Users/a/w/r/x` は仮名でも前方一致が保たれる）。
+			    文字列の中の一部を置き換えるので、`term_<uuid>`、`<uuid>:<uuid>`（paneKey）、`<repoId>::<path>` の中の対応も、ほかの項目の同じ値の仮名と一致する。
+			  - 置き換えた後の文字列が、仮名と、短い列挙の値（英数字、`.`、`-`、`_`、`:`、`/` だけで40文字以下）と区切りだけでできていなければ、元の文字列ごと `text-N` にする。
+			  - オブジェクトのキーも、同じ規則で置き換える。
+			- 検査（`assertRecordingSafe`）は仮名化と別に、録画全体（argv、stdout、stderr、chunk、キーと値）を読み、次のどれかがあれば、書き出さずに誤りにする。
+			  - authToken の値（渡されたとき）、利用者の家のパス、`orca://pair`、秘密の項目の名前。
+			  - 自由な文の項目に `text-N` と空でない値（本文の残り）。
+			  - ほかの文字列で、仮名と短い列挙の値と区切りだけでできていないもの（自由な文、仮名にしていない ID やパス）。JSON として読めない chunk は、引用符の中の文字列ごとに同じ規則で見る。
+			  手で書いた fixture も、テストで同じ検査を通す。
 			"""
 		satisfies: ["R-05", "F-03"]
 	}
 	"D-06": {
 		title: "実機の確かめの道具"
 		text: """
-			- `src/tools/probe-live.ts`（`npm run probe:live`）。ReadOnlyRpc と OrcaCli だけを使い、`orca --version`、`status`、`agent-context`、`worktree list`、
+			- `src/tools/probe-live.ts`（`npm run probe:live`）。ReadOnlyRpc と ReadOnlyOrcaCli だけを使い、`orca --version`、`status`、`agent-context`、`worktree list`、
 			  `worktree ps`、`terminal list`、`session.tabs.list`（worktree ごと）、`nativeChat.readSession`（provider のセッションごとに `limit: 1`）を呼ぶ。
 			- 出力は集計だけ（件数、項目の有無、値の種類、結べたかどうか）。会話の中身、プロンプト、題名、パスを出さない。
 			  model と effort は、値があるかと、値の種類（例 `claude-opus-*` の形、`high` などの列挙）だけを出す。
