@@ -10,8 +10,8 @@ steps: {
 	"S-03": {title: "開く門（OpenOrcaCli、OpenRpc）と、タブの選び方（parseTabsSnapshot、chooseTarget）を作る", realizes: ["R-01", "R-02"], status: "done", session: "impl"}
 	"S-04": {title: "開く処理（OpenService）を作り、録画の再生で経路と失敗を確かめる", realizes: ["R-01", "R-02", "F-01", "F-02", "F-04", "F-05"], status: "done", after: ["S-03"], session: "impl"}
 	"S-05": {title: "HTTP の口（/api/token、/api/open、/embed/*、Host の確かめ）と main.ts の組み立てを作る", realizes: ["R-03", "R-04", "F-03"], status: "done", after: ["S-02", "S-04"], session: "impl"}
-	"S-06": {title: "ボタンの部品（open-button.js、open-button.html、open-button-frame.js、open-button.css）を作り、ブラウザーで確かめる", realizes: ["R-03"], status: "todo", after: ["S-05"], session: "impl"}
-	"S-07": {title: "実機の確かめの道具（open-live）を作り、orca-web の worktree で3つの経路とタブの集合を確かめ、report.md に書く", realizes: ["R-01", "R-02"], status: "todo", after: ["S-04"], session: "impl"}
+	"S-06": {title: "ボタンの部品（open-button.js、open-button.html、open-button-frame.js、open-button.css）を作り、ブラウザーで確かめる", realizes: ["R-03"], status: "done", after: ["S-05"], session: "impl"}
+	"S-07": {title: "実機の確かめの道具（open-live）を作り、orca-web の worktree で3つの経路とタブの集合を確かめ、report.md に書く", realizes: ["R-01", "R-02"], status: "done", after: ["S-04"], session: "impl"}
 	"S-08": {title: "コードのレビューと最終品質ゲートを通し、PR を作って CI の通過を確かめる", realizes: ["R-01", "R-04"], status: "todo", after: ["S-06", "S-07"], session: "impl"}
 }
 
