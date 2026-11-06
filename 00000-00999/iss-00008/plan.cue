@@ -5,14 +5,14 @@ package spec
 goal: "前の Issue の残り（FQG-001〜003）→待ち受けの組み立て→常駐の定義とスクリプト→文書→実機の受け入れの順に、テスト先行で作り、PR をマージできる状態で止める。"
 
 steps: {
-	"S-01": {title: "FQG-001：CLI の誤りの文から stdout を外す", realizes: ["R-05"], status: "todo", session: "impl"}
-	"S-02": {title: "FQG-002：録画の検査の配列の規則を、仮名を含む要素に限る", realizes: ["R-06"], status: "todo", session: "impl"}
-	"S-03": {title: "FQG-003：`/api/state` の noteViewer の配線のテストを足す", realizes: ["R-07"], status: "todo", session: "impl"}
-	"S-04": {title: "待ち受けの組み立て（listen.ts）、`/api/health` の待ち受けの状態、main.ts の終わりのシグナル", realizes: ["R-02", "R-03", "F-01", "F-04"], status: "todo", session: "impl"}
-	"S-05": {title: "LaunchAgent の定義の組み立てと ServiceManager、命令の入口、package.json の命令", realizes: ["R-01", "R-03", "F-02", "F-03"], status: "todo", after: ["S-04"], session: "impl"}
-	"S-06": {title: "README と AGENTS.md を書く", realizes: ["R-04", "R-08"], status: "todo", after: ["S-05"], session: "impl"}
-	"S-07": {title: "実機の受け入れ（一時の起動、ブラウザー、Codex は統括に頼む）と、`--dry-run` の定義の `plutil -lint`。report.md に書く", realizes: ["R-01", "R-02", "R-09"], status: "todo", after: ["S-05"], session: "impl"}
-	"S-08": {title: "コードのレビュー、最終品質ゲート、PR の作成と CI の確かめ", realizes: ["R-01", "R-02"], status: "todo", after: ["S-06", "S-07"], session: "impl"}
+	"S-01": {title: "FQG-001：CLI の誤りの文から stdout を外す", realizes: ["R-05"], status: "done", session: "impl"}
+	"S-02": {title: "FQG-002：録画の検査の配列の規則を、仮名を含む要素に限る", realizes: ["R-06"], status: "done", session: "impl"}
+	"S-03": {title: "FQG-003：`/api/state` の noteViewer の配線のテストを足す", realizes: ["R-07"], status: "done", session: "impl"}
+	"S-04": {title: "待ち受けの組み立て（listen.ts）、`/api/health` の待ち受けの状態、main.ts の終わりのシグナル", realizes: ["R-02", "R-03", "F-01", "F-04"], status: "done", session: "impl"}
+	"S-05": {title: "LaunchAgent の定義の組み立てと ServiceManager、命令の入口、package.json の命令", realizes: ["R-01", "R-03", "F-02", "F-03"], status: "done", after: ["S-04"], session: "impl"}
+	"S-06": {title: "README と AGENTS.md を書く", realizes: ["R-04", "R-08"], status: "done", after: ["S-05"], session: "impl"}
+	"S-07": {title: "実機の受け入れ（一時の起動、ブラウザー、Codex は統括に頼む）と、`--dry-run` の定義の `plutil -lint`。report.md に書く", realizes: ["R-01", "R-02", "R-09"], status: "done", after: ["S-05"], session: "impl"}
+	"S-08": {title: "コードのレビュー、最終品質ゲート、PR の作成と CI の確かめ", realizes: ["R-01", "R-02"], status: "doing", after: ["S-06", "S-07"], session: "impl"}
 }
 
 tests: {
