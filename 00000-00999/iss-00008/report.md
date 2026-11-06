@@ -87,6 +87,7 @@ lsof -nP -iTCP:8791 -sTCP:LISTEN         # 127.0.0.1:8791 と <Tailscale の IP>
   - P3（情報のみ）：FQG-001 restart の kickstart の失敗と pid の食い違いで 1 を返すことを確かめるテストがない（実装は正しい。install の同じ経路にはテストがある）。
 - 実機：上の「実機の受け入れ」。
 - PR：https://github.com/chemitaro/orca-web/pull/15（head d673dee、base main fd89ac6）。CI（GitHub Actions の CI、run 42215309801）は success。2026-11-06T12:09Z の観測で、Actions と Commit Status は PASS、マージの状態は READY（OPEN、draft でない、MERGEABLE、CLEAN）。最終の SHA は d673dee70cdd9e05e45cc63990e490eb7018299e。
+- 統括の依頼（2026-11-06）で、テストの Tailscale の IP をこの Mac の値から仮の値（100.101.102.103）に替えた（1e623f6、テストの値だけの変更なので最終品質ゲートはやり直していない）。差分全体、コミットの文、PR の本文、この Scope の文書に、ほかの本物の IP、ホスト名、利用者のパスはなかった。`npm run lint` と `npm test`（187 件）が通り、CI（run 42215670070）は success、2026-11-06T12:11Z の観測でマージの状態は READY。最終の SHA は 1e623f6。本物の IP は、ブランチの前のコミット（78a6e3f）の履歴には残る（履歴の書き換えはしない）。
 
 ## Residual Risks / Follow-ups
 
