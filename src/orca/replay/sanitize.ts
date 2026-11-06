@@ -157,9 +157,11 @@ export class Pseudonymizer {
   }
 }
 
-/** 録画を仮名化した写しを返す。元の録画は変えない。 */
-export function sanitizeRecording(recording: Recording): Recording {
-  const p = new Pseudonymizer();
+/**
+ * 録画を仮名化した写しを返す。元の録画は変えない。同じ時に録って一緒に再生する録画（CLI と RPC）は、
+ * 1つの Pseudonymizer を渡して共有する（録画をまたいでも同じ値が同じ仮名になる）。
+ */
+export function sanitizeRecording(recording: Recording, p: Pseudonymizer = new Pseudonymizer()): Recording {
   if (recording.kind === 'cli') {
     const out: CliRecording = {
       version: 1,

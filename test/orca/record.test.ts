@@ -7,6 +7,7 @@ import type { CliRunner } from '../../src/orca/cli.ts';
 import { RecordingCliRunner, RecordingRpcTransport, writeRecording } from '../../src/orca/replay/record.ts';
 import type { CliRecording, RpcRecording } from '../../src/orca/replay/recording.ts';
 import { ReplayCliRunner, ReplayRpcTransport } from '../../src/orca/replay/replay.ts';
+import { Pseudonymizer } from '../../src/orca/replay/sanitize.ts';
 import type { RpcTransport } from '../../src/orca/rpc.ts';
 
 const HOME = '/Users/someone';
@@ -92,4 +93,32 @@ test('writeRecording は検査を通った録画だけを書き、通らなけ�
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('同じ Pseudonymizer を渡すと、CLI と RPC の録画をまたいで同じ値が同じ仮名になる', async () => {
+  const cliRec = new RecordingCliRunner({
+    async run() {
+      return {
+        exitCode: 0,
+        stdout: JSON.stringify({ ok: true, result: { id: U1 } }),
+        stderr: '',
+        durationMs: 0,
+        timedOut: false,
+      };
+    },
+  });
+  await cliRec.run(['worktree', 'list', '--json']);
+  const rpcRec = new RecordingRpcTransport({
+    async call<T>() {
+      return { ok: true as const, result: { worktree: U1 } as T, runtimeId: null };
+    },
+  });
+  await rpcRec.call('session.tabs.listAll', null);
+  const shared = new Pseudonymizer();
+  const a = JSON.parse(cliRec.recording({}, shared).entries[0]?.stdout ?? '{}').result.id;
+  const b = JSON.parse(rpcRec.recording({}, shared).exchanges[0]?.chunks[0] ?? '{}').result.worktree;
+  assert.equal(a, b);
+  // 別々なら、それぞれの表で数える
+  const c = JSON.parse(rpcRec.recording().exchanges[0]?.chunks[0] ?? '{}').result.worktree;
+  assert.match(c, /^uuid-\d+$/);
 });

@@ -3,11 +3,11 @@ import { writeFile } from 'node:fs/promises';
 import type { CliResult, CliRunner, CliRunOptions } from '../cli.ts';
 import type { RpcCallOptions, RpcOutcome, RpcTransport } from '../rpc.ts';
 import type { CliEntry, CliRecording, Recording, RpcExchangeRecord, RpcRecording } from './recording.ts';
-import { assertRecordingSafe, type SafetyOptions, sanitizeRecording } from './sanitize.ts';
+import { assertRecordingSafe, type Pseudonymizer, type SafetyOptions, sanitizeRecording } from './sanitize.ts';
 
 /** 仮名化し、検査を通した録画を返す。検査を通らなければ UnsafeRecordingError を投げる。 */
-function cleaned<T extends Recording>(raw: T, options: SafetyOptions): T {
-  const clean = sanitizeRecording(raw) as T;
+function cleaned<T extends Recording>(raw: T, options: SafetyOptions, pseudonymizer?: Pseudonymizer): T {
+  const clean = sanitizeRecording(raw, pseudonymizer) as T;
   assertRecordingSafe(clean, options);
   return clean;
 }
@@ -35,8 +35,9 @@ export class RecordingCliRunner implements CliRunner {
     return result;
   }
 
-  recording(options: SafetyOptions = {}): CliRecording {
-    return cleaned<CliRecording>({ version: 1, kind: 'cli', entries: this.#entries }, options);
+  /** 一緒に再生する RPC の録画と仮名を合わせるときは、同じ pseudonymizer を渡す。 */
+  recording(options: SafetyOptions = {}, pseudonymizer?: Pseudonymizer): CliRecording {
+    return cleaned<CliRecording>({ version: 1, kind: 'cli', entries: this.#entries }, options, pseudonymizer);
   }
 }
 
@@ -74,8 +75,8 @@ export class RecordingRpcTransport implements RpcTransport {
     return outcome;
   }
 
-  recording(options: SafetyOptions = {}): RpcRecording {
-    return cleaned<RpcRecording>({ version: 1, kind: 'rpc', exchanges: this.#exchanges }, options);
+  recording(options: SafetyOptions = {}, pseudonymizer?: Pseudonymizer): RpcRecording {
+    return cleaned<RpcRecording>({ version: 1, kind: 'rpc', exchanges: this.#exchanges }, options, pseudonymizer);
   }
 }
 
