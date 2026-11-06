@@ -14,7 +14,8 @@
     "format": "biome check --write .",
     "build": "tsc -p tsconfig.build.json",
     "start": "node src/server/main.ts",
-    "probe:live": "node src/tools/probe-live.ts"
+    "probe:live": "node src/tools/probe-live.ts",
+    "open:live": "node src/tools/open-live.ts"
   },
   "dependencies": {},
   "devDependencies": {
