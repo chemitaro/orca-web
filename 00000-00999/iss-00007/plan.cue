@@ -5,11 +5,11 @@ package spec
 goal: "守り→開く門と選び方→開く処理→HTTP の口→ボタンの部品→実機の確かめの順に、テスト先行で作り、PR をマージできる状態で止める。"
 
 steps: {
-	"S-01": {title: "iss-00005 の確かめの抜け（FQG-001、FQG-002）のテストを足す", realizes: ["R-05"], status: "todo", session: "impl"}
-	"S-02": {title: "設定（loadConfig）と書き込みの守り（checkHost、checkSameOriginPost、TokenStore）を作る", realizes: ["R-04", "F-03"], status: "todo", session: "impl"}
-	"S-03": {title: "開く門（OpenOrcaCli、OpenRpc）と、タブの選び方（parseTabsSnapshot、chooseTarget）を作る", realizes: ["R-01", "R-02"], status: "todo", session: "impl"}
-	"S-04": {title: "開く処理（OpenService）を作り、録画の再生で経路と失敗を確かめる", realizes: ["R-01", "R-02", "F-01", "F-02", "F-04", "F-05"], status: "todo", after: ["S-03"], session: "impl"}
-	"S-05": {title: "HTTP の口（/api/token、/api/open、/embed/*、Host の確かめ）と main.ts の組み立てを作る", realizes: ["R-03", "R-04", "F-03"], status: "todo", after: ["S-02", "S-04"], session: "impl"}
+	"S-01": {title: "iss-00005 の確かめの抜け（FQG-001、FQG-002）のテストを足す", realizes: ["R-05"], status: "done", session: "impl"}
+	"S-02": {title: "設定（loadConfig）と書き込みの守り（checkHost、checkSameOriginPost、TokenStore）を作る", realizes: ["R-04", "F-03"], status: "done", session: "impl"}
+	"S-03": {title: "開く門（OpenOrcaCli、OpenRpc）と、タブの選び方（parseTabsSnapshot、chooseTarget）を作る", realizes: ["R-01", "R-02"], status: "done", session: "impl"}
+	"S-04": {title: "開く処理（OpenService）を作り、録画の再生で経路と失敗を確かめる", realizes: ["R-01", "R-02", "F-01", "F-02", "F-04", "F-05"], status: "done", after: ["S-03"], session: "impl"}
+	"S-05": {title: "HTTP の口（/api/token、/api/open、/embed/*、Host の確かめ）と main.ts の組み立てを作る", realizes: ["R-03", "R-04", "F-03"], status: "done", after: ["S-02", "S-04"], session: "impl"}
 	"S-06": {title: "ボタンの部品（open-button.js、open-button.html、open-button-frame.js、open-button.css）を作り、ブラウザーで確かめる", realizes: ["R-03"], status: "todo", after: ["S-05"], session: "impl"}
 	"S-07": {title: "実機の確かめの道具（open-live）を作り、orca-web の worktree で3つの経路とタブの集合を確かめ、report.md に書く", realizes: ["R-01", "R-02"], status: "todo", after: ["S-04"], session: "impl"}
 	"S-08": {title: "コードのレビューと最終品質ゲートを通し、PR を作って CI の通過を確かめる", realizes: ["R-01", "R-04"], status: "todo", after: ["S-06", "S-07"], session: "impl"}
