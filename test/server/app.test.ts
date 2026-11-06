@@ -451,3 +451,20 @@ test('開く処理がないサーバーでは、そろった /api/open は 503 �
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test('GET /api/health は、渡された pid と待ち受けの状態（listeners）を返す', async () => {
+  const listeners = [
+    { address: '127.0.0.1', state: 'listening' as const },
+    { address: '100.64.0.1', state: 'retrying' as const, error: 'EADDRNOTAVAIL' },
+  ];
+  const server = createAppServer({ health: () => ({ pid: 4242, listeners }) });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/health`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true, pid: 4242, listeners });
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});

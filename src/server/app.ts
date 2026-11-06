@@ -10,6 +10,7 @@ import { checkSelection, FIELDS } from '../state/fields.ts';
 import type { StateDocument } from '../state/model.ts';
 import type { SettingsStore } from '../state/settings.ts';
 import { checkHost, checkSameOriginWrite, checkToken, type GuardResult, TokenStore } from './guard.ts';
+import type { ListenerStatus } from './listen.ts';
 
 export interface StateSource {
   noteViewer(): void;
@@ -27,6 +28,11 @@ export interface AppOptions {
   readOrigins?: readonly string[];
   /** 受ける Host（`<名前>:<ポート>`）の追加。既定は、待ち受けのポートの `127.0.0.1` と `localhost`。 */
   extraHosts?: readonly string[];
+  /**
+   * `/api/health` の中身（プロセスの pid と、待ち受けのアドレスごとの状態）。main.ts が渡す。
+   * service:install は、この pid を launchd のサービスの pid と照らす（同じポートの別のプロセスを成功と見なさない）。
+   */
+  health?: () => { pid: number; listeners: readonly ListenerStatus[] };
   /** 画面のファイルの置き場。既定はリポジトリの web/。 */
   webDir?: string;
 }
@@ -241,7 +247,7 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
     if (pathname.startsWith('/api/')) {
       if (pathname === '/api/health') {
         if (method !== 'GET') sendError(res, 405, 'method_not_allowed');
-        else sendJson(res, 200, { ok: true });
+        else sendJson(res, 200, options.health ? { ok: true, ...options.health() } : { ok: true });
         return;
       }
       if (READ_ROUTES.has(pathname)) {

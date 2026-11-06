@@ -388,3 +388,15 @@ test('処理中に来た開く要求は busy で断り、Orca に送らない', 
   assert.equal(!b.ok && b.error, 'busy');
   assert.deepEqual(writes(), ['terminal switch --terminal term_uuid-5 --json']);
 });
+
+test('worktree list の JSON でない stdout は、開く口の応答の文に出ない（FQG-001）', async () => {
+  const leak = 'PRIVATE raw orca output';
+  const { service, writes } = setup(
+    [{ argv: ['worktree', 'list', '--json'], exitCode: 0, stdout: leak, stderr: '', delayMs: 0 }],
+    [],
+  );
+  const outcome = await service.open({ worktree: WT_PATH });
+  assert.equal(outcome.ok, false);
+  assert.ok(!JSON.stringify(outcome).includes('PRIVATE'), JSON.stringify(outcome));
+  assert.deepEqual(writes(), []);
+});
