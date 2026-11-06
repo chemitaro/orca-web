@@ -10,8 +10,8 @@ steps: {
 	"S-03": {title: "RPC の境界（RuntimeLocator、UnixSocketRpc、ReadOnlyRpc、authToken の閉じ込め）と、それを検査する ReplayRpcServer を作る", realizes: ["R-03", "F-02"], status: "done", after: ["S-01"], session: "impl"}
 	"S-04": {title: "録画と再生（録画の形、ReplayCliRunner、ReplayRpcTransport、Pseudonymizer、assertRecordingSafe、録画の包み）を作る", realizes: ["R-05", "F-03"], status: "done", after: ["S-02", "S-03"], session: "impl"}
 	"S-05": {title: "機能の確かめ（probeCapabilities、CapabilityCache）を作る", realizes: ["R-04", "F-01", "F-02"], status: "done", after: ["S-04"], session: "impl"}
-	"S-06": {title: "実機の確かめの道具（probe-live）を作り、この Mac で読むだけの確かめを行い、report.md に書く", realizes: ["R-06"], status: "doing", after: ["S-05"], session: "impl"}
-	"S-07": {title: "コードのレビューと最終品質ゲートを通し、PR を作って CI の通過を確かめる", realizes: ["R-01"], status: "todo", after: ["S-06"], session: "impl"}
+	"S-06": {title: "実機の確かめの道具（probe-live）を作り、この Mac で読むだけの確かめを行い、report.md に書く", realizes: ["R-06"], status: "done", after: ["S-05"], session: "impl"}
+	"S-07": {title: "コードのレビューと最終品質ゲートを通し、PR を作って CI の通過を確かめる", realizes: ["R-01"], status: "doing", after: ["S-06"], session: "impl"}
 }
 
 tests: {
