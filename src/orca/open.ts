@@ -225,7 +225,9 @@ function classifyRpc(outcome: RpcOutcome<unknown>, route: OpenRoute): { ok: true
 function classifyCli(outcome: CliOutcome<unknown>, route: OpenRoute): { ok: true } | OpenFailure {
   if (outcome.ok) return { ok: true };
   switch (outcome.kind) {
+    // 封筒（Orca の答え）がないまま終わった。CLI は起動していて、切り替えが届いた可能性がある（FQG-002）。
     case 'timeout':
+    case 'exit-nonzero':
     case 'invalid-json':
     case 'output-too-large':
       return fail('unconfirmed', `could not confirm whether Orca opened the tab (${outcome.kind})`, { route });

@@ -238,6 +238,43 @@ test('書き込みの後の RPC の時間切れ・接続断と CLI の時間切�
   assert.deepEqual(writes(), ['terminal switch --terminal term_uuid-5 --json']);
 });
 
+test('terminal switch が封筒のない出力で非ゼロ終了したとき（シグナルでの終了を含む）は、届いた可能性があるので unconfirmed（FQG-002）', async () => {
+  const entries: CliEntry[] = [
+    {
+      argv: ['terminal', 'switch', '--terminal', 'term_uuid-5', '--json'],
+      exitCode: 1,
+      stdout: '',
+      stderr: 'text-9',
+      delayMs: 0,
+    },
+    {
+      argv: ['terminal', 'switch', '--terminal', 'term_uuid-5', '--json'],
+      exitCode: null,
+      stdout: '',
+      stderr: '',
+      delayMs: 0,
+    },
+  ];
+  for (const exit of entries) {
+    const { service, writes } = setup([worktreeList(), exit], [tabsList([agentTab])]);
+    const outcome = await service.open({ worktree: WT });
+    assert.equal(!outcome.ok && outcome.error, 'unconfirmed', String(exit.exitCode));
+    assert.equal(!outcome.ok && outcome.route, 'terminal-switch');
+    assert.deepEqual(writes(), ['terminal switch --terminal term_uuid-5 --json']);
+  }
+  const notStarted: CliEntry = {
+    argv: ['terminal', 'switch', '--terminal', 'term_uuid-5', '--json'],
+    exitCode: null,
+    stdout: '',
+    stderr: '',
+    delayMs: 0,
+    spawnError: 'ENOENT',
+  };
+  const { service } = setup([worktreeList(), notStarted], [tabsList([agentTab])]);
+  const outcome = await service.open({ worktree: WT });
+  assert.equal(!outcome.ok && outcome.error, 'unavailable', '起動できなかったときは届いていない');
+});
+
 test('method_not_found は unsupported、tab_not_found や terminal_exited は target_gone で、ほかのタブへ切り替えない', async () => {
   const cases: [string, string, string][] = [
     ['method_not_found', 'Unknown method: session.tabs.activate', 'unsupported'],
