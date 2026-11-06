@@ -15,7 +15,7 @@ steps: {
 	"S-08": {title: "コードのレビューと最終品質ゲートを通し、PR を作って CI の通過を確かめる", realizes: ["R-01", "R-04"], status: "done", after: ["S-06", "S-07"], session: "impl"}
 	"S-09": {title: "iss-00006（PR #11、0a0e76c）を取り込み、設定・Host の確かめ・書き込みの守りを1つにする（same-origin-write.ts を置き換え、項目の選択の保存もトークンを要し、画面は write.js で送る）", realizes: ["R-03", "R-04", "F-03"], status: "done", after: ["S-08"], session: "impl"}
 	"S-10": {title: "最終品質ゲートの FQG-002：terminal switch の封筒のない非ゼロの終了を unconfirmed にする", realizes: ["F-01"], status: "done", after: ["S-08"], session: "impl"}
-	"S-11": {title: "取り込みの後の最後のコミットで、コードのレビューと最終品質ゲートをやり直し、PR の CI を確かめる", realizes: ["R-01", "R-04"], status: "doing", after: ["S-09", "S-10"], session: "impl"}
+	"S-11": {title: "取り込みの後の最後のコミットで、コードのレビューと最終品質ゲートをやり直し、PR の CI を確かめる", realizes: ["R-01", "R-04"], status: "done", after: ["S-09", "S-10"], session: "impl"}
 }
 
 tests: {
