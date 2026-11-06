@@ -66,7 +66,7 @@ ID: "iss-00007"
   - レビューのレーン：status pass、coverage complete（functional-correctness、requirements-closure、test-adequacy）、P0 0・P1 0・P2 0・P3 2。
   - テストのレーン（同じコミット）：`npm run lint` exit 0、`npm test` exit 0（108 件すべて成功）、`npm run build` exit 0。
   - P3（情報のみ）：FQG-001 埋め込みの Referrer-Policy が設計 D-06 の文と違う（設計の文を same-origin に直した）。FQG-002 `terminal switch` の CLI が封筒のない出力で非ゼロ終了したとき（シグナルでの終了など）、`unconfirmed`（504）ではなく `orca_error`（502）と返す（書き込みは1回だけで安全は保たれる）。
-- PR：https://github.com/chemitaro/orca-web/pull/10（head 3c02c18、base main）。CI（GitHub Actions）の結果は PR に残る。
+- PR：https://github.com/chemitaro/orca-web/pull/10（head 3c02c18、base main）。CI（GitHub Actions）：2026-11-06T10:14Z の観測で、head 3c02c18 の Actions と Commit Status は PASS、GitHub のマージの状態は READY（OPEN、draft でない、MERGEABLE、CLEAN）。
 
 ## Residual Risks / Follow-ups
 
