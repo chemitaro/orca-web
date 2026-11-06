@@ -1,0 +1,1 @@
+../../../../docs/rules/initiative/artifacts.md
