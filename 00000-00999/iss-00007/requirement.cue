@@ -48,7 +48,8 @@ requirements: {
 
 			選んだ先が、handle を持つ動いている端末なら CLI の `orca terminal switch --terminal <handle>`、ほかのタブ（スリープ中の端末、ファイル、ブラウザーなど）なら RPC の `session.tabs.activate`（`navigation: "host"`、`intent: "user"`）、
 			worktree だけなら RPC の `worktree.activate`（`navigation: "host"`）を使う。スリープ中のエージェントは、Orca の通常の動きとして復元してよい（利用者の判断）。
-			応答は、使った経路（`terminal-switch`、`tab-activate`、`worktree-activate`）と、選んだ理由（`requested-agent`、`last-agent`、`last-tab`、`worktree-only`）と、指定の `agent` が見つかったかを返す。
+			タブのない worktree を選ぶと、Orca はサイドバーで選んだときと同じく最初の端末を作りうる。これは Orca の通常の動きとして許す（統括の判断）。
+			応答は、使った経路（`terminal-switch`、`tab-activate`、`worktree-activate`）と、選んだ理由（`requested-agent`、`last-agent`、`last-tab`、`worktree-only`）と、指定の `agent` が見つかったか（`requestedAgentFound`）と、Orca が最初の端末を作りうるか（`mayCreateInitialTerminal`）を返す。
 			"""
 		acceptance: [
 			"録画の再生で、指定のエージェント、最後に動いたエージェント、最後に見ていたタブ、スリープ中の端末、タブのない worktree のそれぞれで、期待する経路と引数（handle、tabId と leafId、`navigation: \"host\"`）で1回だけ呼ぶ",
@@ -60,6 +61,7 @@ requirements: {
 		text: """
 			開く口が Orca に送れるのは、読む CLI と RPC（iss-00005 の一覧）に加えて、CLI の `terminal switch` と、RPC の `session.tabs.activate` と `worktree.activate`（どちらも `navigation: "host"` だけ）だけにする。
 			`terminal create`、`file open`、`worktree create`、`session.tabs.create` などを呼ぶ経路をコードに持たず、門（gate）が一覧にない操作を送らずに拒む。失敗したときに、代わりに新しいタブを作る経路もない。
+			この要件は orca-web が作る操作を送らない意味で、Orca の通常の動きによる作成（スリープの復元、タブのない worktree の最初の端末）は許す。
 			"""
 		acceptance: [
 			"門が、一覧にない CLI のコマンドと RPC、`navigation` が host でない activate を送らずに拒む",
@@ -148,8 +150,7 @@ decisions: [
 	"エージェントかどうか分からないタブ（agentStatus のない端末）は、エージェントと見なさない。最後に見ていたタブとしては選びうる",
 	"トークンは1回ごとに使い捨てにせず、有効の間は何度でも使える（ボタンを何度も押すため）。期限切れの 401 では、iframe がトークンを取り直して1回だけ送り直す（拒まれた要求は Orca に届いていないので安全）",
 	"開いたかの確かめは「送った書き込みが成功を返したか」で判断する。前面を読む口がないため",
+	"「新しいタブを作る経路を持たない」は、orca-web が作る操作を Orca に送らない意味とする。Orca の通常の動きによる作成（スリープ中のエージェントの復元、タブのない worktree を選んだときに Orca が作る最初の端末。v1.4.251 の `ensureWorktreeHasInitialTerminal`）は許す（2026-11-06 統括の判断、案A）。タブのない worktree を選ぶときは、応答の `mayCreateInitialTerminal: true` でその旨を示す",
 ]
 
-questions: [
-	"タブのない worktree で `worktree.activate` を呼ぶと、Orca の画面は最初の端末を自動で作る（v1.4.251 の `ensureWorktreeHasInitialTerminal`）。サイドバーで worktree を選んだときと同じ通常の動きとして許すか（統括に確かめる）",
-]
+
