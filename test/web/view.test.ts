@@ -69,3 +69,12 @@ test('buildView は接続の状態と鮮度を返す', () => {
     lastSuccessAt: expectedState.sources.tabs.lastSuccessAt,
   });
 });
+
+test('buildView は担当と Task の行を絞らない（終わったものも出す）', () => {
+  const view = buildView(expectedState, FIELDS, ['worker.state', 'task.completedAt'], { formatTime: iso });
+  const [workers, tasks] = view.tables;
+  assert.ok(workers && tasks);
+  assert.equal(workers.rows.length, expectedState.workers.length);
+  assert.equal(tasks.rows.length, expectedState.tasks.length);
+  assert.ok(tasks.rows.some((r: { cells: { text: string }[] }) => r.cells[0]?.text === '2026-11-06T09:10:00.000Z'));
+});

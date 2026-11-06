@@ -105,7 +105,8 @@ export class StatePoller {
   #lastViewerAt: number | null = null;
   #connection: Connection = { state: 'starting', reason: null, checkedAt: null };
   #orca: StateDocument['orca'] = null;
-  #initial: Promise<void> | null = null;
+  /** 一度でも読み終えた組。 */
+  readonly #completed = new Set<PollGroup>();
   #timer: NodeJS.Timeout | null = null;
 
   constructor(options: StatePollerOptions) {
@@ -154,14 +155,12 @@ export class StatePoller {
     await Promise.all(due.map((g) => this.#refresh(g, capabilities)));
   }
 
-  /** 正規化した文書。一度も読んでいなければ、最初の読みを待つ。 */
+  /** 正規化した文書。まだ読み終えていない組があれば、その最初の読み（途中なら、その読み）を待つ。 */
   async snapshot(): Promise<StateDocument> {
-    if (GROUPS.some((g) => this.#last[g] === null)) {
-      this.#initial ??= (async () => {
-        const capabilities = this.#capabilityOnce();
-        await Promise.all(GROUPS.map((g) => this.#refresh(g, capabilities)));
-      })();
-      await this.#initial;
+    const pending = GROUPS.filter((g) => !this.#completed.has(g));
+    if (pending.length > 0) {
+      const capabilities = this.#capabilityOnce();
+      await Promise.all(pending.map((g) => this.#refresh(g, capabilities)));
     }
     return this.snapshotSync();
   }
@@ -214,6 +213,7 @@ export class StatePoller {
       try {
         await this.#read(g, started, capabilities);
       } finally {
+        this.#completed.add(g);
         this.#next[g] = started + this.#interval(g);
         this.#inflight[g] = null;
       }

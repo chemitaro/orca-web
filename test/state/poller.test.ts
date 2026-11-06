@@ -202,3 +202,12 @@ test('読み手が例外を投げても、取得元の誤りにして続ける',
   assert.equal(doc.sources.tasks.error?.kind, 'exception');
   assert.equal(doc.workers.length, 2);
 });
+
+test('タイマーの最初の読みの途中に来た snapshot は、その読みの終わりを待つ', async () => {
+  const p = poller(await staticReader());
+  const ticking = p.tick();
+  const doc = await p.snapshot();
+  await ticking;
+  assert.equal(doc.connection.state, 'connected');
+  assert.equal(doc.agents.length, expectedState.agents.length);
+});

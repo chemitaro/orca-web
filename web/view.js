@@ -18,9 +18,6 @@ export const MISSING_LABELS = {
   'no-data': '値がない',
 };
 
-const SETTLED_WORKER_STATES = new Set(['succeeded', 'failed', 'stopped', 'abandoned', 'cancelled']);
-const SETTLED_TASK_STATES = new Set(['completed', 'failed', 'cancelled']);
-
 const ENTITY_TABLES = [
   { entity: 'worktree', title: 'worktree', list: 'worktrees' },
   { entity: 'agent', title: 'エージェント', list: 'agents' },
@@ -72,9 +69,9 @@ function rowsFor(entity, state) {
     case 'agent':
       return state.agents;
     case 'worker':
-      return state.workers.filter((w) => !SETTLED_WORKER_STATES.has(w.state.value) || w.liveness.value === 'live');
+      return state.workers;
     case 'task':
-      return state.tasks.filter((t) => !SETTLED_TASK_STATES.has(t.status.value));
+      return state.tasks;
     case 'run':
       return state.runs;
     default:
