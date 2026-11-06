@@ -1,0 +1,18 @@
+# spec-dock runtime (generated)
+# v2 generated state for agents (SSOT + derived views)
+.agent/
+.specdock-json-transactions/
+# legacy v2 name (kept ignored for safe upgrades)
+.work/
+# local disposable work areas (README is the only tracking-eligible path)
+# re-include the directory first: a root `.workbench/` ignore would otherwise hide the README
+!**/.workbench/
+**/.workbench/*
+!**/.workbench/README.md
+**/.workbench/README.md/**
+active/
+/adrs/
+# canonical catalog and link (schema 4); a real initiatives directory stays visible
+/.canonical/
+/initiatives
+!/initiatives/

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="SpecDockの外部CLI、worktreeごとの直接作業対象、StartとFinish、観測・移行・保全を説明する単独HTMLです。">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; script-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>SpecDock — 外部CLIとworktreeごとの作業ガイド</title>
+<style>
+:root{--ink:#17263b;--muted:#53657a;--brand:#125b70;--line:#d9e2e9;--paper:#fff;--back:#f2f5f8;--soft:#eaf4f6;--warn:#fff5df;--danger:#fbeeee;--radius:15px}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}body{margin:0;background:var(--back);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.85;font-size:16px}a{color:var(--brand);text-underline-offset:3px}a:focus-visible,summary:focus-visible{outline:3px solid #de8b20;outline-offset:5px}code{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:.9em;overflow-wrap:anywhere}p code,li code,td code{background:#edf2f6;padding:.12em .3em;border-radius:4px}pre{margin:20px 0;padding:20px 22px;border-radius:12px;background:#142a3d;color:#eef6ff;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-size:13px;line-height:1.75;border:1px solid #233b50}pre code{font-size:inherit;white-space:inherit}h1,h2,h3,h4{line-height:1.45;font-weight:700;letter-spacing:.01em}h1{font-size:clamp(30px,3.8vw,50px);margin:20px 0}h2{font-size:clamp(24px,2.5vw,30px);margin:8px 0 22px}h3{font-size:21px;margin:30px 0 12px}h4{font-size:18px;margin:22px 0 8px}p{margin:12px 0 18px}strong{font-weight:700}header.hero{color:#f8fbff;background:linear-gradient(125deg,#13283d,#16475a);padding:58px max(28px,calc((100vw - 1320px)/2)) 48px}.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:#a7d2de}.hero p{max-width:880px;color:#dce9f2}.hero .lead{font-size:18px}.badges{display:flex;gap:9px;flex-wrap:wrap}.badge{display:inline-block;border:1px solid #6894a5;border-radius:999px;font-size:12px;padding:4px 13px;color:#effbff}.meta{font-size:12px;color:#bcd1de;overflow-wrap:anywhere}.layout{max-width:1380px;margin:0 auto;display:grid;grid-template-columns:245px minmax(0,1fr);gap:30px;padding:32px 28px 70px}.sidebar{align-self:start;position:sticky;top:24px;max-height:calc(100vh - 48px);overflow:auto;padding:16px 0}.sidebar>p{font-size:12px;color:var(--muted);letter-spacing:.1em;margin:0 0 12px 10px}.sidebar a{display:flex;gap:12px;color:var(--muted);font-size:13px;line-height:1.55;text-decoration:none;padding:10px;border-radius:8px}.sidebar a:hover{background:#e4edf2;color:var(--brand)}.sidebar a span{font-family:monospace;color:#6e8298}.mobile-nav{display:none}main{min-width:0}section{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:36px;margin:0 0 24px;box-shadow:0 5px 18px #10203004}.section-label{font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--brand)}.intro{font-size:17px}.note{border-left:4px solid var(--brand);background:var(--soft);padding:17px 20px;border-radius:0 10px 10px 0;margin:22px 0}.note.warn{background:var(--warn);border-color:#b97813}.note.danger{background:var(--danger);border-color:#b34747}.note p:last-child{margin-bottom:0}.note p:first-child{margin-top:0}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:20px 0}.card{border:1px solid var(--line);border-radius:12px;padding:20px;min-width:0}.card h3{font-size:18px;margin:0 0 10px}.card p{font-size:14px;color:var(--muted);margin:0}.card .tag{font-size:11px;display:block;letter-spacing:.09em;color:var(--brand);margin-bottom:7px}.table-scroll{max-width:100%;overflow-x:auto;margin:18px 0 24px;border:1px solid var(--line);border-radius:10px}table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.75;table-layout:auto}th,td{text-align:left;padding:13px 15px;vertical-align:top;border-bottom:1px solid var(--line);overflow-wrap:anywhere}th{background:#eff4f7;color:#374d65;font-size:12px;white-space:nowrap}tr:last-child td{border-bottom:0}tbody tr:nth-child(even){background:#fbfcfd}.wide table{min-width:730px}.compact td{padding:11px 13px}.diagram{margin:24px 0;background:#f5f8fa;border:1px solid var(--line);border-radius:13px;padding:24px}.diagram figcaption{font-size:13px;color:var(--muted);margin-top:15px}.flow{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap}.flow .node{flex:1;min-width:130px;border:1px solid #aac4d0;background:white;border-radius:10px;padding:14px;font-size:13px}.flow .node strong{display:block;font-size:15px;color:var(--brand)}.flow .arrow{align-self:center;color:#65808e;font-size:20px}.flow .node small{display:block;color:var(--muted);font-size:12px}.chain{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}.chain .node{border:1px solid #b8c8d6;background:#fff;padding:14px 9px;text-align:center;border-radius:9px;font-size:14px}.chain .empty{border-style:dashed;color:#657788;background:#f7f9fb}.chain-label{font-size:12px;color:var(--brand);font-weight:700}.transition{padding:8px 0;font-size:13px;color:var(--muted)}.state-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.state{background:#fff;border:1px solid var(--line);border-radius:10px;padding:18px}.state strong{display:block}.state span{font-size:13px;color:var(--muted)}.state.center{grid-column:1/-1;background:var(--soft)}details{border:1px solid var(--line);border-radius:11px;margin:18px 0;padding:0 18px}summary{cursor:pointer;font-weight:700;padding:16px 0;line-height:1.6}details .table-scroll{margin-top:0}ul,ol{padding-left:1.5em}li{margin:8px 0}.steps{counter-reset:step;list-style:none;padding:0}.steps>li{position:relative;padding:0 0 23px 47px;margin:0;border-left:1px solid var(--line);margin-left:17px}.steps>li::before{counter-increment:step;content:counter(step);position:absolute;left:-17px;top:0;display:grid;place-items:center;width:33px;height:33px;border-radius:50%;color:white;background:var(--brand);font-size:13px;font-weight:700}.steps>li:last-child{border:0;padding-bottom:0}.steps strong{display:block}.steps p{font-size:14px;margin:3px 0 0;color:var(--muted)}.muted{color:var(--muted);font-size:13px}.source-path{font-size:12px;overflow-wrap:anywhere}.footer{font-size:12px;color:var(--muted);padding:8px 4px}.skip{position:absolute;left:-10000px}.skip:focus{position:fixed;left:16px;top:16px;background:white;padding:14px;z-index:99}.check-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.check{border:1px solid var(--line);border-radius:9px;padding:14px;font-size:14px}.check::before{content:"□ ";font-size:19px;color:var(--brand)}
+@media(max-width:1000px){.layout{grid-template-columns:190px minmax(0,1fr);gap:18px;padding:24px 18px}.sidebar a{font-size:12px;padding:8px}.sidebar{top:16px}section{padding:26px}}
+@media(max-width:760px){.wide::before{content:"表は左右にスクロールできます。";display:block;padding:9px 12px;font-size:11px;color:var(--muted);background:#f6f9fb}body{font-size:15px}.hero{padding:35px 20px!important}.hero .lead{font-size:16px}.layout{display:block;padding:18px 12px 35px}.sidebar{display:none}.mobile-nav{display:block;background:white;border:1px solid var(--line);border-radius:12px;padding:0 18px;margin:0 0 18px}.mobile-nav summary{font-size:14px}.mobile-nav a{display:block;font-size:14px;padding:6px 0;text-decoration:none}.mobile-nav a span{display:inline-block;min-width:33px;color:var(--muted)}section{padding:23px 18px;margin-bottom:16px;border-radius:12px}.cards,.check-grid{grid-template-columns:1fr}.flow{display:block}.flow .node{min-width:0}.flow .arrow{display:block;text-align:center;transform:rotate(90deg);height:30px;font-size:20px}.diagram{padding:18px 12px;margin:18px 0}.chain{gap:6px}.chain .node{font-size:12px;padding:12px 4px}.state-grid{grid-template-columns:1fr}.state.center{grid-column:auto}pre{padding:15px 13px;font-size:12px}th,td{padding:11px 12px}.note{padding:14px 15px}.steps>li{padding-left:31px}.intro{font-size:16px}.meta{font-size:11px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media print{body{background:white;font-size:10pt;color:black}.hero{background:white!important;color:black!important;padding:0 0 22px!important}.hero p,.hero .eyebrow,.hero .meta{color:#333}.hero .badge{color:#333;border-color:#aaa}h1{font-size:24pt}.layout{display:block;max-width:none;margin:0;padding:0}.sidebar,.mobile-nav,.skip{display:none}section{box-shadow:none;padding:15px 0;border:0;border-top:1px solid #aaa;border-radius:0;margin:0 0 18px}h2,h3,summary{break-after:avoid}figure,.card,.note,pre{break-inside:avoid}pre{background:#f5f5f5;color:#111;border-color:#ccc;font-size:8pt}.table-scroll{overflow:visible;border:0}.wide table{min-width:0;font-size:8pt}th,td{padding:6px}details{border:0;padding:0}details:not([open])>:not(summary){display:block!important}a{color:inherit;text-decoration:none}.cards{display:block}.card{margin:10px 0}}
+</style>
+</head>
+<body>
+<a class="skip" href="#overview">本文へ移動</a>
+<header class="hero"><div class="eyebrow">SPECDOCK / EXTERNAL CLI / DIRECT WORK TARGET</div><h1>仕様を共有し、<br>現在の作業を各worktreeで記録します。</h1><p class="lead">実行プログラムはworktree外へ導入し、GitHub番号と既存仕様を正本にします。同じcloneの並行作業は必要時に観測し、Startとbranch switchだけ短い排他で重複と競合を防ぎます。</p><div class="badges"><span class="badge">外部CLI・直接対象方式</span><span class="badge">三階層・GitHub番号</span><span class="badge">単独HTML・外部依存なし</span></div><p class="meta">配布ガイド改定: 2026-10-02 / Issue #413</p></header>
+<div class="layout"><nav class="sidebar" aria-label="目次"><p>CONTENTS</p><a href="#overview"><span>01</span>まず理解すること</a>
+<a href="#engine"><span>02</span>実行プログラムとGitの役割</a>
+<a href="#storage"><span>03</span>何をどこへ置くか</a>
+<a href="#terms"><span>04</span>用語と状態を区別する</a>
+<a href="#selectors"><span>05</span>対象を正確に指定する</a>
+<a href="#lifecycle"><span>06</span>Start・Finish・clearの違い</a>
+<a href="#walkthrough"><span>07</span>通常操作の流れ</a>
+<a href="#failure"><span>08</span>途中失敗を正直に扱う</a>
+<a href="#migration"><span>09</span>導入・移行・静的資産更新</a>
+<a href="#catalog"><span>10</span>全71コマンドを確認する</a>
+<a href="#safety"><span>11</span>この方式が保証する範囲</a>
+<a href="#sources"><span>12</span>詳細へ進む</a></nav>
+<main><details class="mobile-nav"><summary>目次を開く</summary><nav aria-label="モバイル目次"><a href="#overview"><span>01</span>まず理解すること</a>
+<a href="#engine"><span>02</span>実行プログラムとGitの役割</a>
+<a href="#storage"><span>03</span>何をどこへ置くか</a>
+<a href="#terms"><span>04</span>用語と状態を区別する</a>
+<a href="#selectors"><span>05</span>対象を正確に指定する</a>
+<a href="#lifecycle"><span>06</span>Start・Finish・clearの違い</a>
+<a href="#walkthrough"><span>07</span>通常操作の流れ</a>
+<a href="#failure"><span>08</span>途中失敗を正直に扱う</a>
+<a href="#migration"><span>09</span>導入・移行・静的資産更新</a>
+<a href="#catalog"><span>10</span>全71コマンドを確認する</a>
+<a href="#safety"><span>11</span>この方式が保証する範囲</a>
+<a href="#sources"><span>12</span>詳細へ進む</a></nav></details>
+<section id="overview" aria-labelledby="overview-title"><div class="section-label">01</div><h2 id="overview-title">まず理解すること</h2><p class="intro">SpecDockは、GitHub Issueに結び付いた仕様をInitiative・Epic・Issueの三階層で扱うCLIです。実行プログラムは通常のPython packageとしてworktree外に導入し、各作業場には仕様と最小限の作業記録を置きます。</p>
+<p>対応OSはLinuxとmacOS、Pythonは3.10以上です。他のOSでは業務コマンドを開始せず、変更前に<code>UNSUPPORTED_PLATFORM</code>（終了値3）を返します。help・version・completionは、repositoryや業務用のOS機能に依存せず利用できます。</p>
+<div class="cards"><article class="card"><h3>仕様の正本</h3><p>Requirement・Design・Planは一次仕様で、clone ごとのカタログ（<code>spec-dock/canonical</code> ブランチ）に置かれ、自動で保存・共有されます。Scopeの題名・種類・親子・依存の正本はGitHubです。Reportは実施・検証の記録、Artifactは採用前も含む証拠です。</p></article><article class="card"><h3>Scopeの番号</h3><p>新規Scopeは必ずGitHubを使います。GitHubが発行した番号を既存のIDに使い、UUIDやオフライン用の新しい連番を追加しません。</p></article><article class="card"><h3>現在の作業</h3><p>一つのworktreeの直接対象は同時に一件です。親Epic・Initiativeは文脈や集計であり、別の作業を暗黙に開始しません。</p></article><article class="card"><h3>並行作業の観測</h3><p>Gitが列挙する同じcloneのmainとlinked worktreeを必要時に読みます。別clone、別PC、Codexのプロセスは探索しません。</p></article></div>
+<p>正確な引数は導入版の<code>spec-dock help COMMAND</code>と各leafの<code>--help</code>で確認できます。本書は外部CLI・直接対象方式の操作を説明します。実装、テスト、レビュー、PR、mergeはそれぞれ独立した完了証拠です。</p>
+</section>
+<section id="engine" aria-labelledby="engine-title"><div class="section-label">02</div><h2 id="engine-title">実行プログラムとGitの役割</h2><p>ここでいう「engine」はCLIを実行するPythonプログラムです。常駐サービスや中央の状態管理サーバーを追加する意味ではありません。package managerでworktree外に導入した一つの実行環境を、どのworktreeからも呼び出します。</p>
+<figure class="diagram"><div class="flow"><div class="node"><strong>外部のspec-dock</strong><small>Python packageとruntime<br>help・業務コマンドの入口</small></div><div class="arrow" aria-hidden="true">→</div><div class="node"><strong>現在のworktree</strong><small>仕様・成果物・静的資産<br>ignoredの直接対象一件</small></div><div class="arrow" aria-hidden="true">→</div><div class="node"><strong>native Git一覧</strong><small>同cloneの作業場を都度取得<br>他worktreeの直接記録を観測</small></div></div><figcaption>独自のworktree名簿、Git内のengine locator、共有control、operation journal、cacheは通常運用のauthorityにしません。</figcaption></figure>
+<p><code>spec-dock/scripts/spec-dock</code>はPATH上の外部consoleへ引数、標準出力、標準エラー、終了値を渡すshimです。checkout内PythonやGit共有controlを探しません。外部consoleが見つからないときは導入/PATHを確認します。旧engineへの自動fallbackや自動installは行いません。</p>
+<p>Gitのcommon directoryは同じcloneを識別するために読みます。Startの短いOS排他にも既存の物理実体を使いますが、SpecDock独自のデータfile、登録情報、config/refをGit管理領域へ保存しません。branchやworktreeの作成ではGit自身が必要なrefs/index等を変更します。</p>
+</section>
+<section id="storage" aria-labelledby="storage-title"><div class="section-label">03</div><h2 id="storage-title">何をどこへ置くか</h2><div class="table-scroll" tabindex="0"><table><thead><tr><th scope="col">情報</th><th scope="col">置き場所・権威</th><th scope="col">扱い</th></tr></thead><tbody>
+<tr><td>CLIのPython実装</td><td>worktree外の通常package</td><td>checkoutやmain worktreeのcontrolに依存しません。</td></tr>
+<tr><td>仕様・Report・Artifact</td><td>カタログ（<code>spec-dock/initiatives/&lt;区切り&gt;/&lt;ID&gt;/</code> の先、<code>spec-dock/canonical</code> ブランチ）</td><td>コードのブランチには入れず、定期の同期が保存・共有します。</td></tr>
+<tr><td>Scopeの題名・種類・親子・依存</td><td>GitHub Issue（種類のラベル、sub-issue、blocked-by）</td><td>SpecDockのコマンドだけで変えます。表示は構造のスナップショットから読みます。</td></tr>
+<tr><td>Scopeの番号・GitHub完了状態</td><td>GitHub</td><td>新規作成はオンラインです。観測できない状態はunknownです。</td></tr>
+<tr><td>直接作業対象</td><td><code>spec-dock/.agent/work-target/</code></td><td>自身のworktreeだけ、ignoredで0または1件。開始時のbranchとScopeを記録します。</td></tr>
+<tr><td>文書・template・skill・shim</td><td>明示したworktreeの静的資産</td><td>packageが持つ既知path/hashに基づいて導入・更新します。</td></tr>
+<tr><td>Syncの集計</td><td>そのコマンドの出力</td><td>予約・完了・祖先を都度観測し、index/treeやcacheを保存しません。</td></tr>
+<tr><td>保全backup</td><td>全worktree・Git・installed packageの外</td><td>新しい絶対pathに保存し、独立した一時場所へ実際に復元して比較します。</td></tr>
+</tbody></table></div>
+<p>直接記録のfile tokenは、捕捉した一件だけを安全に解除するための識別子です。ScopeのUUID、GitHub番号の代替、永続的な操作IDではありません。追跡済み、またはignoreされていない保存先には新しい直接記録を公開しません。</p>
+</section>
+<section id="terms" aria-labelledby="terms-title"><div class="section-label">04</div><h2 id="terms-title">用語と状態を区別する</h2><div class="table-scroll" tabindex="0"><table><thead><tr><th scope="col">用語</th><th scope="col">意味</th></tr></thead><tbody>
+<tr><td>main worktree</td><td>cloneの最初の作業場です。main branchとは別概念で、制御拠点ではありません。</td></tr>
+<tr><td>直接対象・選択中</td><td>そのworktreeが明示取得した一つのScopeです。GitHubがopen/closedか、Codexが稼働中かとは別です。</td></tr>
+<tr><td>予約</td><td>直接記録に残る作業対象です。別branchへcheckoutしても自動解除しません。</td></tr>
+<tr><td>論理active・祖先集計</td><td>整合する直接対象と、現在のmetadataから導く親の文脈です。異なる子Issueは並行して開始できます。</td></tr>
+<tr><td>completed</td><td>GitHubではclosedかつstate_reason=completedです。単にclosedなら常に完了、とは扱いません。</td></tr>
+<tr><td>stale / unavailable / invalid</td><td>対象や祖先を解決できない、読取不能、破損/複数記録等です。emptyに置き換えません。</td></tr>
+<tr><td>Artifact / Workbench</td><td>Artifactは証拠、Workbenchはignoredの一時作業です。作成・import・一回copyだけで正本や採用済み判断にはなりません。</td></tr>
+<tr><td>partial / unknown</td><td>一部効果が成立した、または成否を確定できない状態です。成功・未実施と区別します。</td></tr>
+</tbody></table></div>
+<p>新規local Scopeやオフライン作成はありません。Scopeの題名、種類、親子、依存の正本はGitHubです。</p>
+</section>
+<section id="selectors" aria-labelledby="selectors-title"><div class="section-label">05</div><h2 id="selectors-title">対象を正確に指定する</h2><p>Scope ID、GitHub番号/ref/URL、現在の直接対象に基づくdynamic selectorを使います。曖昧な番号、未選択、stale、親チェーン不整合から変更対象を推測しません。必要なら<code>scope show TARGET</code>で明示対象を読みます。</p>
+<p><code>--project ABS</code>は正確なGit worktree rootです。worktree show/remove/bootstrapやinstallationの対象も実体の絶対pathで指定します。独自alias台帳を作りません。同じremote URLでも別cloneはこの観測範囲に含めません。</p>
+<p>Artifact所有者の<code>@root</code>はrepository rootのArtifactに限ります。Scope作成、Start、依存対象に流用しません。Artifact create/importの保存先はJSONの<code>data.result.artifact.path</code>を使い、pathを組み立て直しません。</p>
+</section>
+<section id="lifecycle" aria-labelledby="lifecycle-title"><div class="section-label">06</div><h2 id="lifecycle-title">Start・Finish・clearの違い</h2><ol class="steps"><li><strong>Startの事前確認</strong><p>対象と依存のlive readinessを確認します。GitHub照会は短い排他の外で行います。</p></li><li><strong>短い排他の中で開始を確定</strong><p>同cloneの予約を再観測し、重複を確認してbranch作成/checkout、直接記録の公開まで行います。</p></li><li><strong>作業中の通常操作</strong><p>文書編集、Artifact、Sync、Finishに共通Start lockや編集権限制度は設けません。</p></li><li><strong>FinishでIssueを完了</strong><p>GitHub完了を確認して、捕捉した直接記録だけを解除します。branchに留まり、後から始まった別対象を消しません。</p></li></ol>
+<div class="note"><p>Gitは同じbranchの同時checkoutを防ぎます。それだけでは、別branchで同じIssueを同時Startする競合を防げません。短いStart排他は重複確認と取得の間の競合だけを防ぎます。同じIssueの重複はbranch名ではなくScope IDとGitHub番号で判定します。<code>branch switch</code>も同じ排他の中でcheckoutし、閲覧用active linkの書込みと重ならないようにします。排他はGit共通dirへのOS flockだけで、Gitへ書込みません。SpecDockを経由しないGit操作と別cloneは対象外です。通常のfile編集をロックする機能ではありません。</p></div>
+<p>新しいbranchのStartには<code>--base REF</code>が必要です。既存branchを再利用する場合は<code>--branch NAME</code>を明示し、baseを渡しません。既存refをresetせず、同じ妥当な対象/branchへのStartはunchangedです。</p>
+<p><code>active set</code>は現在の妥当な直接対象と同じ場合だけ選択をunchangedのまま保ち、ずれた閲覧用<code>spec-dock/active/{initiative,epic,issue}</code> linkだけを揃えます。空・別対象への取得は<code>WORK_START_REQUIRED</code>で停止します。親への暗黙昇格やfocusの第二状態は作りません。linkは選択の正本ではありません。</p>
+<p><code>active clear</code>はselectionだけを解除し、Issueを閉じたりbranchを変更したりしません。<code>scope close</code>はbackend状態だけを変えます。Finishは作業完了なので、未完了作業を引き継ぐために使いません。今回、work releaseという新コマンドは追加しません。</p>
+</section>
+<section id="walkthrough" aria-labelledby="walkthrough-title"><div class="section-label">07</div><h2 id="walkthrough-title">通常操作の流れ</h2><p>作成結果から実際のIDを読み、親を明示します。下の<code>EPIC_ID</code>、<code>ISSUE_ID</code>、<code>BASE_REF</code>は実際に返されたIDと存在するbaseへ置き換えてください。</p>
+<pre><code>spec-dock scope create issue --backend github --parent EPIC_ID --title "変更の目的" --json
+spec-dock scope show ISSUE_ID --json
+spec-dock work start ISSUE_ID --base BASE_REF --json
+spec-dock active show --json
+spec-dock workspace sync --source github --json
+# 実装・検証・レビューと必要な提出を別途完了する
+spec-dock work finish ISSUE_ID --yes --json</code></pre>
+<p>一つのworktreeでIssue AをFinishした後、Issue BをStartする連続利用は可能です。A/Bを同時に直接選択することはできません。同じEpic配下の異なるIssueを別worktreeで開始すれば、Syncが各予約と祖先件数を集計します。</p>
+<p>Syncの既定は構造のスナップショット（GitHubの構造の写し）を読みます。<code>--source github</code>を明示すると、確かめを待たずに取り直してから観測します。出力の<code>data.complete</code>とfindingsを読み、<code>process_state=not_observed</code>を実行中の証拠にしません。</p>
+</section>
+<section id="failure" aria-labelledby="failure-title"><div class="section-label">08</div><h2 id="failure-title">途中失敗を正直に扱う</h2><p>新しい永続journalやresume/rollback操作はありません。実体、Gitの原文エラー、返されたeffects、残った候補とbackupを確認してから、次の明示操作を判断します。自動checkout、branch削除、reset、stash等による巻戻しを行いません。</p>
+<div class="table-scroll" tabindex="0"><table><thead><tr><th scope="col">終了値</th><th scope="col">意味</th><th scope="col">確認すること</th></tr></thead><tbody>
+<tr><td>0</td><td>成功、unchanged、dry-runのplanned</td><td>status、実際の結果、effectsを読みます。</td></tr>
+<tr><td>1</td><td>効果前の内部不具合</td><td>診断を保全し、不具合を調べます。</td></tr>
+<tr><td>2</td><td>文法や廃止optionの診断</td><td>現在helpの文法へ戻ります。旧journal optionを付けません。</td></tr>
+<tr><td>3</td><td>事前条件が満たされない</td><td>対象・予約・readiness・保全・確認を調べます。</td></tr>
+<tr><td>4</td><td>明示local対象が存在しない</td><td>正確な対象を確認します。通信失敗を不存在とみなしません。</td></tr>
+<tr><td>5</td><td>変更効果のない実行失敗</td><td>errorと実体を読み、成功を仮定しません。</td></tr>
+<tr><td>6</td><td>一部効果が成立、またはunknown</td><td>succeeded / unknown / not_attemptedを区別し、残存pathとbackupを保全します。</td></tr>
+<tr><td>7</td><td>必要な観測や検証が不完全</td><td>complete=falseやfindingsを読みます。不明なworktreeをemptyと見なしません。</td></tr>
+</tbody></table></div>
+<p>Gitのargv/stdout/stderr/returncodeを保持します。checkout後に記録公開が失敗したときも、成立したGit効果を隠しません。GitHub応答が不明なら、Issue作成やcloseが未実施とは断定せず、自動的に再作成しません。</p>
+<p><code>--yes</code>は通常のCLI確認を省略するだけで、破損・重複・対象安全性・backup要件を迂回しません。<code>--dry-run</code>は変更計画で、書込み、backup作成、GitHub更新、Start lock取得を行いません。</p>
+</section>
+<section id="migration" aria-labelledby="migration-title"><div class="section-label">09</div><h2 id="migration-title">導入・移行・静的資産更新</h2><p>レビュー・通常試験が済んだwheelを、例えば<code>uv tool install /absolute/path/spec_dock-VERSION-py3-none-any.whl</code>でworktree外に導入します。packageの更新と、checkoutの静的資産更新を別操作として扱います。</p>
+<pre><code>spec-dock installation init /absolute/project --dry-run --json
+spec-dock installation init /absolute/project --yes --json
+spec-dock installation show --target /absolute/project --json</code></pre>
+<p>initは明示した一つのGit worktreeに文書・template・skill・shimとworkspace宣言を置きます。既存の配布先fileがあれば書込み前に停止します。Python runtime、直接記録、Git内の独自領域は作りません。</p>
+<p>版3の宣言のリポジトリは、SpecDock 0.4.2 を入れ直し、版のタグ <code>v0.4.2</code> の <code>scripts/migrate-to-canonical/README.md</code> の手順で移してから、0.5.0 で扱います（<a href="migration.md">導入・移行・保全</a>）。</p>
+<pre><code>spec-dock installation update --target /absolute/project --backup-dir /absolute/new-static-backup --yes --json</code></pre>
+<p>static updateは現在/既知旧hashだけを更新し、既知旧runtime filesと外した雛形を一件ずつ退役させます。ユーザー改変はmanual mergeへ戻します。backupには変更する旧bytes/modeだけを保存し、独立した一時場所へ復元して比較します。directory単位の削除はしません。</p>
+<p>uninstallは正確な対象とtool資産削除の明示許可がある場合だけ使います。既知static filesを保全して削除し、workspace、ignore規則、仕様、Artifact、Workbench、直接記録、未知file、directoryを残します。版4でない宣言と未知protocolは適用対象にしません。</p>
+<p>詳しい条件は<a href="migration.md">導入・移行・保全</a>で確認できます。旧engineの実行、Git controlの更新、journal replay、全worktree一括書換えを移行手順に戻しません。</p>
+</section>
+<section id="catalog" aria-labelledby="catalog-title"><div class="section-label">10</div><h2 id="catalog-title">全71コマンドを確認する</h2><p>SpecDock 0.5.0 は宣言の版4（canonical モード。仕様の構造を GitHub Issue に、中身を <code>spec-dock/canonical</code> ブランチに置く形）だけを扱います。版3の宣言では、<code>canonical check</code> のほかのどのコマンドも <code>CANONICAL_NOT_MIGRATED</code> で止まります。C43〜C50 は canonical のカタログと同期のコマンドです。使い方、ツールの設定の1行、エラーと次の1手は<a href="canonical.md">canonical モードの使い方</a>にあります。</p><p><code>--project ABS</code>は正確なworktree root、<code>--json</code>は<code>specdock.cli/v2</code>のenvelopeです。必要な変更確認は<code>--yes</code>、保全先は新しい<code>--backup-dir ABS</code>で指定します。optional表記でもapplyで必須になる条件があるため、現在helpと結果を読みます。</p>
+<div class="table-scroll wide" tabindex="0" aria-label="全71コマンド。左右にスクロールできます。"><table><thead><tr><th scope="col">ID</th><th scope="col">コマンド</th><th scope="col">引数・固有option</th><th scope="col">対象と効果</th><th scope="col">副作用</th></tr></thead><tbody><tr><td>C01</td><td><code>scope create initiative</code></td><td><code>--backend github --title TITLE --assurance LEVEL --assurance-reason TEXT</code></td><td>GitHubで番号を発行してInitiativeを作り、<code>templates/cue/initiative/</code>からカタログに置きます。</td><td>GitHub作成、カタログのScope</td></tr>
+<tr><td>C02</td><td><code>scope create epic</code></td><td><code>--backend github --parent TARGET --title TITLE --assurance LEVEL --assurance-reason TEXT</code></td><td>明示したInitiativeの下にEpicを作ります。</td><td>GitHub作成、カタログのScope</td></tr>
+<tr><td>C03</td><td><code>scope create issue</code></td><td><code>--backend github --parent TARGET --title TITLE --assurance LEVEL --assurance-reason TEXT</code></td><td>明示したEpicの下にIssueを作ります。</td><td>GitHub作成、カタログのScope</td></tr>
+<tr><td>C04</td><td><code>scope import github initiative</code></td><td><code>GITHUB_REF --title TITLE [--github-repo OWNER/REPO] --assurance LEVEL --assurance-reason TEXT</code>（<code>--title</code>は使わずGitHubの題名で進めます）</td><td>既存Issueを確認してInitiativeへ取り込みます（足りない種類のラベル、親子、カタログのディレクトリだけを足します）。</td><td>GitHubのラベル・親子、カタログのScope</td></tr>
+<tr><td>C05</td><td><code>scope import github epic</code></td><td><code>GITHUB_REF --parent TARGET --title TITLE [--github-repo OWNER/REPO] --assurance LEVEL --assurance-reason TEXT</code>（同上）</td><td>既存IssueをEpicへ取り込みます。</td><td>GitHubのラベル・親子、カタログのScope</td></tr>
+<tr><td>C06</td><td><code>scope import github issue</code></td><td><code>GITHUB_REF --parent TARGET --title TITLE [--github-repo OWNER/REPO] --assurance LEVEL --assurance-reason TEXT</code>（同上）</td><td>既存IssueをIssue Scopeへ取り込みます。</td><td>GitHubのラベル・親子、カタログのScope</td></tr>
+<tr><td>C07</td><td><code>scope list</code></td><td><code>[--kind {initiative,epic,issue}] [--parent TARGET] [--state {open,completed,not-planned,unknown}]</code></td><td>構造のスナップショットのScopeを、カタログの場所とともに表示します。</td><td>読取りのみ</td></tr>
+<tr><td>C08</td><td><code>scope show</code></td><td><code>TARGET</code></td><td>GitHubの題名、親子、状態、カタログの場所、保証レベルを表示します。</td><td>読取りのみ</td></tr>
+<tr><td>C09</td><td><code>scope edit</code></td><td><code>TARGET --title TITLE</code></td><td>GitHub Issueの題名だけを変更し、ID、ディレクトリ、branchを保ちます。</td><td>GitHubの題名</td></tr>
+<tr><td>C10</td><td><code>scope close</code></td><td><code>TARGET [--reason {completed,not-planned}]</code></td><td>対象のGitHub Issueを閉じます。reason既定はcompletedです。completedで閉じるときは、子孫がすべてcompletedかnot-plannedなら閉じられ、openまたは状態が分からない子孫が1つでもあれば<code>DESCENDANT_NOT_COMPLETED</code>で止まります。</td><td>GitHub状態</td></tr>
+<tr><td>C11</td><td><code>scope reopen</code></td><td><code>TARGET</code></td><td>対象だけをopenへ戻します。</td><td>GitHub状態</td></tr>
+<tr><td>C12</td><td><code>scope delete</code></td><td><code>TARGET [--recursive] [--clear-active] [--detach-dependencies] [--backup-dir ABS]</code></td><td>種類のラベルと親子（と、明示すれば依存）を外し、保全してからカタログのディレクトリを削除します。Issueとbranchは消しません。</td><td>GitHubのラベル・親子、backup、カタログ</td></tr>
+<tr><td>C13</td><td><code>active show</code></td><td>共通optionのみ</td><td>一つの直接記録と現在の祖先を表示します。</td><td>読取りのみ</td></tr>
+<tr><td>C14</td><td><code>active set</code></td><td><code>TARGET</code></td><td>現在の妥当な直接対象と同じなら選択はunchangedで、ずれた閲覧用active linkだけを揃えます。空/別対象はWORK_START_REQUIREDで停止します。</td><td>active linkのみ</td></tr>
+<tr><td>C15</td><td><code>active clear</code></td><td><code>--from TARGET</code> または <code>--all</code></td><td>捕捉した直接記録だけを解除し、未選択ならactive linkをfallbackへ揃えます。</td><td>selection、active link</td></tr>
+<tr><td>C16</td><td><code>work start</code></td><td><code>TARGET [--branch NAME] [--base REF] [--switch-active] [--source github]</code></td><td>live readiness後、短い排他内で重複再確認・branch作成/checkout・直接対象公開を行い、排他の後でactive linkを揃えます。schema4の既定branch名は<code>&lt;ID&gt;</code>で、作業中の印を付け、別のPCの印があれば警告<code>SCOPE_IN_PROGRESS</code>を返します。</td><td>Git、worktree局所selection、active link</td></tr>
+<tr><td>C17</td><td><code>work finish</code></td><td><code>TARGET</code></td><td>完了確認後に捕捉selectionだけ解除し、branchに留まります。解除したらactive linkをfallbackへ揃えます。閉じる前に仕様の保存とpushを最大180秒待ち、確かめられなければ<code>CANONICAL_SAVE_UNCONFIRMED</code>で閉じずに止まります。</td><td>GitHub完了、selection、active link</td></tr>
+<tr><td>C18</td><td><code>branch show</code></td><td><code>TARGET [--name NAME]</code></td><td>現在のref/占有を観測します。対応台帳は保存しません。</td><td>読取りのみ</td></tr>
+<tr><td>C19</td><td><code>branch create</code></td><td><code>TARGET [--name NAME] --base REF</code></td><td>固定baseからbranchを作り、checkoutしません。既存refをresetしません。</td><td>Git ref</td></tr>
+<tr><td>C20</td><td><code>branch switch</code></td><td><code>TARGET [--name NAME]</code></td><td>同cloneのStart lock内でbranchへcheckoutし、selection取得/解除は行いません。lockを--lock-timeout内に取れなければSTART_LOCK_BUSYで止まります。</td><td>Gitのみ</td></tr>
+<tr><td>C21</td><td><code>dependency list</code></td><td><code>TARGET [--view {declared,effective}]</code></td><td>宣言/継承依存を表示します。</td><td>読取りのみ</td></tr>
+<tr><td>C22</td><td><code>dependency check</code></td><td><code>TARGET [--source github]</code></td><td>readinessと根拠を観測します。既定は構造のスナップショット、<code>--source github</code>は取り直してから判定します。</td><td>読取りのみ</td></tr>
+<tr><td>C23</td><td><code>dependency add</code></td><td><code>--from TARGET --to TARGET</code></td><td>fromがtoを前提とするblocked-byをGitHubに足します。重複はunchangedです。</td><td>GitHubの依存</td></tr>
+<tr><td>C24</td><td><code>dependency remove</code></td><td><code>--from TARGET --to TARGET [--missing-ok]</code></td><td>指定のblocked-byをGitHubから外します。</td><td>GitHubの依存</td></tr>
+<tr><td>C25</td><td><code>artifact create</code></td><td><code>--scope ARTIFACT_SCOPE --type {blank,research,interview,disc,decision-candidate,adr} --title TITLE [--slug SLUG]</code></td><td>templateから一件のMarkdownをno-replace公開します。</td><td>Artifact</td></tr>
+<tr><td>C26</td><td><code>artifact import file</code></td><td><code>PATH --scope ARTIFACT_SCOPE</code></td><td>一件のregular fileをopaque evidenceとして保存します。</td><td>Artifact</td></tr>
+<tr><td>C27</td><td><code>artifact list</code></td><td><code>--scope ARTIFACT_SCOPE</code></td><td>識別情報だけを一覧表示します。</td><td>読取りのみ</td></tr>
+<tr><td>C28</td><td><code>artifact show</code></td><td><code>ARTIFACT_ID --scope ARTIFACT_SCOPE</code></td><td>path/type等を表示し、本文を出力しません。</td><td>読取りのみ</td></tr>
+<tr><td>C29</td><td><code>worktree create</code></td><td><code>NAME --base REF [--root ABS]</code></td><td>native root/NAMEとworktree/NAME branchを作ります。bootstrapは別です。</td><td>native Git</td></tr>
+<tr><td>C30</td><td><code>worktree list</code></td><td>共通optionのみ</td><td>同じphysical cloneのnative inventoryを表示します。</td><td>読取りのみ</td></tr>
+<tr><td>C31</td><td><code>worktree show</code></td><td><code>ABS</code></td><td>一つのnative worktreeを表示します。</td><td>読取りのみ</td></tr>
+<tr><td>C32</td><td><code>worktree remove</code></td><td><code>ABS [--unlock] [--discard-ignored]</code></td><td>明示作業場を除去し、branchを残します。</td><td>native Git、対象directory</td></tr>
+<tr><td>C33</td><td><code>worktree bootstrap</code></td><td><code>ABS</code></td><td>project-owned make initを一回実行します。</td><td>任意project処理</td></tr>
+<tr><td>C34</td><td><code>workspace sync</code></td><td><code>[--source github] [--allow-invalid]</code></td><td>複数WTの予約・論理active・祖先とlifecycleを都度観測します。</td><td>読取りのみ</td></tr>
+<tr><td>C35</td><td><code>workspace validate</code></td><td><code>[--require-nodes]</code></td><td>構造のスナップショットとカタログのディレクトリ・文書を照らして検証します。CIでは<code>canonical check</code>を使います。</td><td>読取りのみ</td></tr>
+<tr><td>C36</td><td><code>workspace doctor</code></td><td><code>[--raw] [--legacy] [--github-repo OWNER/REPO --github-pr NUMBER --github-head-sha SHA] [--github-extended]</code></td><td>明示した現在/旧状態・capabilityをread-only診断します。</td><td>読取り、明示時GitHub照会</td></tr>
+<tr><td>C37</td><td><code>installation show</code></td><td><code>[--target ABS]</code></td><td>package版と一つのWTのstatic資産分類を表示します。</td><td>読取りのみ</td></tr>
+<tr><td>C38</td><td><code>installation init</code></td><td><code>ABS</code></td><td>未導入WTへ静的資産と新writer宣言を置きます。</td><td>static資産、workspace</td></tr>
+<tr><td>C39</td><td><code>installation update</code></td><td><code>[--target ABS] [--backup-dir ABS]</code></td><td>既知static資産だけを保全して更新・個別退役します。</td><td>外部backup、static資産</td></tr>
+<tr><td>C40</td><td><code>installation uninstall</code></td><td><code>[--target ABS] [--backup-dir ABS]</code></td><td>既知static資産だけを保全・削除し、workspace/ignore/ユーザー成果を残します。</td><td>外部backup、static資産</td></tr>
+<tr><td>C41</td><td><code>help</code></td><td><code>[COMMAND PATH]</code></td><td>現在helpを表示します。repository不要です。</td><td>出力のみ</td></tr>
+<tr><td>C42</td><td><code>completion</code></td><td><code>{bash,zsh,fish}</code></td><td>補完をstdoutへ返し、shell設定を変更しません。</td><td>出力のみ</td></tr>
+<tr><td>C43</td><td><code>canonical check</code></td><td><code>[--commit REV]</code></td><td>指定commit（既定HEAD）のtreeに仕様のpath・<code>.meta.json</code>がなく、版4の宣言・static資産・ignore規則が揃うかをCI向けに検査します。問題はpathと次の1手付きでexit7です。workflow見本は <code>docs/ci/spec-dock-check.yml</code> です。</td><td>読取りのみ</td></tr>
+<tr><td>C44</td><td><code>canonical link</code></td><td><code>[--no-schedule]</code></td><td>このcloneのカタログ（mainの<code>spec-dock/.canonical</code>）を探すか作ってlockし、除外の3行を足し、mainとこのチェックアウトの<code>spec-dock/initiatives</code>をカタログへのリンクにし、定期の同期に登録します（登録簿、定期の実行、基準）。<code>--no-schedule</code> は登録せず基準だけを記録します。何度実行しても同じ結果です。</td><td>カタログのworktree、<code>info/exclude</code>、リンク、状態の置き場、定期の実行</td></tr>
+<tr><td>C45</td><td><code>canonical status</code></td><td>共通optionのみ</td><td>カタログ、リンク、除外、読み書きの可否、ツールの設定の1行、定期の同期、未保存と保留、形式、git、構造のスナップショットを示し、問題ごとに次の1手を示します。GitHubに問い合わせません。</td><td>読取りのみ</td></tr>
+<tr><td>C46</td><td><code>canonical sync</code></td><td><code>[--registered] [--state-root PATH] [--loop [--detach]]</code></td><td>カタログの保存、取り込み、pushを1回行います（強制pushしません）。<code>--registered</code> は登録簿のすべてのカタログを処理し、<code>--loop</code> はsystemdのない環境の常駐のプロセスとして60秒ごとに動きます。日常は定期の実行が動かします。</td><td>カタログのcommit、push、状態の置き場</td></tr>
+<tr><td>C47</td><td><code>canonical accept</code></td><td><code>[PATH...] [--deletions]</code></td><td>保留した変更（秘密情報らしいもの、大きすぎるファイル、大量の削除）を、次の同期で保存してよいと記録します。中身が変われば効きません。</td><td><code>.runtime/accepted.json</code></td></tr>
+<tr><td>C48</td><td><code>canonical restore</code></td><td><code>[PATH...]</code></td><td>保留中のパス（パスなしは保留中の削除）を、カタログのHEADの内容に戻します。commitしません。</td><td>カタログの作業ツリー</td></tr>
+<tr><td>C49</td><td><code>canonical resume</code></td><td><code>--adopt-remote</code> | <code>--push-local</code></td><td>一時停止したカタログの同期を、利用者が決めた扱いで再開します。</td><td>状態の置き場、<code>--push-local</code> はpush</td></tr>
+<tr><td>C50</td><td><code>canonical remove</code></td><td><code>[--yes]</code></td><td>未保存と未pushがないことを確かめてから、このcloneのリンク、カタログ、除外、定期の同期の登録を外します。ブランチは消しません。</td><td>リンク、カタログ、<code>info/exclude</code>、状態の置き場、定期の実行</td></tr>
+<tr><td>C51</td><td><code>scope move</code></td><td><code>TARGET --parent TARGET</code></td><td>ScopeのGitHubの親だけを付け替えます（sub-issueの<code>replace_parent</code>）。カタログの平らなディレクトリは動きません。このチェックアウトが対象かその子孫を選んでいれば<code>spec-dock/active</code>のリンクを整えます。schema3では<code>CANONICAL_NOT_MIGRATED</code>で止まります。</td><td>GitHubの親子、active link</td></tr>
+<tr><td>C52</td><td><code>scope check</code></td><td><code>TARGET</code></td><td>1つのScopeの仕様をインターネットなしで検査します。CUEのScope（<code>requirement.cue</code>）は、型・リポジトリの型（<code>spec-dock/cue/*.cue</code>）と一緒に<code>cue</code>（v0.17.1以上）で評価し、形の誤り（<code>CUE_INVALID</code>）、つながりの指摘（<code>SPEC_FINDINGS</code>）、保証レベルの置き場、説明資料の形を、ファイルと直し方つきで示します。誤りがあれば終了コード7（<code>SCOPE_CHECK_FAILED</code>）。MarkdownのScopeは<code>checked=false</code>で成功します。<code>work finish</code>も閉じる前に同じ検査をします。schema3では<code>CANONICAL_NOT_MIGRATED</code>で止まります。</td><td>読取りのみ</td></tr>
+<tr><td>C53</td><td><code>scope render</code></td><td><code>TARGET [--design-system MODE]</code></td><td>1つのCUEのScopeの要件・設計・計画を、インターネットなしでHTMLに描き、標準出力に出します（<code>--json</code>では<code>data.result.html</code>）。<code>scope check</code>と同じ評価を使い、検査の結果（つながりの指摘、形の誤り）をページの初めに、続けて要件、失敗・境界条件、設計、計画（手順の状態と数、実行の割り当て）を、番号のリンクで結んで示します。デザインシステムはそのチェックアウトの<code>spec-dock/design-system/</code>を<code>file:</code>のURLで、図の部品はCDNから読みます。<code>--design-system inline</code>（既定は<code>file</code>）では、<code>ds.css</code>、<code>ds.js</code>、<code>marked</code>をHTMLに埋め込み、別のPCでも崩れないページにします（デザインシステムがなければ<code>DESIGN_SYSTEM_MISSING</code>、終了コード3）。評価が通らなければ検査の結果だけのページで成功し<code>SCOPE_RENDER_INCOMPLETE</code>を警告します。MarkdownのScopeは終了コード7（<code>SCOPE_NOT_CUE</code>）。ダッシュボードなどは、Pythonの入口<code>spec_dock.runtime.application.scope_render.render_scope_html(ScopeRenderSource, *, design_system_base, vendor_base)</code>で、読み込み先のURLを渡して描けます（<code>timeout</code>秒、既定30。<code>embed_design_system</code>にデザインシステムのディレクトリを渡すと埋め込みます。返り値はHTMLの<code>str</code>。MarkdownのScopeは<code>CanonicalCommandError</code>の<code>SCOPE_NOT_CUE</code>、<code>cue</code>と型の版の問題は<code>scope check</code>と同じコードで止まります）。schema3では<code>CANONICAL_NOT_MIGRATED</code>で止まります。</td><td>読取りのみ</td></tr>
+<tr><td>C54</td><td><code>dashboard summary</code></td><td><code>[REPOSITORY]</code></td><td>1つのリポジトリのダッシュボードの要約（<code>specdock.dashboard-summary/v1</code>）を返します。チェックアウトの中ではREPOSITORYを省けます。構造のスナップショットを読むだけで、GitHubにもサーバーにも要求を送りません（<code>--json</code>では<code>data.result</code>）。</td><td>読取りのみ</td></tr>
+<tr><td>C55</td><td><code>dashboard serve</code></td><td><code>[--port N] [--tailscale] [--state-root ROOT]</code></td><td>利用者ごとに1つのダッシュボードのサーバーを前面で動かし、登録した全リポジトリを見るだけで配ります。既定は<code>127.0.0.1</code>の番号47800だけ、<code>--tailscale</code>でTailscaleの住所にも待ち受けます。GitHubに要求を送りません。</td><td>状態の置き場の<code>dashboard/</code></td></tr>
+<tr><td>C56</td><td><code>dashboard hide</code></td><td><code>[REPOSITORY]</code></td><td>リポジトリに隠す印を付け、ダッシュボードの表示から外します。印は設定にかかわらず隠します。同期は続きます。</td><td>状態の置き場の<code>dashboard/repositories.json</code></td></tr>
+<tr><td>C57</td><td><code>dashboard show</code></td><td><code>[REPOSITORY]</code></td><td>隠す印を消します。設定が隠していれば表示に戻らず、<code>DASHBOARD_HIDDEN_BY_CONFIG</code>を警告します。</td><td>状態の置き場の<code>dashboard/repositories.json</code></td></tr>
+<tr><td>C58</td><td><code>dashboard list</code></td><td></td><td>登録したリポジトリと、表示中か隠しているか、その理由（印、設定とその出どころ）、サーバーのURLを示します。</td><td>読取りのみ</td></tr>
+<tr><td>C59</td><td><code>dashboard service install</code></td><td><code>[--port N] [--tailscale]</code></td><td>ログインのときにダッシュボードのサーバーを起動し、落ちても起動し直す常駐を入れます（launchd か systemd のユーザーの単位）。同期の常駐とは別のものです。</td><td>常駐の設定のファイルと登録</td></tr>
+<tr><td>C60</td><td><code>dashboard service status</code></td><td></td><td>常駐が入っているか、動いているか、URL、版を示します。</td><td>読取りのみ</td></tr>
+<tr><td>C61</td><td><code>dashboard service uninstall</code></td><td></td><td>常駐を止め、設定のファイルと記録を消します。</td><td>常駐の設定のファイルと登録</td></tr>
+<tr><td>C62</td><td><code>todo add</code></td><td></td><td>人のタスクを登録します（エージェントは必須の欄があります）。</td><td>カタログの<code>todos/</code></td></tr>
+<tr><td>C63</td><td><code>todo list</code></td><td></td><td>人のタスクを期限の順に並べます。</td><td>読取りのみ</td></tr>
+<tr><td>C64</td><td><code>todo show</code></td><td></td><td>1件とサブタスクの残りを示します。</td><td>読取りのみ</td></tr>
+<tr><td>C65</td><td><code>todo update</code></td><td></td><td>欄を直します。</td><td>カタログの<code>todos/</code></td></tr>
+<tr><td>C66</td><td><code>todo done</code></td><td></td><td>完了にし、答えを残します。</td><td>カタログの<code>todos/</code></td></tr>
+<tr><td>C67</td><td><code>todo snooze</code></td><td></td><td>指定の時刻まで隠します。</td><td>カタログの<code>todos/</code></td></tr>
+<tr><td>C68</td><td><code>todo cancel</code></td><td></td><td>理由つきで取り消します。</td><td>カタログの<code>todos/</code></td></tr>
+<tr><td>C69</td><td><code>todo reopen</code></td><td></td><td>開き直します。</td><td>カタログの<code>todos/</code></td></tr>
+<tr><td>C70</td><td><code>todo check</code></td><td></td><td>全部の記録を検査します。</td><td>読取りのみ</td></tr>
+<tr><td>C71</td><td><code>todo settings</code></td><td></td><td>効いている設定と出どころを示します。</td><td>読取りのみ</td></tr>
+</tbody></table></div>
+<p>worktree createはroot/NAMEとworktree/NAME branchを作ります。project-owned <code>make init</code>はbootstrapで別に一回実行します。Scopeの<code>.workbench</code>はカタログの中にあり、どのworktreeからも同じものが見えます。worktree removeはnative Gitのguardを守り、branchを残します。</p>
+</section>
+<section id="safety" aria-labelledby="safety-title"><div class="section-label">11</div><h2 id="safety-title">この方式が保証する範囲</h2><p>協調して新CLIを使う同じphysical cloneのStartを直列化します。旧writer、任意の手編集、別clone、別PC、複数ホストの共有filesystemを完全に封鎖する仕組みではありません。未対応のOS/FS原語は成功と装わず停止します。</p>
+<p>main worktreeは制御拠点ではありません。読み取れない作業場、stale、破損、複数記録は診断に残します。Startの重複確認が完全でなければGit変更前に停止します。別branchへ移った直接記録も予約として捨てません。</p>
+<p>既存の仕様・ID・GitHub linkage・成果物を保全します。破壊的操作には正確な対象と削除等の明示的な許可が必要です。PR mergeは人間が行います。Finishの成功だけを、実装・テスト・Strict review・mergeの合格証拠にしません。</p>
+</section>
+<section id="sources" aria-labelledby="sources-title"><div class="section-label">12</div><h2 id="sources-title">詳細へ進む</h2><ul><li><a href="reference_cli.md">CLI参照</a>：55 leafと引数、JSON、Start/Finish。</li><li><a href="reference_worktree.md">worktree参照</a>：native Git一覧、作成、bootstrap、削除。</li><li><a href="reference_sync.md">状態の観測と検証</a>：Sync、working tree/CI validate、doctor。</li><li><a href="reference_github.md">GitHub参照</a>：番号、ref、完了とunknown。</li><li><a href="reference_deps.md">依存参照</a>：宣言/継承、readiness。</li><li><a href="reference_naming.md">命名と識別子</a>：既存ID、branch、捕捉token。</li><li><a href="authoring/overview.md">文書作成ガイド</a>：Requirement、Design、Plan、Report、Artifactの役割。</li><li><a href="README.md">文書の入口</a>：CurrentとHistoricalを区別して読む。</li></ul>
+<p>本書はpackageに同梱する日本語の操作ガイドです。外部script・font・通信を使わない単独HTMLとして開けます。既存の会話、古いengine/controlの操作説明、Historical資料を新CLIのauthorityにしません。</p>
+</section>
+<footer class="footer"><p>SpecDock / <a href="#overview">本文の先頭へ</a></p></footer>
+</main></div>
+</body>
+</html>

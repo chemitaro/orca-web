@@ -1,0 +1,23 @@
+# ホストの runner（GitHub が貸す ubuntu-latest など）は、動いた時間に費用がかかります。
+# この見本は、PR と既定のブランチへの push のたびに動きます。
+# 起動の条件（on）と runs-on は、リポジトリの決まりに合わせて変えてかまいません。
+#   - 手動の起動だけにする: on を `workflow_dispatch:` だけにする
+#   - 自前の runner に振り分ける: runs-on を、そのラベルに替える
+#   - push の前に手元で回す: .githooks/pre-push で `spec-dock canonical check --json` を実行する
+# どの形でも、検査の中身は同じ `spec-dock canonical check --json` です。
+name: SpecDock check
+on:
+  pull_request:
+  push:
+    branches: [main]   # 既定のブランチの名前に合わせる
+permissions:
+  contents: read
+jobs:
+  spec-dock-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SpecDock
+        run: pipx install "spec-dock @ git+https://github.com/chemitaro/spec-dock@v$(cat spec-dock/system/spec-dock-version)"
+      - name: Check
+        run: spec-dock canonical check --json
