@@ -5,15 +5,15 @@ package spec
 goal: "読み取り→正規化→ポーリング→項目と設定→HTTP と CORS→画面の順に、テスト先行で作り、実機で確かめ、PR をマージできる状態で止める。"
 
 steps: {
-	"S-01": {title: "Orca の読み取り（read-state.ts：取得元ごとの関数、ページング、許可の一覧での項目の拾い）を作る", realizes: ["R-01", "R-02", "F-02"], status: "todo", session: "impl"}
-	"S-02": {title: "正規化した状態の文書の型と normalizeState（Fact、ReadingFact、欠けた理由、結び付け、時刻、並び）を作る", realizes: ["R-01", "R-02", "R-04", "F-01", "F-02"], status: "todo", after: ["S-01"], session: "impl"}
-	"S-03": {title: "共有のポーリング（StatePoller：組の間隔、見る人、途中の読みの共有、前の値、tasks と workerLaunch の抑え、接続の状態）を作る", realizes: ["R-05", "F-01", "F-02"], status: "todo", after: ["S-02"], session: "impl"}
-	"S-04": {title: "項目の一覧と設定の保存（fields.ts、settings.ts）を作る", realizes: ["R-03", "F-03"], status: "todo", after: ["S-02"], session: "impl"}
-	"S-05": {title: "HTTP の口（/api/state、/api/fields、/api/settings/fields）、読み取りの CORS、書き込みの小さな守り、静的な画面の配り、main.ts の設定を作る", realizes: ["R-01", "R-03", "R-04"], status: "todo", after: ["S-03", "S-04"], session: "impl"}
-	"S-06": {title: "状態の画面（web/view.js、web/main.js、web/style.css、web/index.html）を作る", realizes: ["R-03", "F-01"], status: "todo", after: ["S-05"], session: "impl"}
-	"S-07": {title: "AGENTS.md を今の形に合わせる（FQG-003）", realizes: ["R-01"], status: "todo", after: ["S-05"], session: "impl"}
-	"S-08": {title: "この Mac の Orca で、サーバーを起動して /api/state と CORS とブラウザーの画面を確かめ、report.md に件数で書く", realizes: ["R-01", "R-02", "R-03", "R-04"], status: "todo", after: ["S-06", "S-07"], session: "impl"}
-	"S-09": {title: "コードのレビューと最終品質ゲートを通し、PR を作って CI の通過を確かめる", realizes: ["R-01"], status: "todo", after: ["S-08"], session: "impl"}
+	"S-01": {title: "Orca の読み取り（read-state.ts：取得元ごとの関数、ページング、許可の一覧での項目の拾い）を作る", realizes: ["R-01", "R-02", "F-02"], status: "done", session: "impl"}
+	"S-02": {title: "正規化した状態の文書の型と normalizeState（Fact、ReadingFact、欠けた理由、結び付け、時刻、並び）を作る", realizes: ["R-01", "R-02", "R-04", "F-01", "F-02"], status: "done", after: ["S-01"], session: "impl"}
+	"S-03": {title: "共有のポーリング（StatePoller：組の間隔、見る人、途中の読みの共有、前の値、tasks と workerLaunch の抑え、接続の状態）を作る", realizes: ["R-05", "F-01", "F-02"], status: "done", after: ["S-02"], session: "impl"}
+	"S-04": {title: "項目の一覧と設定の保存（fields.ts、settings.ts）を作る", realizes: ["R-03", "F-03"], status: "done", after: ["S-02"], session: "impl"}
+	"S-05": {title: "HTTP の口（/api/state、/api/fields、/api/settings/fields）、読み取りの CORS、書き込みの小さな守り、静的な画面の配り、main.ts の設定を作る", realizes: ["R-01", "R-03", "R-04"], status: "done", after: ["S-03", "S-04"], session: "impl"}
+	"S-06": {title: "状態の画面（web/view.js、web/main.js、web/style.css、web/index.html）を作る", realizes: ["R-03", "F-01"], status: "done", after: ["S-05"], session: "impl"}
+	"S-07": {title: "AGENTS.md を今の形に合わせる（FQG-003）", realizes: ["R-01"], status: "done", after: ["S-05"], session: "impl"}
+	"S-08": {title: "この Mac の Orca で、サーバーを起動して /api/state と CORS とブラウザーの画面を確かめ、report.md に件数で書く", realizes: ["R-01", "R-02", "R-03", "R-04"], status: "done", after: ["S-06", "S-07"], session: "impl"}
+	"S-09": {title: "コードのレビューと最終品質ゲートを通し、PR を作って CI の通過を確かめる", realizes: ["R-01"], status: "doing", after: ["S-08"], session: "impl"}
 }
 
 tests: {
