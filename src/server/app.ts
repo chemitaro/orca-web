@@ -125,7 +125,8 @@ function embedHeaders(config: AppConfig, type: string, page: boolean): Record<st
     'content-type': type,
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
-    'referrer-policy': 'no-referrer',
+    // no-referrer だと、Fetch の仕様では同じオリジンの POST の Origin が null になりうる（守りが拒む）。
+    'referrer-policy': 'same-origin',
   };
   if (page) {
     headers['content-security-policy'] = [

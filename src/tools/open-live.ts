@@ -41,7 +41,17 @@ async function main(): Promise<void> {
   let outcome: unknown;
   if (values.route === undefined) {
     const request = values.agent ? { worktree: selector, agent: values.agent } : { worktree: selector };
-    outcome = await orca.open.open(request);
+    const result = await orca.open.open(request);
+    // worktreeId（パスを含む）と Orca の誤りの文は出さず、決まった項目だけを出す。
+    outcome = result.ok
+      ? {
+          ok: true,
+          route: result.route,
+          reason: result.reason,
+          requestedAgentFound: result.requestedAgentFound ?? null,
+          mayCreateInitialTerminal: result.mayCreateInitialTerminal ?? null,
+        }
+      : { ok: false, error: result.error, route: result.route ?? null, missing: result.missing ?? null };
   } else {
     const worktree = `id:${picked.worktreeId}`;
     const listed = await orca.readRpc.call('session.tabs.list', { worktree });

@@ -373,7 +373,8 @@ test('/embed/open-button は CSP（frame-ancestors に SpecDock のオリジン�
     assert.match(csp, /script-src 'self'(;|$)/);
     assert.ok(!csp.includes('unsafe-inline'));
     assert.equal(res.headers['x-content-type-options'], 'nosniff');
-    assert.equal(res.headers['referrer-policy'], 'no-referrer');
+    // no-referrer にすると、Fetch の仕様では同じオリジンの POST の Origin が null になりうる。
+    assert.equal(res.headers['referrer-policy'], 'same-origin');
     assert.match(res.text, /open-button-frame\.js/);
     assert.ok(!/<script>[^<]/.test(res.text), 'no inline script');
   });

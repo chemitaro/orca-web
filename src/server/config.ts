@@ -70,6 +70,8 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
           .filter((o) => o !== '')
           .map(parseOrigin)
       : bindAddresses.map((a) => `http://${a}:${SPECDOCK_PORT}`);
+  // 空の frame-ancestors はブラウザーに無視され、どこからでも埋め込めてしまう。
+  if (specdockOrigins.length === 0) throw new ConfigError('ORCA_WEB_SPECDOCK_ORIGINS has no origin');
   const orcaCli = env.ORCA_WEB_ORCA_CLI || DEFAULT_ORCA_CLI;
   if (!path.isAbsolute(orcaCli)) throw new ConfigError('ORCA_WEB_ORCA_CLI must be an absolute path');
   return {

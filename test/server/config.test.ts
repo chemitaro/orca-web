@@ -23,7 +23,7 @@ test('Tailscale の IP があれば、2つのアドレスで待ち受け、Host�
 test('SpecDock のオリジンは設定で変えられ、scheme://host[:port] の形だけを受ける', () => {
   const c = loadConfig({ ORCA_WEB_SPECDOCK_ORIGINS: 'http://127.0.0.1:47801, https://dash.example.ts.net' });
   assert.deepEqual(c.specdockOrigins, ['http://127.0.0.1:47801', 'https://dash.example.ts.net']);
-  for (const bad of ['http://x:1/path', 'ftp://x', 'http://u:p@x', 'http://x?a=1', 'not a url', "'self'"]) {
+  for (const bad of [',', ' , ', 'http://x:1/path', 'ftp://x', 'http://u:p@x', 'http://x?a=1', 'not a url', "'self'"]) {
     assert.throws(() => loadConfig({ ORCA_WEB_SPECDOCK_ORIGINS: bad }), ConfigError, bad);
   }
 });
