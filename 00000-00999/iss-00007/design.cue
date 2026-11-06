@@ -9,7 +9,7 @@ goals: [
 ]
 
 current: "サーバーは `GET /api/health` だけを持ち、127.0.0.1 だけで待ち受ける。Orca の境界は読むだけの門（ReadOnlyOrcaCli、ReadOnlyRpc）だけを持つ。"
-target:  "設定した2つのアドレスで待ち受け、Host を確かめ、`POST /api/token` と `POST /api/open` と `/embed/*` を持つ。開く口は、開く門を通して、既存のタブだけを選ぶ。"
+target:  "設定した2つのアドレスで待ち受け、すべての要求で Host を確かめ、`POST /api/token` と `POST /api/open` と `/embed/*` を持つ。iss-00006 の項目の選択の保存も同じ書き込みの守りの下に置く。開く口は、開く門を通して、既存のタブだけを選ぶ。"
 
 design: {
 	"D-01": {
@@ -19,13 +19,14 @@ design: {
 
 			| 変数 | 既定 | 意味 |
 			|---|---|---|
-			| `ORCA_WEB_PORT` | 8791 | 待ち受けのポート |
-			| `ORCA_WEB_TAILSCALE_IP` | なし | Tailscale の IPv4。あれば 127.0.0.1 と並べて待ち受ける |
-			| `ORCA_WEB_SPECDOCK_ORIGINS` | `http://127.0.0.1:47800` と `http://<Tailscale の IP>:47800` | frame-ancestors に並べる SpecDock のオリジン（カンマ区切り） |
-			| `ORCA_WEB_ORCA_CLI` | `/Applications/Orca.app/Contents/Resources/bin/orca` | Orca の CLI の絶対パス |
+			| `PORT` | 8791 | 待ち受けのポート（iss-00006 と共通） |
+			| `ORCA_WEB_TAILSCALE_IP` | なし | Tailscale の IPv4。あれば 127.0.0.1 と並べて待ち受け、その Host を許す |
+			| `ORCA_WEB_READ_ORIGINS` | `http://127.0.0.1:47800`（と `http://<Tailscale の IP>:47800`） | SpecDock のオリジン（カンマ区切り）。読み取りの CORS（iss-00006）と frame-ancestors に使う。空なら frame-ancestors は `'none'` |
+			| `ORCA_BIN` | `/Applications/Orca.app/Contents/Resources/bin/orca` | Orca の CLI の絶対パス（iss-00006 と共通） |
+			| `ORCA_WEB_SETTINGS_FILE` | iss-00006 の既定 | 項目の選択の保存先（iss-00006） |
 
-			そこから、待ち受けのアドレス（`127.0.0.1` と Tailscale の IP）、許す Host（`<アドレス>:<port>`）、自分のオリジン（`http://<アドレス>:<port>`）を導く。
-			Tailscale の IP は IPv4 の形だけを受け、`0.0.0.0`、`127.0.0.1` の重ね、ループバック以外の特別な値を拒んで起動を止める。SpecDock のオリジンは `http://` か `https://` と host とポートだけの形（パスなし）に限る。
+			そこから、待ち受けのアドレス（`127.0.0.1` と Tailscale の IP）と、足す Host（`<Tailscale の IP>:<port>`）を導く。iss-00006 が先にマージしたので、変数の名前は iss-00006 に合わせた。
+			Tailscale の IP は IPv4 の形だけを受け、`0.0.0.0`、ループバック、マルチキャスト、ブロードキャストを拒んで起動を止める（`ConfigError`）。SpecDock のオリジンは `new URL(o).origin` と同じ文字列だけを受ける。
 			`main.ts` は、待ち受けのアドレスごとに1つの `http.Server` を作り、同じ処理を共有する。0.0.0.0 に代えない。常駐の定義は iss-00008 で作る。
 			"""
 		satisfies: ["R-04"]
@@ -33,11 +34,11 @@ design: {
 	"D-02": {
 		title: "書き込みの守り（`src/server/guard.ts`）"
 		text: """
-			- `checkHost(req, config)`：Host の見出しが、許す Host のどれかと完全一致するか。ないとき、違うときは 403 `host_rejected`。**すべての要求**に、道の振り分けの前に当てる（DNS rebinding を防ぐ）。
-			- `checkSameOriginPost(req, config)`：method が POST（違えば 405 `method_not_allowed`）、`Content-Type` の media type が `application/json`（違えば 415 `unsupported_media_type`）、
+			- `checkHost(req, hosts)`：Host の見出しが、許す Host（待ち受けのポートの `127.0.0.1:<port>`、`localhost:<port>` と足した Host）のどれかと完全一致するか。ないとき、違うときは 421 `misdirected_host`（iss-00006 と同じ）。**すべての要求**（静的な画面を含む）に、道の振り分けの前に当てる（DNS rebinding を防ぐ）。
+			- `checkSameOriginWrite(req, method)`：method が決めたもの（開く口とトークンは POST、項目の選択の保存は PUT。違えば 405 `method_not_allowed`）、`Content-Type` の media type が `application/json`（違えば 415 `unsupported_media_type`）、
 			  `Origin` が `http://<Host>` と完全一致（ない、`null`、違う値は 403 `origin_rejected`）、`Sec-Fetch-Site` があれば `same-origin`（違えば 403 `origin_rejected`）。
 			- `TokenStore`：`issue()` が 32 バイトの乱数を base64url にしたトークンと期限（10 分）を返す。`verify(token)` が期限内か。生きているトークンは 64 個までで、超えたら古いものから捨てる。時計は差し替えられる。値を記録しない。
-			- 書き込み（`/api/open`）は、`checkSameOriginPost` の後に、`X-Orca-Web-Token` の見出しを `verify` で確かめる（ない 401 `token_missing`、無効や期限切れ 401 `token_invalid`）。物は 4 KiB まで（超えたら 413 `payload_too_large`）、JSON の物で、知らない鍵を持たない（違えば 400 `invalid_request`）。
+			- 書き込み（`/api/open` と `/api/settings/fields`）は、`checkSameOriginWrite` の後に、`X-Orca-Web-Token` の見出しを `verify` で確かめる（ない 401 `token_missing`、無効や期限切れ 401 `token_invalid`）。開く口の物は 4 KiB まで（超えたら 413 `payload_too_large`）、JSON の物で、知らない鍵を持たない（違えば 400 `invalid_request`）。項目の選択の保存の物の確かめは iss-00006 のまま（64 KiB、`checkSelection`）。
 			- 応答には CORS の見出しを付けない。
 			"""
 		satisfies: ["R-04", "F-03"]
@@ -76,7 +77,7 @@ design: {
 			3. `orca worktree list --json` で worktree を解決する。`truncated` なら `--limit <totalCount>` で読み直し、それでも切れていれば `unknown_shape`。ID かパスの完全一致が1件でなければ `worktree_not_found`。
 			4. `session.tabs.list { worktree: "id:<ID>" }`。失敗は `orca_error`、形が違えば `unknown_shape`、応答の runtime の ID が確かめのときと違えば `runtime_changed`。
 			5. `chooseTarget` で選び、経路の1回だけを送る（`terminal switch` は `--terminal <handle>`、activate は `navigation: "host"`、タブの activate は `intent: "user"`）。
-			6. 結果を分ける：成功は `opened`。時間切れ、接続断、不正な応答、CLI の時間切れは `unconfirmed`（F-01）。`method_not_found` は `unsupported`。`tab_not_found` などのタブの消失は `target_gone`。そのほかの Orca の誤りは `orca_error`。どの場合も、2回目の書き込みを送らない。
+			6. 結果を分ける：成功は `opened`。時間切れ、接続断、不正な応答、CLI の時間切れと、Orca の答え（封筒）のない CLI の非ゼロの終了（シグナルでの終了を含む。切り替えが届いた可能性がある）は `unconfirmed`（F-01）。CLI を起動できなかったときは送っていないので `unavailable`。`method_not_found` は `unsupported`。`tab_not_found` などのタブの消失は `target_gone`。そのほかの Orca の誤りは `orca_error`。どの場合も、2回目の書き込みを送らない。
 
 			HTTP の状態：`opened` 200、`invalid_request` 400、`worktree_not_found` 404、`busy` と `target_gone` 409、`unsupported` 501、`orca_error` と `unknown_shape` 502、`unavailable` と `runtime_changed` 503、`unconfirmed` 504。
 			誤りの文は `clip` で短くし、authToken は RPC の境界が伏せる。
@@ -91,12 +92,15 @@ design: {
 			| 道 | 守り | 応答 |
 			|---|---|---|
 			| `GET /api/health` | Host | `{ ok: true }` |
+			| `GET /api/state`、`GET /api/fields`（iss-00006） | Host、読み取りの CORS | 状態と項目 |
+			| `PUT /api/settings/fields`（iss-00006） | Host、同じオリジンの PUT と JSON、トークン、64 KiB | 項目の選択の保存 |
 			| `POST /api/token` | Host、同じオリジンの POST と JSON | `{ ok: true, token, expiresAt }`（`cache-control: no-store`） |
 			| `POST /api/open` | Host、同じオリジンの POST と JSON、トークン、4 KiB | D-05 の結果 |
 			| `GET /embed/open-button` | Host | ボタンの画面（D-07）、CSP つき |
 			| `GET /embed/open-button.js`、`/embed/open-button-frame.js`、`/embed/open-button.css` | Host | 固定の対応のファイル（利用者のパスを受けない） |
+			| `GET /`、`/main.js`、`/view.js`、`/style.css`（iss-00006）、`/write.js` | Host | 状態の画面と、書き込みの送り方（D-07） |
 
-			画面の応答の CSP：`default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors <SpecDock のオリジン>`。
+			ボタンの画面の CSP：`default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors <SpecDock のオリジン>`。状態の画面の CSP（iss-00006）にも `frame-ancestors <SpecDock のオリジン>` を足す。SpecDock のオリジンが空なら `'none'`。
 			あわせて `X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Cache-Control: no-store`（`no-referrer` にすると、Fetch の仕様では同じオリジンの `mode: same-origin` の POST の Origin が `null` になりうり、守りが拒む。コードのレビューで見つけて直した）。状態の API（iss-00006）が足す道とぶつからないよう、振り分けは道の表の1か所にまとめる。
 			"""
 		satisfies: ["R-01", "R-03", "R-04", "F-03"]
@@ -107,7 +111,8 @@ design: {
 			- `open-button.js`（置き場の1行のスクリプト）：`document.currentScript` の `src` から orca-web のオリジンを、`data-worktree`、`data-agent`、`data-theme`、`data-size` から引数を得て、スクリプトの直後に iframe（`title`、枠なし、`sandbox="allow-scripts allow-same-origin"`）を差し込む。
 			  親の画面で `matchMedia("(max-width: 390px)")` が当たる間は iframe を隠し、`src` を付けない（読み込まない）。トークンを扱わない。
 			- `open-button.html`（iframe の中）：ボタン1つと結果の1行。外の script と style だけを使う（CSP で inline を許さない）。
-			- `open-button-frame.js`（iframe の中）：読み込みで `POST /api/token` を呼び、トークンをメモリーにだけ持つ。押すと `POST /api/open` を呼ぶ。期限が近いか 401 `token_invalid` なら取り直し、1回だけ送り直す。処理中はボタンを止める。結果は `textContent` で示す。`theme` と `size` は許した値だけを `data-` の属性に写す。
+			- `write.js`（`/write.js`、状態の画面と iframe が共有）：`createWriter()` の `send(path, method, body)` が、初めの書き込みの前に `POST /api/token` でトークンを得て、メモリーにだけ持ち、`X-Orca-Web-Token` で送る。期限の 30 秒前を過ぎたら取り直し、401 なら取り直して1回だけ送り直す。`mode: same-origin`、`referrerPolicy: same-origin`。
+			- `open-button-frame.js`（iframe の中）：押すと `write.js` で `POST /api/open` を呼ぶ。処理中はボタンを止める。結果は `textContent` で示す。`theme` と `size` は許した値だけを `data-` の属性に写す。
 			- `open-button.css`：明るい・暗い（`prefers-color-scheme` と `data-theme`）、大きさ（sm、md）。
 			"""
 		satisfies: ["R-03"]
@@ -131,7 +136,7 @@ design: {
 	}
 }
 
-compatibility: "`createAppServer` が設定を受けるようになる（`/api/health` も Host を確かめる）。iss-00006 は道の表に道を足す。後にマージするほうが取り込み直す。"
+compatibility: "iss-00006（PR #11）が先にマージされたので、0a0e76c を取り込んだ（マージのコミット）。`createAppServer(options)` は iss-00006 の形（poller、settings、readOrigins、extraHosts、webDir）に open と tokens を足した。Host の確かめは /api/ だけから全ての道に広げた。`same-origin-write.ts` を消し、項目の選択の保存はトークンを要するようになった（画面は write.js で送る）。"
 
 risks: [
 	"内部の RPC は非公開。Orca の版が変わったら、録画を取り直し、`npm run open:live` で確かめ直す",

@@ -13,6 +13,9 @@ steps: {
 	"S-06": {title: "ボタンの部品（open-button.js、open-button.html、open-button-frame.js、open-button.css）を作り、ブラウザーで確かめる", realizes: ["R-03"], status: "done", after: ["S-05"], session: "impl"}
 	"S-07": {title: "実機の確かめの道具（open-live）を作り、orca-web の worktree で3つの経路とタブの集合を確かめ、report.md に書く", realizes: ["R-01", "R-02"], status: "done", after: ["S-04"], session: "impl"}
 	"S-08": {title: "コードのレビューと最終品質ゲートを通し、PR を作って CI の通過を確かめる", realizes: ["R-01", "R-04"], status: "done", after: ["S-06", "S-07"], session: "impl"}
+	"S-09": {title: "iss-00006（PR #11、0a0e76c）を取り込み、設定・Host の確かめ・書き込みの守りを1つにする（same-origin-write.ts を置き換え、項目の選択の保存もトークンを要し、画面は write.js で送る）", realizes: ["R-03", "R-04", "F-03"], status: "done", after: ["S-08"], session: "impl"}
+	"S-10": {title: "最終品質ゲートの FQG-002：terminal switch の封筒のない非ゼロの終了を unconfirmed にする", realizes: ["F-01"], status: "done", after: ["S-08"], session: "impl"}
+	"S-11": {title: "取り込みの後の最後のコミットで、コードのレビューと最終品質ゲートをやり直し、PR の CI を確かめる", realizes: ["R-01", "R-04"], status: "doing", after: ["S-09", "S-10"], session: "impl"}
 }
 
 tests: {
@@ -29,6 +32,9 @@ tests: {
 	"T-11": {title: "/embed/open-button が CSP（frame-ancestors に SpecDock のオリジンだけ、inline を許さない）と nosniff で返り、部品のファイルが固定の対応だけで返る", verifies: ["R-03"]}
 	"T-12": {title: "ブラウザーで、別のオリジンの試しの画面に1行のスクリプトを置くとボタンが出て、押すと偽の開く処理まで届き、幅 390px では出ない", verifies: ["R-03"]}
 	"T-13": {title: "実機で、orca-web の worktree に3つの経路を1回ずつ送り、Orca の前面が切り替わり、タブの集合が変わらない（report.md に記録）", verifies: ["R-01", "R-02"]}
+	"T-14": {title: "項目の選択の保存（PUT /api/settings/fields）が、Origin・JSON・Host に加えてトークンを要し、トークンつきなら保存でき、write.js がトークンを得て送り、期限と 401 で取り直して1回だけ送り直し、ブラウザーで状態の画面の保存が通る", verifies: ["R-04", "F-03"]}
+	"T-15": {title: "terminal switch が封筒のない出力で非ゼロ終了（シグナルを含む）したら unconfirmed、起動できなければ unavailable で、2回目を送らない", verifies: ["F-01"]}
+	"T-16": {title: "状態の画面と部品の画面が frame-ancestors に SpecDock のオリジンだけを持ち、オリジンが空なら none、すべての道で許していない Host が 421 になる", verifies: ["R-03", "R-04"]}
 }
 
 verification: "`npm run lint`、`npm test`、`npm run build` と CI。ボタンはブラウザーで、開く口は `npm run open:live` で、orca-web のリポジトリの worktree だけを対象に確かめ、report.md に書く。"
@@ -42,7 +48,7 @@ execution: {
 	}
 	reviews: {
 		spec: {role: "仕様のレビュー（spec-review、実装の前）", model: "opus", effort: "medium"}
-		code: {role: "コードのレビュー（code-review）", after: "S-07", model: "sonnet", effort: "high"}
-		gate: {role: "最終品質ゲート（final-quality-gate、1人）", after: "S-08", model: "opus", effort: "high"}
+		code: {role: "コードのレビュー（code-review。取り込みの後にやり直す）", after: "S-10", model: "sonnet", effort: "high"}
+		gate: {role: "最終品質ゲート（final-quality-gate、1人。取り込みの後にやり直す）", after: "S-11", model: "opus", effort: "high"}
 	}
 }

@@ -86,10 +86,11 @@ requirements: {
 		title: "書き込みは、許した Host、同じオリジン、短期のトークンの要求だけを受ける"
 		text: """
 			- 待ち受けは 127.0.0.1 と、設定した Tailscale の IP だけ（0.0.0.0 に代えない）。
-			- すべての要求で、Host を、待ち受けのアドレスとポートの組（`127.0.0.1:<port>`、`<Tailscale の IP>:<port>`）との完全一致で確かめる。
-			- 書き込み（`/api/open`）は、POST、`Content-Type: application/json`、4 KiB 以下の JSON の物、`Origin` が要求の Host の orca-web 自身のオリジン（`http://<Host>`）と完全一致、`Sec-Fetch-Site` があれば `same-origin`、独自ヘッダー `X-Orca-Web-Token` の有効なトークンを要する。
+			- すべての要求で、Host を、待ち受けのポートの `127.0.0.1:<port>`、`localhost:<port>` と `<Tailscale の IP>:<port>` との完全一致で確かめる（違えば 421 `misdirected_host`。iss-00006 の状態の API と同じ守り）。
+			- 書き込み（`POST /api/open` と、iss-00006 の項目の選択の保存 `PUT /api/settings/fields`）は、決めた method、`Content-Type: application/json`、上限以下の JSON の物（開く口は 4 KiB）、`Origin` が要求の Host の orca-web 自身のオリジン（`http://<Host>`）と完全一致、`Sec-Fetch-Site` があれば `same-origin`、独自ヘッダー `X-Orca-Web-Token` の有効なトークンを要する。
 			- トークンは `POST /api/token`（同じ Host、Origin、Sec-Fetch-Site、JSON の確かめを通った要求だけ）が出す。256 ビットの乱数、有効は 10 分、メモリーにだけ持つ。CORS の許可を付けない。URL、ログ、親の画面に出さない。
-			- ボタンの画面は、`Content-Security-Policy` の `frame-ancestors` に、設定した SpecDock のオリジン（既定は `http://127.0.0.1:47800` と `http://<Tailscale の IP>:47800`）だけを持つ。
+			- ボタンの画面と状態の画面は、`Content-Security-Policy` の `frame-ancestors` に、設定した SpecDock のオリジン（`ORCA_WEB_READ_ORIGINS`。既定は `http://127.0.0.1:47800` と、Tailscale の IP があれば `http://<Tailscale の IP>:47800`）だけを持つ。オリジンが空なら `'none'`。
+			- 状態の画面の項目の選択の保存も、同じ手順でトークンを得て送る（iss-00006 の小さな同じオリジンの守り `same-origin-write.ts` を、この守りに置き換えた。2026-11-06 統括の依頼）。
 			"""
 		acceptance: [
 			"HTTP のテストで、守りのそれぞれを1つずつ外した要求が拒まれ、開く処理が呼ばれない",
@@ -107,7 +108,7 @@ failures: {
 	"F-01": {
 		title: "書き込みを送った後の時間切れや結果不明では、別のタブへ切り替えず「開いたか確かめられない」と返す"
 		text: """
-			`terminal switch` の時間切れ、RPC の時間切れ、接続断、不正な応答では、その1回の後に Orca へ書き込みを送らず、HTTP 504 と `unconfirmed` を返す。
+			`terminal switch` の時間切れや、Orca の答え（封筒）のない非ゼロの終了（シグナルでの終了を含む）、RPC の時間切れ、接続断、不正な応答では、その1回の後に Orca へ書き込みを送らず、HTTP 504 と `unconfirmed` を返す。
 			Orca の読む口には「前面の worktree」を示す値がないので、時間切れの後に開いたかを読み直して確かめることはしない。
 			"""
 		impact:   "利用者は、Orca の画面を見て開いたかを確かめる"
