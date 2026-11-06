@@ -54,13 +54,14 @@ design: {
 			  識別子（`id`、`worktreeId`、`paneKey`、`terminalHandle`、`dispatchId` など結ぶための値）は Fact にしない素の値。
 			- 欠けた理由：`not-provided`（取得元を読めたが、この対象に値がない）、`no-source`（この種類の対象には取得元がない。例：Codex の推論、構造化 Chat のモデル）、
 			  `not-linked`（結ぶ鍵がない。例：handle のないタブの最後の出力）、`not-fetched`（方針で読まない。例：終わった担当の `worker-show`）、
-			  `source-failed`（取得元が一度も成功していない）、`source-unavailable`（機能が使えない。例：`readTabs` の欠け）、`invalid-value`（知らない形の値）。
+			  `source-failed`（取得元が一度も成功していない。Dispatch ごとに読む `workerLaunch` では、その Dispatch の読みが成功していない）、`source-unavailable`（機能が使えない。例：`readTabs` の欠け）、`invalid-value`（知らない形の値）。
 			- 鮮度：各 Fact の `source` で `sources` を引く。取得元の `stale` は、最後の取得が失敗したか、最後の成功から間隔の3倍を過ぎたとき真。文書の `stale` は、どれかの取得元が古いとき真。
 			- モデルと推論は `ReadingFact = Fact<string> & { meaning, readings: [{ value, meaning, source, field }] }`。
 			  `readings` は読めた値のすべてで、並びは `current-selection`、`last-observed`、`launch-resolved`、`launch-requested`。代表（value、meaning、source、field）は先頭。
 			  エージェントの取得元：タブの `agentStatus.model`（`last-observed`）、`agentStatus.providerSession.effort`（`current-selection`）、担当なら `workerLaunch` の
 			  `startOptions.launch.effective`（`launch-resolved`）と `requested`（`launch-requested`）。どれもなければ null で、理由は、担当で `worker-show` を読んでいなければ
-			  `not-fetched`、読めていなければ `source-failed`、それ以外は、モデルなら `not-provided`、推論は Claude Code なら `not-provided`、ほかの種類なら `no-source`。
+			  `not-fetched`、読めていなければ `source-failed`。担当でなければ、端末のタブのモデルは `not-provided`（Orca が報告しない）、推論は Claude Code なら `not-provided`、ほかの種類なら `no-source`。
+			  構造化 Chat のタブと、タブのない行（`untabbed`）は、モデルも推論も `no-source`（この Issue では `agentSession.options` を読まない）。
 			- エージェントの作り方：
 			  1. `tabs` の terminal のタブのうち、`agentStatus` か `launchAgent` を持つもの（`kind: "terminal-tab"`、`id` は paneKey `<parentTabId>:<leafId>`）。
 			  2. `tabs` の `agent-session` のタブ（`kind: "chat-tab"`、`id` は `chat:<tab.id>`）。
@@ -72,7 +73,11 @@ design: {
 			  - 題名：`agentStatus.orchestration.taskTitle`、ps の `taskTitle`、タブの `customTitle`、タブの `title` の順。200字で切る。
 			  - 親：`agentStatus.orchestration.parentPaneKey`、なければ ps の `parentPaneKey`。
 			  - 担当：`agentStatus.orchestration` の `dispatchId`、`taskId`、`orchestrationRunId`。なければ `workers` の `agentTerminalHandle` がタブの handle と一致する担当。
+			- repo：`id`、`displayName`、`path`、`kind`、remote の鍵は `gitRemoteIdentity.canonicalKey` をそのまま返す（URL から作らない。なければ `not-provided`）。
 			- worktree：`worktrees` を基にし、`worktreePs` を `worktreeId` で重ねる（片方にしかない worktree も返す）。ブランチは `refs/heads/` を外す。
+			  パス、ブランチ、表示名、main か、アーカイブか、親（`parentWorktreeId`）、子（`childWorktreeIds`）、最後に動いた時刻（`lastActivityAt`）は `worktrees` を先に、なければ `worktreePs`。
+			  状態は ps の `status`（`working`、`active`、`inactive` など）、最後の出力の時刻は ps の `lastOutputAt`。
+			- Run：`id` と、題名は `objective`（200字で切る）。
 			  PR は `linkedPR` の番号、状態、題名、URL。CI は `linkedPR.checksStatus` と `checksSummary` の件数。PR がなければ両方 `not-provided`。
 			- 担当：`workers` の `dispatchId`、`taskId`、`runId`、`workerState`、`dispatchStatus`、`projection.liveness.verdict`、`agentTerminalHandle`、`projection.workspace.id`。
 			- Task：`task_title`（なければ `display_name`）、`status`、`parent_id`、`deps`（JSON の配列の文字列を解く。解けなければ `invalid-value`）、`created_at` と `completed_at`。
@@ -127,7 +132,9 @@ design: {
 			- `createAppServer(options)` が、`poller`、`settings`、`readOrigins`、`selfHosts` を受ける（ない部品の口は 503）。`src/server/main.ts` が設定を読んで組み立てる。
 			- 設定：`ORCA_WEB_READ_ORIGINS`（カンマ区切りの正確なオリジン。既定 `http://127.0.0.1:47800`）、`ORCA_WEB_SETTINGS_FILE`、`ORCA_BIN`、`PORT`。
 			  オリジンは `new URL(o).origin` と同じ文字列だけを受け、末尾の `/` やパスのあるものは起動の誤りにする。
-			- 読み取りの CORS（`/api/state`、`/api/fields` の GET と OPTIONS）：Origin がない、または `http://<Host>`（Host が selfHosts にあるとき）なら通す。
+			- Host の確かめ（DNS の付け替えへの守り）：`/api/` の口は、`Host` が selfHosts（既定は `127.0.0.1:<port>` と `localhost:<port>`）と完全に一致しなければ 421 で拒む。
+			  iss-00007 が一般の守り（F-04）を作るときに、同じ一覧を使うか置き換える。
+			- 読み取りの CORS（`/api/state`、`/api/fields` の GET と OPTIONS）：Origin がない、または `http://<Host>` なら通す。
 			  `readOrigins` と完全に一致すれば `Access-Control-Allow-Origin: <そのオリジン>` と `Vary: Origin` を付ける。ほかの Origin は 403。
 			  OPTIONS は許したオリジンに `Access-Control-Allow-Methods: GET` を返す。資格情報（Cookie）は許さない。
 			- 応答はすべて `Cache-Control: no-store`、`X-Content-Type-Options: nosniff`。
@@ -161,6 +168,6 @@ compatibility: """
 risks: [
 	"内部の RPC と CLI の JSON は非公開で、Orca の版で変わりうる。拾う項目を許可の一覧にし、形が違えば `invalid-shape` か `invalid-value` で示す",
 	"`worker-show` を担当の数だけ呼ぶ。終わって端末を返した担当は呼ばず、結果を覚えて抑える",
-	"読み取りの Host の確かめ（DNS の付け替えへの守り）は iss-00007 の F-04 で入れる。それまで待ち受けは 127.0.0.1 だけ（main.ts）",
+	"Host の確かめは selfHosts の完全一致の最小の形。Tailscale のアドレスで待ち受けるとき（iss-00008）は、その Host を selfHosts に足す必要がある",
 	"Task の時刻の `YYYY-MM-DD HH:MM:SS` を UTC とみなしている（SQLite の CURRENT_TIMESTAMP）。違えば時刻がずれる",
 ]
