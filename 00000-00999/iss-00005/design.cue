@@ -88,7 +88,7 @@ design: {
 			- 録画：`RecordingCliRunner` は CliRunner を包み、argv、終了コード、stdout、stderr、所要時間を記録する。`RecordingRpcTransport` は RpcTransport を包み、
 			  解いた応答を1つの行（`{ id, ok, result | error, _meta }` の1つの chunk）として記録する。分割、keepalive、不正な JSON、接続断は、実機からは録らず、手で書いた録画で表す。
 			  どちらも書き出す前に `sanitizeRecording` と `assertRecordingSafe` を通す。
-			- 仮名化（`Pseudonymizer`、1つの録画で1つ）。CLI の stdout と RPC の chunk は、JSON の行として読めれば中を仮名化して書き戻す。
+			- 仮名化（`Pseudonymizer`、1つの録画で1つ。同じ時に録って一緒に再生する CLI と RPC の録画の組では、1つを共有し、録画をまたいでも同じ値を同じ仮名にする）。CLI の stdout と RPC の chunk は、JSON の行として読めれば中を仮名化して書き戻す。
 			  - 秘密の項目（`authToken`、`token`、`pairingCode` など、名前で判定）は消す。`orca://pair` を含む文字列は伏せる。
 			  - 自由な文の項目（`prompt`、`preview`、`lastAssistantMessage`、`toolInput`、`title`、`taskTitle`、`spec`、`result`（task の）、`objective`、`comment`、`messages` の本文など）は
 			    `text-N` に置き換える（同じ文は同じ仮名）。stderr も自由な文として扱う。
@@ -111,7 +111,7 @@ design: {
 			  `worktree ps`、`terminal list`、`session.tabs.list`（worktree ごと）、`nativeChat.readSession`（provider のセッションごとに `limit: 1`）を呼ぶ。
 			- 出力は集計だけ（件数、項目の有無、値の種類、結べたかどうか）。会話の中身、プロンプト、題名、パスを出さない。
 			  model と effort は、値があるかと、値の種類（例 `claude-opus-*` の形、`high` などの列挙）だけを出す。
-			- 結べるかの確かめ：worktree list の `id` → `session.tabs.list` のタブ（`parentTabId`、`leafId`）→ terminal list の `tabId`・`leafId`・`handle` → worktree ps の
+			- 結べるかの確かめ：worktree list の `id` → `session.tabs.list` のタブ（`parentTabId`、`leafId`）→ terminal list の `tabId`・`leafId`・`handle`（タブの `terminal` の handle からも結び、どの識別子が一致するかを数える）→ worktree ps の
 			  `paneKey`（`<tabId>:<leafId>`）→ `agentStatus.providerSession` の id。各段で一意に結べた数、結べなかった数、複数に当たった数を数える。
 			- スリープの見え方：タブの `status`（`pending-handle`）、`ptyId` の有無、`agentStatus` の有無と `state`、worktree ps の `hasLivePty` の組を数える。
 			- 結論は開発者が report.md に書く。道具の出力は Git の管理外の `.workbench/` に置く。
