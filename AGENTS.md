@@ -8,11 +8,15 @@ orca-web は、この Mac の Orca（stablyai/orca のデスクトップアプ�
 - `src/orca/`：Orca のアダプター。Orca に触るのはここだけです。
   - `cli.ts`：CLI の境界（`CliRunner`、`NodeCliRunner`、`buildManagedEnv`）。絶対パス、引数の配列、管理した環境変数で呼びます。
   - `orca-cli.ts`：`--json` の封筒を型の結果（`CliOutcome`）に解く `OrcaCli`。
-  - そのほか、RPC の境界、機能の確かめ、録画と再生（後の手順で足します。各ファイルの先頭の説明を読む）。
-- `src/server/`：HTTP の入口（今は `/api/health` だけ）。
+  - `runtime.ts`、`rpc.ts`：`orca-runtime.json` の口と、内部の Unix ソケットの RPC の境界（`UnixSocketRpc`、読む RPC だけを送る `ReadOnlyRpc`）。authToken は `RuntimeEndpoint` の中だけに持つ。
+  - `capabilities.ts`：機能ごとの確かめ（`probeCapabilities`、runtime の ID ごとに覚える `CapabilityCache`）。
+  - `read-state.ts`：状態の API のための読み取り。取得元ごとに読み、ページを最後まで読み、決めた項目だけに減らす（プロンプトや本文は拾わない）。
+  - `replay/`：録画と再生（`ReplayCliRunner`、`ReplayRpcTransport`、仮名化と検査の `sanitize.ts`）。
+- `src/state/`：状態の API の中身。`normalize.ts`（正規化した文書 `orca-web.state/v1` の組み立て。型は `model.ts`）、`poller.ts`（共有のポーリング。Orca を読むのはここだけ）、`fields.ts`（表示できる項目の一覧）、`settings.ts`（項目の選択の保存）。
+- `src/server/`：HTTP の入口。`GET /api/health`、`GET /api/state`、`GET /api/fields`、`PUT /api/settings/fields`、静的な画面。`config.ts` が環境変数（`PORT`、`ORCA_BIN`、`ORCA_WEB_READ_ORIGINS`、`ORCA_WEB_SETTINGS_FILE`）を読む。
 - `src/tools/`：実機の確かめと録画の道具。
-- `web/`：画面（素の ES Modules。ビルドしない）。
-- `test/`：`node:test` のテストと、録画の fixture（`test/fixtures/`）。
+- `web/`：状態の画面（素の ES Modules。ビルドしない）。表の組み立ては純粋な関数の `view.js`。
+- `test/`：`node:test` のテストと、録画の fixture（`test/fixtures/`、状態の API の手書きの録画は `test/state/fixture.ts`）。
 - 依存は devDependencies（`typescript`、`@types/node`、`@biomejs/biome`）だけです。実行時の依存を足さないでください。
 
 ## テストの実行
@@ -24,6 +28,7 @@ npm run lint        # biome check と tsc --noEmit（型の検査）
 npm run build       # tsc で dist/ に出す
 npm run format      # biome で整形する
 npm run probe:live  # この Mac の Orca で読むだけの確かめ（集計だけを出す）
+npm start           # http://127.0.0.1:8791/ で状態の API と画面を出す（Orca を読むだけ）
 ```
 
 1つのファイルだけを走らせるときは `node --test test/orca/cli-runner.test.ts` のように呼びます。テストは Orca を起動しません。Orca の応答は録画の再生で与えます。CI（`.github/workflows/ci.yml`）は PR と main への push で lint、テスト、ビルドを走らせます。
