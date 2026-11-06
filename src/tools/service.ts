@@ -9,9 +9,10 @@ import { type ExecResult, type HealthReply, parseServiceArgs, ServiceManager, Us
 const EXEC_TIMEOUT_MS = 10_000;
 const HEALTH_TIMEOUT_MS = 2_000;
 
-function exec(file: string, args: readonly string[]): Promise<ExecResult> {
+function exec(file: string, args: readonly string[], options: { timeoutMs?: number } = {}): Promise<ExecResult> {
+  const timeout = options.timeoutMs ?? EXEC_TIMEOUT_MS;
   return new Promise((resolve) => {
-    execFile(file, [...args], { timeout: EXEC_TIMEOUT_MS, encoding: 'utf8' }, (error, stdout, stderr) => {
+    execFile(file, [...args], { timeout, encoding: 'utf8' }, (error, stdout, stderr) => {
       if (!error) {
         resolve({ code: 0, stdout, stderr });
         return;

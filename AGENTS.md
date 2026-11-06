@@ -38,10 +38,10 @@ npm run format      # biome で整形する
 npm run probe:live  # この Mac の Orca で読むだけの確かめ（集計だけを出す）
 npm run open:live   # この Mac の Orca で開く口を確かめる（前面を切り替える。このリポジトリの worktree だけ）
 npm start           # http://127.0.0.1:8791/ で状態の API、画面、開く口を出す
-npm run service:install -- --dry-run   # LaunchAgent の定義と命令を見るだけ（何も書かない）
+node src/tools/service.ts install --dry-run   # LaunchAgent の定義と命令を見るだけ（ビルドせず、何も書かない）
 ```
 
-`npm run service:install`、`service:uninstall`、`service:restart` は利用者の launchd の登録を変えます。エージェントは実行しないでください（`--dry-run` と `service:status` は読むだけ）。本物の登録は利用者か統括が行います。
+`npm run service:install`、`service:uninstall`、`service:restart` は利用者の launchd の登録を変えます。エージェントは実行しないでください（`node src/tools/service.ts install --dry-run` と `service:status` は読むだけ。`npm run service:install -- --dry-run` は先にビルドして `dist/` を書き換える）。本物の登録は利用者か統括が行います。
 
 1つのファイルだけを走らせるときは `node --test test/orca/cli-runner.test.ts` のように呼びます。テストは Orca を起動しません。Orca の応答は録画の再生で与えます。CI（`.github/workflows/ci.yml`）は PR と main への push で lint、テスト、ビルドを走らせます。
 

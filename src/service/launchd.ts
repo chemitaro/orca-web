@@ -14,6 +14,8 @@ const THROTTLE_SECONDS = 10;
 const MIN_NODE_MAJOR = 24;
 const DEFAULT_WAIT_MS = 15_000;
 const POLL_MS = 250;
+/** `tailscale ip -4` を待つ上限。動いていない Tailscale で入れるのを長く止めない。 */
+const TAILSCALE_TIMEOUT_MS = 5_000;
 
 export type ServiceCommand = 'install' | 'uninstall' | 'restart' | 'status';
 const COMMANDS: readonly ServiceCommand[] = ['install', 'uninstall', 'restart', 'status'];
@@ -159,7 +161,8 @@ export interface HealthReply {
 }
 
 export interface ServiceIo {
-  exec(file: string, args: readonly string[]): Promise<ExecResult>;
+  /** timeoutMs がなければ、口の既定の時間切れ。 */
+  exec(file: string, args: readonly string[], options?: { timeoutMs?: number }): Promise<ExecResult>;
   /** `http://127.0.0.1:<port>/api/health` の答え。答えないか形が違えば null。 */
   health(port: number): Promise<HealthReply | null>;
   sleep(ms: number): Promise<void>;
@@ -249,7 +252,7 @@ export class ServiceManager {
 
   async #findTailscaleIp(): Promise<string | null> {
     for (const file of ['tailscale', TAILSCALE_APP]) {
-      const r = await this.#o.io.exec(file, ['ip', '-4']);
+      const r = await this.#o.io.exec(file, ['ip', '-4'], { timeoutMs: TAILSCALE_TIMEOUT_MS });
       if (r.code === 0) return parseTailscaleIpv4(r.stdout);
     }
     return null;

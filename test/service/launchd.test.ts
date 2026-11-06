@@ -147,6 +147,7 @@ interface Fake {
   repo: string;
   plist: string;
   healthCalls: number[];
+  timeouts: [string, number | undefined][];
 }
 
 interface FakeOptions {
@@ -175,6 +176,7 @@ async function withFake(options: FakeOptions, fn: (f: Fake) => Promise<void>): P
   const out: string[] = [];
   const err: string[] = [];
   const healthCalls: number[] = [];
+  const timeouts: [string, number | undefined][] = [];
   let loaded = options.loaded ?? false;
   const pid = options.pid ?? 4242;
   const manager = new ServiceManager({
@@ -184,8 +186,9 @@ async function withFake(options: FakeOptions, fn: (f: Fake) => Promise<void>): P
     nodePath: options.nodePath ?? NODE,
     nodeVersion: options.nodeVersion ?? 'v24.21.0',
     io: {
-      async exec(file, args) {
+      async exec(file, args, execOptions) {
         calls.push([file, ...args]);
+        timeouts.push([file, execOptions?.timeoutMs]);
         const key = [file, ...args].join(' ');
         for (const [prefix, result] of Object.entries(options.fail ?? {})) {
           if (key.startsWith(prefix)) return result;
@@ -218,6 +221,7 @@ async function withFake(options: FakeOptions, fn: (f: Fake) => Promise<void>): P
       repo,
       plist: path.join(home, 'Library', 'LaunchAgents', `${SERVICE_LABEL}.plist`),
       healthCalls,
+      timeouts,
     });
   } finally {
     await rm(home, { recursive: true, force: true });
@@ -406,5 +410,19 @@ test('status は読み込みの状態の行と health の待ち受けの状態�
   await withFake({}, async (f) => {
     assert.equal(await f.manager.run(parseServiceArgs(['status'])), 1);
     assert.match(f.out.join('\n') + f.err.join('\n'), /読み込まれていない/);
+  });
+});
+
+test('tailscale ip -4 は 5 秒で打ち切り、launchctl は既定の時間切れで呼ぶ', async () => {
+  await withFake({ tailscale: { code: null, stdout: '', stderr: 'timed out' } }, async (f) => {
+    assert.equal(await f.manager.run(parseServiceArgs(['install', '--dry-run'])), 0);
+    assert.deepEqual(f.timeouts, [
+      ['tailscale', 5000],
+      ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', 5000],
+    ]);
+  });
+  await withFake({}, async (f) => {
+    assert.equal(await f.manager.run(parseServiceArgs(['install', '--tailscale-ip', 'none'])), 0);
+    assert.ok(f.timeouts.every(([file, t]) => file === '/bin/launchctl' && t === undefined));
   });
 });

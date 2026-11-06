@@ -27,7 +27,7 @@ npm start           # http://127.0.0.1:8791/（ターミナルを閉じると止
 
 ```sh
 npm ci
-npm run service:install -- --dry-run   # 書く定義と送る命令を見るだけ（何も書かない）
+node src/tools/service.ts install --dry-run   # 書く定義と送る命令を見るだけ（ビルドせず、何も書かない。dist/ がなければ先に npm run build）
 npm run service:install                # ビルドして、定義を書き、読み込み、/api/health を待つ
 npm run service:status                 # 読み込みの状態（state、pid、last exit code）と待ち受けの状態
 npm run service:restart                # ビルドして、起動し直す（コードを更新した後）
