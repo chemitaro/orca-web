@@ -86,6 +86,7 @@ lsof -nP -iTCP:8791 -sTCP:LISTEN         # 127.0.0.1:8791 と <Tailscale の IP>
   - テストのレーン（同じコミット）：`npm run lint` exit 0、`npm test` exit 0（187 件すべて成功）、`npm run build` exit 0。
   - P3（情報のみ）：FQG-001 restart の kickstart の失敗と pid の食い違いで 1 を返すことを確かめるテストがない（実装は正しい。install の同じ経路にはテストがある）。
 - 実機：上の「実機の受け入れ」。
+- PR：https://github.com/chemitaro/orca-web/pull/15（head d673dee、base main fd89ac6）。CI（GitHub Actions の CI、run 42215309801）は success。2026-11-06T12:09Z の観測で、Actions と Commit Status は PASS、マージの状態は READY（OPEN、draft でない、MERGEABLE、CLEAN）。最終の SHA は d673dee70cdd9e05e45cc63990e490eb7018299e。
 
 ## Residual Risks / Follow-ups
 
