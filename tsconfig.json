@@ -18,7 +18,8 @@
     "rewriteRelativeImportExtensions": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowJs": true
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "web"]
 }
