@@ -10,7 +10,7 @@ assurance: {
 	reason: "手元の常駐。止まっても手で起動し直せる"
 }
 
-purpose: "orca-web をこの Mac の launchd の利用者のサービス（LaunchAgent）として常駐させ、127.0.0.1 と指定の Tailscale の IP だけで待ち受けるようにする。あわせて、epic-00003 の全体を、この Mac の実機で受け入れる。"
+purpose: "orca-web をこの Mac の launchd の利用者のサービス（LaunchAgent）として常駐させ、127.0.0.1 と指定の Tailscale の IP だけで待ち受けるようにする。あわせて、epic-00003 の全体を、この Mac の実機で受け入れる（本物の launchd の登録とスマホの確かめは、マージの後に統括と利用者が行い、結果は epic-00003 の report.md に書く）。"
 
 background: """
 	親の epic-00003 の最後の slice（R-06 と、Epic 全体の実機の受け入れ）。状態の API（iss-00006）と開く口・ボタンの部品・書き込みの守り（iss-00007）はマージ済み。
@@ -45,7 +45,7 @@ requirements: {
 			- 定義（`~/Library/LaunchAgents/io.github.chemitaro.orca-web.plist`）は、ラベル `io.github.chemitaro.orca-web`、node の絶対パスとビルドした成果物（`<リポジトリ>/dist/server/main.js`）の引数の配列、作業のディレクトリ（リポジトリ）、
 			  ログ（`~/Library/Logs/orca-web/service.log`。標準出力と標準エラー）、`RunAtLoad`、`KeepAlive`、`ThrottleInterval` 10 秒、環境変数（`PORT`、`ORCA_BIN`、`ORCA_WEB_TAILSCALE_IP`、指定があれば `ORCA_WEB_READ_ORIGINS` と `ORCA_WEB_SETTINGS_FILE`、最小の `PATH`）を持つ。
 			- 設定は、入れるときの引数（`--port`、`--tailscale-ip <IP|auto|none>`、`--read-origins`、`--orca-bin`、`--settings-file`）で渡す。Tailscale の IP の既定は `auto`（`tailscale ip -4` の 100.64.0.0/10 のアドレス）。
-			- `install` は、設定をサーバーと同じ規則（`loadConfig`）で確かめてから定義を書き、読み込み済みなら外してから `launchctl bootstrap gui/<uid>` で読み込み、`/api/health` が答えるまで待つ。`--dry-run` では、定義と送る命令を出すだけで何も書かない。
+			- `install` は、設定をサーバーと同じ規則（`loadConfig`）で確かめてから定義を書き、読み込み済みなら外してから `launchctl bootstrap gui/<uid>` で読み込み、`/api/health` が答え、その `pid` が launchd の示すサービスの pid と一致するまで待つ（同じポートの別のプロセスの答えを成功と見なさない）。`--dry-run` では、定義と送る命令を出すだけで何も書かない。
 			- `uninstall` は外して定義を消す（ログと項目の選択の設定は残す）。`restart` は `launchctl kickstart -k`。`status` は読み込みの状態と `/api/health` を出す。
 			"""
 		acceptance: [
@@ -70,7 +70,7 @@ requirements: {
 		text: """
 			- `install` で Tailscale の IP が取れない（`tailscale` がない、動いていない、100.64.0.0/10 のアドレスがない）ときは、Tailscale の IP なしで定義を書き、そのことを出力に出す。
 			- サーバーが Tailscale の IP で待ち受けられない（`EADDRNOTAVAIL` など。ログインの直後で Tailscale がまだ動いていない）ときは、127.0.0.1 の待ち受けを続け、ログに1行（アドレスと誤りの種類）を書き、30 秒ごとに待ち受けを試し直す。待ち受けられたらログに1行を書く。同じ誤りの繰り返しは書かない。
-			- `GET /api/health` が、待ち受けのアドレスごとの状態（`listening`、`retrying` と誤りの種類）を返す。
+			- `GET /api/health` が、プロセスの `pid` と、待ち受けのアドレスごとの状態（`listening`、`retrying` と誤りの種類）を返す。
 			"""
 		acceptance: [
 			"テストで、待ち受けられない Tailscale の IP（文書用のアドレス 192.0.2.1）を設定しても 127.0.0.1 で答え、`/api/health` に `retrying` が出て、ログに1行だけ書く",
@@ -96,7 +96,7 @@ requirements: {
 	}
 	"R-06": {
 		title: "録画の検査の JSON の配列の規則が、短い語の並びを安全と判定しない（iss-00006 の FQG-002）"
-		text:  "`isSafeString` の JSON の配列の規則は、各要素が仮名（`uuid-N`、`hex-N`、`p-N`、`text-N`）を含み、仮名を除いた残りが短い区切りの文字だけのときに限って安全とする。`[\"fix\",\"the\",\"bug\"]` のような語の並びは安全としない。"
+		text:  "`isSafeString` の JSON の配列の規則は、各要素が仮名（`uuid-N`、`hex-N`、`p-N`、`text-N`）を含み、仮名を除いた残りが 16 字以下の英数字と `._:/-` だけ（`task_` などの接頭辞）のときに限って安全とする。`[\"fix\",\"the\",\"bug\"]` のような語の並びは安全としない。"
 		acceptance: ["テストで、語の並びの配列が安全と判定されず、仮名化で text-N になり、仮名の配列（`[\"task_hex-1\"]`）と空の配列は残り、既存の録画が検査を通る"]
 	}
 	"R-07": {
@@ -121,7 +121,8 @@ requirements: {
 			5. Orca に届かないとき（Orca の CLI のパスを存在しないものにした別の起動）、画面が止まらず「接続できない」と鮮度を示す。実際の Orca は止めない（ほかのエージェントが止まるため）。
 			6. Tailscale の IP で、状態の API が読め、許していない Host が拒まれる。
 
-			スマホでの確かめ（幅 390px で状態の画面が読め、ボタンが出ない）は利用者に頼み、手順を report.md に書く。
+			スマホでの確かめ（幅 390px で状態の画面が読め、ボタンが出ない）は利用者に、本物の launchd の登録とログインし直した後の確かめ（epic-00003 の R-06 の受け入れの1つ目）は統括に頼み、手順を report.md に書く。
+			その2つの結果は、統括が epic-00003 の report.md に書き、Epic の受け入れを閉じる（この Issue の完了の条件には含めない）。
 			"""
 		acceptance: ["report.md に、1〜6の結果（件数と結論だけ。本文、プロンプト、トークンを書かない）と、利用者に頼むスマホと本物の登録の確かめの手順がある"]
 	}
@@ -138,7 +139,7 @@ failures: {
 	}
 	"F-03": {
 		title: "launchctl が失敗したとき、または入れた後に `/api/health` が答えないときは、成功と言わない"
-		text:  "`bootstrap` と `kickstart` の失敗は、launchctl の終了コードと stderr を出して終了コード1。答えないときは、ログの置き場を示して終了コード1。読み込まれていない `restart` は `install` を示して終了コード1。読み込まれていない `uninstall` は、定義があれば消して成功する。"
+		text:  "`bootout`、`bootstrap`、`kickstart` の失敗は、launchctl の終了コードと stderr を出して終了コード1（`bootout` が失敗したら、`install` は定義を書き換えず bootstrap せず、`uninstall` は定義を消さない）。`/api/health` が答えない、または答えた `pid` がサービスの pid と違うときは、ログの置き場を示して終了コード1。読み込まれていない `restart` は `install` を示して終了コード1。読み込まれていない `uninstall` は、定義があれば消して成功する。"
 	}
 	"F-04": {
 		title: "SIGTERM と SIGINT では、待ち受けと試し直しとポーリングを止めて、終了コード0で終わる"

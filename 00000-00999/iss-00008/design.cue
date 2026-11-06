@@ -31,7 +31,7 @@ design: {
 		text: """
 			- `main.ts` は、設定を読み（`ConfigError` は終了コード2）、Orca の配線とポーリングと設定のファイルを組み立て、`startListeners` で待ち受ける。127.0.0.1 の失敗は `orca-web: cannot listen on 127.0.0.1:<port> (<code>)` を記録して終了コード1。
 			- SIGTERM と SIGINT で、`ListenerSet.close()` とポーリングの `stop()` を呼び、終了コード0で終わる（閉じ切らないときは 5 秒で抜ける）。
-			- `createAppHandler` に `health?: () => ListenerStatus[]` を足す。`GET /api/health` は `{ ok: true, listeners: [...] }`（なければ今までどおり `{ ok: true }`）。Host の確かめは今までどおり先に当てる。
+			- `createAppHandler` に `health?: () => { pid: number; listeners: ListenerStatus[] }` を足す。`GET /api/health` は `{ ok: true, pid, listeners: [...] }`（なければ今までどおり `{ ok: true }`）。Host の確かめは今までどおり先に当てる。
 			"""
 		satisfies: ["R-03", "F-01", "F-04"]
 	}
@@ -53,14 +53,15 @@ design: {
 
 			| 命令 | 送る launchctl の引数 | ほか |
 			|---|---|---|
-			| install | `print gui/<uid>/<ラベル>`（読み込み済みか）、あれば `bootout gui/<uid>/<ラベル>`、`bootstrap gui/<uid> <plist>` | 設定と node（24 以上、絶対パス）と成果物を確かめ、ログのディレクトリを作り、一時ファイルから名前を変えて定義を書き、`/api/health` を 15 秒まで待つ |
+			| install | `print gui/<uid>/<ラベル>`（読み込み済みか）、あれば `bootout gui/<uid>/<ラベル>`、`bootstrap gui/<uid> <plist>`、待つ間の `print` | 設定と node（24 以上、絶対パス）と成果物を確かめ、ログのディレクトリを作り、一時ファイルから名前を変えて定義を書き、`/api/health` の `pid` が `print` の `pid = N` と一致するまで 15 秒待つ |
 			| uninstall | `print`、あれば `bootout` | 定義を消す。ログと設定は残す |
-			| restart | `print`、`kickstart -k gui/<uid>/<ラベル>` | 読み込まれていなければ誤り。`/api/health` を待つ |
+			| restart | `print`、`kickstart -k gui/<uid>/<ラベル>`、待つ間の `print` | 読み込まれていなければ誤り。install と同じく `pid` の一致を待つ |
 			| status | `print` | 読み込みの状態（`state`、`pid`、`last exit code` の行だけ）と `/api/health` の待ち受けの状態 |
 
 			- Tailscale の IP の `auto` は、`PATH` の `tailscale`、なければ `/Applications/Tailscale.app/Contents/MacOS/Tailscale` の `ip -4` を 5 秒で呼ぶ。取れなければ、Tailscale なしで書き、出力に「Tailscale の IP が取れないので 127.0.0.1 だけで待ち受ける」と出す。
 			- `--dry-run` は、定義と送る命令を出すだけで、ファイルを書かず、launchctl を呼ばない（Tailscale の IP の `auto` を探すことはする）。
-			- `health(port)` は `http://127.0.0.1:<port>/api/health` を読む（`fetch` の Host は `127.0.0.1:<port>` で、守りを通る）。
+			- `health(port)` は `http://127.0.0.1:<port>/api/health` を読む（`fetch` の Host は `127.0.0.1:<port>` で、守りを通る）。答えた `pid` が launchd のサービスの pid と違えば、同じポートの別のプロセスなので成功としない。
+			- `bootout` が非ゼロで終わったら、そこで終了コード1で止まる（install は定義を書き換えず、uninstall は定義を消さない）。
 			- 入口の `src/tools/service.ts` は、本物の口（`execFile`、`node:fs/promises`、`fetch`）と、`process.execPath`、`process.getuid()`、`os.homedir()`、リポジトリのディレクトリ（`import.meta.dirname` の2つ上）を渡す。終了コードは成功 0、設定の誤り 2、そのほかの誤り 1。
 			- `package.json`：`service:install` と `service:restart` は先に `npm run build` を走らせる（`npm run build && node src/tools/service.ts install`）。
 			"""
