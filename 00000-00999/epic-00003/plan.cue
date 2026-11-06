@@ -1,33 +1,30 @@
 package spec
 
 // 計画（Epic）。型 specdock/v1。
-// Epic の計画は、子の Scope への切り分けを持つ。実装の手順とテストは子の Scope が持つので、
-// steps と tests は書かない。
 
-// 目標（任意）。
-// goal: "..."
+goal: "土台→状態の API と開く口（並行）→常駐と実機の受け入れの順で、SpecDock の epic-00471 が使える状態の API と開くボタンを出す。"
 
-// 子の Scope への切り分け。子の ID（iss-00001 など）をキーにする。covers（子に任せる要件・失敗の条件の番号）が必須。
-// すべての要件を、いずれかの子に任せる。standard 以上では、それが「確かめるテストがある」にも当たり、
-// strict 以上では、すべての失敗の条件を任せ、どの子にも、任せる番号を書く。
-// 子の題名は GitHub に、子の保証レベルは子の requirement.cue にあるので、ここには書かない。
 slices: {
-	// "iss-00001": {
-	// 	covers: ["R-01", "F-01"]
-	// 	text:   "この Issue に任せること"
-	// 	after: ["iss-00002"]
-	// 	session: "coord"
-	// }
+	"iss-00005": {
+		covers: ["F-02"]
+		text:   "雛形、テストと lint、Orca のアダプター（CLI と RPC）、機能の確かめ、録画と再生の基盤。実機で、モデルと推論、スリープ、タブの識別子が取れるかを確かめて記録する"
+	}
+	"iss-00006": {
+		covers: ["R-01", "R-02", "R-03", "F-01"]
+		text:   "状態の API、項目の一覧と選択、読み取りの CORS"
+		after: ["iss-00005"]
+	}
+	"iss-00007": {
+		covers: ["R-04", "R-05", "F-03", "F-04"]
+		text:   "書き込みの守り、開く口、単独のボタンの部品"
+		after: ["iss-00005"]
+	}
+	"iss-00008": {
+		covers: ["R-06"]
+		text:   "launchd での常駐、待ち受けのアドレス、Mac とスマホでの実機の受け入れ"
+		after: ["iss-00006", "iss-00007"]
+	}
 }
 
-// 検証のしかた、戻し方、終わりの条件（任意）。critical では、切り分けがあれば rollback が要る。
-// verification: "..."
-// rollback:     "..."
-// exit:         "..."
-
-// 実行の割り当て（任意）。切り分けの session は、ここのセッションの名前を指す。
-// レビューの after は、どの切り分けの後かを指す。モデルと推論の名前は、どんな文字列でもよい。
-// execution: {
-// 	sessions: coord: {task: "統括", model: "...", effort: "...", rationale: "..."}
-// 	reviews: gate: {role: "最終の確かめ", after: "iss-00001", model: "...", effort: "..."}
-// }
+verification: "各 Issue で録画と再生のテストを書き、iss-00008 でこの Mac の実機で通して確かめる。"
+exit:         "SpecDock の別のオリジンの画面から、状態を読み、ボタンだけで Orca の該当のタブを前面に出せる。"
