@@ -1,0 +1,146 @@
+{
+  "probedAt": "2026-11-06T09:12:56.308Z",
+  "orca": {
+    "cliVersion": "1.4.251",
+    "appVersion": "1.4.251",
+    "runtimeIdConsistent": true,
+    "connection": {
+      "state": "connected"
+    },
+    "features": {
+      "readState": {
+        "available": true,
+        "missing": [],
+        "deferred": []
+      },
+      "readTabs": {
+        "available": true,
+        "missing": [],
+        "deferred": []
+      },
+      "openExistingTab": {
+        "available": true,
+        "missing": [],
+        "deferred": [
+          "rpc:session.tabs.activate",
+          "rpc:worktree.activate"
+        ]
+      },
+      "readTranscript": {
+        "available": true,
+        "missing": [],
+        "deferred": []
+      },
+      "sendGuarded": {
+        "available": false,
+        "missing": [
+          "orca-web:guarded-send-verified"
+        ],
+        "deferred": []
+      }
+    }
+  },
+  "live": {
+    "counts": {
+      "worktrees": 105,
+      "tabsRead": 105,
+      "tabsFailed": 0,
+      "terminalTabs": 89,
+      "tabsByType": {
+        "terminal": 89,
+        "agent-session": 1
+      }
+    },
+    "truncated": {
+      "worktreeList": false,
+      "worktreePs": false,
+      "terminalList": false
+    },
+    "failures": [],
+    "modelEffort": {
+      "claude": {
+        "agentTabs": 9,
+        "workers": 5,
+        "withModel": 0,
+        "modelShapes": {},
+        "withProviderSession": 9,
+        "withEffort": 9,
+        "effortValues": {
+          "high": 5,
+          "xhigh": 3,
+          "medium": 1
+        }
+      },
+      "unknown": {
+        "agentTabs": 2,
+        "workers": 0,
+        "withModel": 0,
+        "modelShapes": {},
+        "withProviderSession": 2,
+        "withEffort": 2,
+        "effortValues": {
+          "high": 1,
+          "medium": 1
+        }
+      },
+      "codex": {
+        "agentTabs": 1,
+        "workers": 0,
+        "withModel": 0,
+        "modelShapes": {},
+        "withProviderSession": 1,
+        "withEffort": 0,
+        "effortValues": {}
+      }
+    },
+    "sleep": {
+      "tabCombos": {
+        "status=ready pty=yes agentStatus=none launchAgent=no": 30,
+        "status=ready pty=yes agentStatus=done launchAgent=yes": 5,
+        "status=pending-handle pty=yes agentStatus=none launchAgent=yes": 34,
+        "status=pending-handle pty=yes agentStatus=none launchAgent=no": 13,
+        "status=ready pty=yes agentStatus=done launchAgent=no": 3,
+        "status=ready pty=yes agentStatus=working launchAgent=yes": 4
+      },
+      "psAgentsWithoutLivePty": {}
+    },
+    "linking": {
+      "tabToTerminal": {
+        "unique": 29,
+        "none": 60,
+        "multiple": 0
+      },
+      "handleAgrees": 28,
+      "readyTabs": 42,
+      "byHandle": {
+        "tabId=parentTabId leaf=same worktree=same": 28,
+        "tabId=other leaf=other worktree=same": 14
+      },
+      "tabToPsAgent": {
+        "unique": 11,
+        "none": 78,
+        "multiple": 0
+      },
+      "terminals": 44,
+      "terminalsWithPlaceholderTabId": 14,
+      "psAgents": 12,
+      "psAgentsMatchedToTab": 11,
+      "agentStatusPaneKeyAgrees": 12,
+      "providerSessions": {
+        "present": 12,
+        "distinct": 12,
+        "shared": 0
+      }
+    },
+    "transcript": {
+      "attempted": 10,
+      "ok": 10,
+      "withMessages": 10,
+      "okByAgent": {
+        "claude": 9,
+        "codex": 1
+      },
+      "failedByCode": {}
+    }
+  }
+}
