@@ -57,7 +57,16 @@ ID: "iss-00007"
 
 ## Verification
 
-（コードのレビュー、最終品質ゲート、CI の結果を、それぞれ終えたときに書く。）
+- 仕様のレビュー（spec-review、spec-reviewer opus / medium）：round 1 で **pass**（P0 0、P1 0、P2 1、P3 1）。固定は CUE の sha256（requirement 38250e60…、design 71595bf4…、plan 54b619fe…）。P2（theme がないときの明暗）と P3（「広げると出る」とテストの対応）は情報のみ。実装は iframe の中の `prefers-color-scheme` に従い、ブラウザーの確かめで 391px に広げると出ることも確かめた。
+- コードのレビュー（code-review、code-reviewer sonnet / high、standards と spec の2人、範囲 2e5fc64..4adc35a）：どちらも **pass**。
+  - spec：P3 1（`open:live` の出力に worktreeId のパスと Orca の誤りの文が出る）。指摘外の注記（`Referrer-Policy: no-referrer` では Fetch の仕様で同じオリジンの POST の Origin が null になりうる）も正しいと判断した。
+  - standards：P3 2（`ORCA_WEB_SPECDOCK_ORIGINS` が `,` だけだと frame-ancestors が空になる、AGENTS.md が古い）。
+  - 3c02c18 で、出力を決まった項目に絞り、Referrer-Policy を `same-origin` にし、空のオリジンを設定の誤りにした（テストつき）。ブラウザーと `open:live` で確かめ直した。AGENTS.md は依頼の編集してよい範囲の外なので直していない。
+- 最終品質ゲート（final-quality-gate、quality-gate-reviewer opus / high、1人、ChatGPT なし）：campaign `iss-00007-fqg-1`、試み1で **合格**。合格したコミットは `3c02c18cba67b2f381abbb4c4715cf0d9f923210`。
+  - レビューのレーン：status pass、coverage complete（functional-correctness、requirements-closure、test-adequacy）、P0 0・P1 0・P2 0・P3 2。
+  - テストのレーン（同じコミット）：`npm run lint` exit 0、`npm test` exit 0（108 件すべて成功）、`npm run build` exit 0。
+  - P3（情報のみ）：FQG-001 埋め込みの Referrer-Policy が設計 D-06 の文と違う（設計の文を same-origin に直した）。FQG-002 `terminal switch` の CLI が封筒のない出力で非ゼロ終了したとき（シグナルでの終了など）、`unconfirmed`（504）ではなく `orca_error`（502）と返す（書き込みは1回だけで安全は保たれる）。
+- PR：https://github.com/chemitaro/orca-web/pull/10（head 3c02c18、base main）。CI（GitHub Actions）の結果は PR に残る。
 
 ## Residual Risks / Follow-ups
 
@@ -66,4 +75,5 @@ ID: "iss-00007"
 - Origin とトークンはブラウザー由来の偽の要求を防ぐもので、同じ Mac の悪意あるプロセスへの認証の境界ではない。
 - Chrome の Private Network Access で、Tailscale のアドレスからの iframe と要求が止められうる。Mac とスマホの実機の受け入れは iss-00008 で行う。
 - iss-00006（状態の API）は、エージェントの識別子として paneKey（`<parentTabId>:<leafId>`）を返す前提にした。
+- 最終品質ゲートの FQG-002（`terminal switch` の CLI の異常終了を `unconfirmed` に分ける）は、後の Issue で直す候補。
 - `AGENTS.md` に `npm run open:live` と新しいファイル（`open*.ts`、`server/config.ts`、`server/guard.ts`、`web/embed/`）の説明がない（編集してよい範囲の外。iss-00005 の FQG-003 と合わせて後で直す）。

@@ -97,7 +97,7 @@ design: {
 			| `GET /embed/open-button.js`、`/embed/open-button-frame.js`、`/embed/open-button.css` | Host | 固定の対応のファイル（利用者のパスを受けない） |
 
 			画面の応答の CSP：`default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors <SpecDock のオリジン>`。
-			あわせて `X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Cache-Control: no-store`。状態の API（iss-00006）が足す道とぶつからないよう、振り分けは道の表の1か所にまとめる。
+			あわせて `X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Cache-Control: no-store`（`no-referrer` にすると、Fetch の仕様では同じオリジンの `mode: same-origin` の POST の Origin が `null` になりうり、守りが拒む。コードのレビューで見つけて直した）。状態の API（iss-00006）が足す道とぶつからないよう、振り分けは道の表の1か所にまとめる。
 			"""
 		satisfies: ["R-01", "R-03", "R-04", "F-03"]
 	}
