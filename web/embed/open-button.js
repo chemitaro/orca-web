@@ -23,7 +23,8 @@
   frame.height = data.size === 'sm' ? '26' : '32';
   frame.style.border = '0';
   frame.style.verticalAlign = 'middle';
-  frame.style.colorScheme = 'normal';
+  // iframe の要素と中の文書の color-scheme をそろえる（違うと、ブラウザーが不透明な背景を塗る）。
+  frame.style.colorScheme = data.theme === 'light' || data.theme === 'dark' ? data.theme : 'light dark';
   script.after(frame);
 
   const narrow = window.matchMedia('(max-width: 390px)');
