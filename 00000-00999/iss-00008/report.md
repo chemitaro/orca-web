@@ -76,7 +76,16 @@ lsof -nP -iTCP:8791 -sTCP:LISTEN         # 127.0.0.1:8791 と <Tailscale の IP>
 
 ## Verification
 
-（レビューとゲートの後に書く）
+- 仕様のレビュー（spec-review、spec-reviewer opus / medium、CUE は sha256 で固定）：round 1 は **pass**（P0 0、P1 0、P2 2、P3 3）。P2・P3 は情報だが取り込んだ（`/api/health` の pid と install の pid の照らし合わせ、bootout の失敗の扱い、Epic の残りの記録先、文の食い違い）。round 2 も **pass**（P0〜P2 0、P3 1。compatibility に pid を足して直した）。固定の sha256：requirement 5523e998…、design a92421aa…（round 2）。pass の後に design の文を小さく直した（compatibility の pid、`ProcessType` を書かない）。
+- コードのレビュー（code-review、code-reviewer sonnet / high、standards と spec の2人、範囲 fd89ac6..479b83f）：どちらも **pass**（P0〜P2 0）。
+  - spec：P3 1（`tailscale ip -4` の時間切れが仕様の 5 秒でなく 10 秒）。
+  - standards：P3 1（`npm run service:install -- --dry-run` は先にビルドするので、「何も書かない」と食い違う）。
+  - 2件とも d673dee で直した（tailscale だけ 5 秒、テストつき。dry-run はビルドしない `node src/tools/service.ts install --dry-run` で案内）。ChatGPT のレビューは使っていない（統括の依頼でレビュアーを指定）。
+- 最終品質ゲート（final-quality-gate、quality-gate-reviewer opus / high、1人、ChatGPT なし）：campaign `iss-00008-fqg-1`、試み1で **合格**。合格したコミットは `d673dee70cdd9e05e45cc63990e490eb7018299e`。
+  - レビューのレーン：status pass、coverage complete（functional-correctness、requirements-closure、test-adequacy）、P0 0・P1 0・P2 0・P3 1。
+  - テストのレーン（同じコミット）：`npm run lint` exit 0、`npm test` exit 0（187 件すべて成功）、`npm run build` exit 0。
+  - P3（情報のみ）：FQG-001 restart の kickstart の失敗と pid の食い違いで 1 を返すことを確かめるテストがない（実装は正しい。install の同じ経路にはテストがある）。
+- 実機：上の「実機の受け入れ」。
 
 ## Residual Risks / Follow-ups
 

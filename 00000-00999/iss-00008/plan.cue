@@ -12,7 +12,7 @@ steps: {
 	"S-05": {title: "LaunchAgent の定義の組み立てと ServiceManager、命令の入口、package.json の命令", realizes: ["R-01", "R-03", "F-02", "F-03"], status: "done", after: ["S-04"], session: "impl"}
 	"S-06": {title: "README と AGENTS.md を書く", realizes: ["R-04", "R-08"], status: "done", after: ["S-05"], session: "impl"}
 	"S-07": {title: "実機の受け入れ（一時の起動、ブラウザー、Codex は統括に頼む）と、`--dry-run` の定義の `plutil -lint`。report.md に書く", realizes: ["R-01", "R-02", "R-09"], status: "done", after: ["S-05"], session: "impl"}
-	"S-08": {title: "コードのレビュー、最終品質ゲート、PR の作成と CI の確かめ", realizes: ["R-01", "R-02"], status: "doing", after: ["S-06", "S-07"], session: "impl"}
+	"S-08": {title: "コードのレビュー、最終品質ゲート、PR の作成と CI の確かめ", realizes: ["R-01", "R-02"], status: "done", after: ["S-06", "S-07"], session: "impl"}
 }
 
 tests: {
