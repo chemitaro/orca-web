@@ -10,6 +10,7 @@ export interface CliEntry {
   delayMs: number;
   timedOut?: boolean;
   spawnError?: string;
+  outputOverflow?: boolean;
 }
 
 export interface CliRecording {

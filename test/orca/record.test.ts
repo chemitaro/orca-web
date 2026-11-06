@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import type { CliRunner } from '../../src/orca/cli.ts';
-import { RecordingCliRunner, RecordingRpcTransport, writeRecording } from '../../src/orca/replay/record.ts';
+import {
+  RecordingCliRunner,
+  RecordingRpcTransport,
+  writeRecording,
+  writeRecordingSet,
+} from '../../src/orca/replay/record.ts';
 import type { CliRecording, RpcRecording } from '../../src/orca/replay/recording.ts';
 import { ReplayCliRunner, ReplayRpcTransport } from '../../src/orca/replay/replay.ts';
 import { Pseudonymizer } from '../../src/orca/replay/sanitize.ts';
@@ -121,4 +126,23 @@ test('同じ Pseudonymizer を渡すと、CLI と RPC の録画をまたいで�
   // 別々なら、それぞれの表で数える
   const c = JSON.parse(rpcRec.recording().exchanges[0]?.chunks[0] ?? '{}').result.worktree;
   assert.match(c, /^uuid-\d+$/);
+});
+
+test('writeRecordingSet は全部の録画を検査してから、出力先を作って書く。1つでも通らなければ何も書かない', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'ow-set-'));
+  try {
+    const good: CliRecording = { version: 1, kind: 'cli', entries: [] };
+    const bad: RpcRecording = {
+      version: 1,
+      kind: 'rpc',
+      exchanges: [{ method: 'm', chunks: ['{"id":"$ID","ok":true,"result":{"prompt":"leak"}}\n'], end: 'close' }],
+    };
+    const out = path.join(dir, 'new', 'sub');
+    await assert.rejects(writeRecordingSet(out, { 'a.json': good, 'b.json': bad }), /unsafe recording/);
+    await assert.rejects(stat(out), /ENOENT/);
+    await writeRecordingSet(out, { 'a.json': good });
+    assert.deepEqual(JSON.parse(await readFile(path.join(out, 'a.json'), 'utf8')), good);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

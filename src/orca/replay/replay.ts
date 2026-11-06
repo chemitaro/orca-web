@@ -31,6 +31,7 @@ export class ReplayCliRunner implements CliRunner {
       timedOut: entry.timedOut ?? false,
     };
     if (entry.spawnError !== undefined) result.spawnError = entry.spawnError;
+    if (entry.outputOverflow) result.outputOverflow = true;
     return result;
   }
 }

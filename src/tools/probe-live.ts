@@ -7,7 +7,7 @@ import { parseArgs } from 'node:util';
 import { type CapabilityReport, probeCapabilities } from '../orca/capabilities.ts';
 import { NodeCliRunner } from '../orca/cli.ts';
 import { OrcaCli, ReadOnlyOrcaCli } from '../orca/orca-cli.ts';
-import { RecordingCliRunner, RecordingRpcTransport, writeRecording } from '../orca/replay/record.ts';
+import { RecordingCliRunner, RecordingRpcTransport, writeRecordingSet } from '../orca/replay/record.ts';
 import { Pseudonymizer } from '../orca/replay/sanitize.ts';
 import { ReadOnlyRpc, UnixSocketRpc } from '../orca/rpc.ts';
 import { RuntimeLocator } from '../orca/runtime.ts';
@@ -52,11 +52,12 @@ async function main(): Promise<void> {
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 
   if (values.record && cliRecorder && rpcRecorder) {
-    const dir = path.resolve(values.record);
-    // CLI と RPC の録画は一緒に再生するので、仮名の表を共有する。
+    // CLI と RPC の録画は一緒に再生するので、仮名の表を共有し、両方を検査してからまとめて書く。
     const shared = new Pseudonymizer();
-    await writeRecording(path.join(dir, 'live-cli.json'), cliRecorder.recording({}, shared));
-    await writeRecording(path.join(dir, 'live-rpc.json'), rpcRecorder.recording({}, shared));
+    await writeRecordingSet(path.resolve(values.record), {
+      'live-cli.json': cliRecorder.recording({}, shared),
+      'live-rpc.json': rpcRecorder.recording({}, shared),
+    });
     process.stderr.write(`recordings written to ${values.record}\n`);
   }
 }

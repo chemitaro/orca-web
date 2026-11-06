@@ -13,7 +13,13 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 
 export function createAppServer(): Server {
   return createServer((req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
+    let url: URL;
+    try {
+      url = new URL(req.url ?? '/', 'http://localhost');
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'bad_request' });
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(res, 200, { ok: true });
       return;

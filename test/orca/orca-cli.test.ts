@@ -107,3 +107,8 @@ test('document は --json の封筒のない JSON（agent-context）をそのま
   assert.equal((await ro.document(['agent-context'])).ok, true);
   await assert.rejects(ro.document(['terminal', 'send']), /not a read-only command/);
 });
+
+test('出力の超過は output-too-large で返す', async () => {
+  const outcome = await new OrcaCli(runnerReturning({ exitCode: null, outputOverflow: true })).json(['status']);
+  assert.equal(!outcome.ok && outcome.kind, 'output-too-large');
+});

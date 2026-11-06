@@ -30,3 +30,22 @@ test('知らないパスは 404 を返す', async () => {
     await res.arrayBuffer();
   });
 });
+
+test('URL として不正な request-target は 400 を返し、サーバーは落ちない', async () => {
+  const { request } = await import('node:http');
+  await withServer(async (base) => {
+    const { port } = new URL(base);
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request({ host: '127.0.0.1', port, method: 'GET', path: '//[' }, (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    assert.equal(status, 400);
+    const res = await fetch(`${base}/api/health`);
+    assert.equal(res.status, 200);
+    await res.arrayBuffer();
+  });
+});

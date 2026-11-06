@@ -89,3 +89,13 @@ test('ReplayRpcTransport は params が録画と違えば誤りにする', async
   });
   await assert.rejects(rpc.call('session.tabs.list', { worktree: 'b' }), /no recorded exchange/);
 });
+
+test('ReplayCliRunner は出力の超過も再生する', async () => {
+  const runner = new ReplayCliRunner({
+    version: 1,
+    kind: 'cli',
+    entries: [{ argv: ['status', '--json'], exitCode: null, stdout: '', stderr: '', delayMs: 0, outputOverflow: true }],
+  });
+  const outcome = await new OrcaCli(runner).json(['status']);
+  assert.equal(!outcome.ok && outcome.kind, 'output-too-large');
+});

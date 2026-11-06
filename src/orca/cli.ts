@@ -16,6 +16,8 @@ export interface CliResult {
   timedOut: boolean;
   /** 起動できなかったときの理由（例 `ENOENT`）。 */
   spawnError?: string;
+  /** stdout か stderr が上限を超えて止めたとき true。 */
+  outputOverflow?: boolean;
 }
 
 /** CLI の境界。実物は NodeCliRunner、テストでは録画の再生に差し替える。argv は実行ファイルを含まない。 */
@@ -115,7 +117,7 @@ export class NodeCliRunner implements CliRunner {
           timedOut,
         };
         if (spawnError !== undefined) result.spawnError = spawnError;
-        else if (overflow) result.spawnError = 'output exceeded the limit';
+        if (overflow) result.outputOverflow = true;
         resolve(result);
       };
       const timer = setTimeout(() => {

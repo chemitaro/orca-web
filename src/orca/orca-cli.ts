@@ -1,7 +1,13 @@
 // Orca の CLI の `--json` の応答を、型の結果に解く。
 import type { CliResult, CliRunner } from './cli.ts';
 
-export type CliFailureKind = 'orca-error' | 'exit-nonzero' | 'timeout' | 'invalid-json' | 'spawn-failed';
+export type CliFailureKind =
+  | 'orca-error'
+  | 'exit-nonzero'
+  | 'timeout'
+  | 'invalid-json'
+  | 'spawn-failed'
+  | 'output-too-large';
 
 export type CliOutcome<T = unknown> =
   | { ok: true; result: T; durationMs: number }
@@ -21,6 +27,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function processFailure(r: CliResult): CliOutcome<never> | null {
   if (r.timedOut) return { ok: false, kind: 'timeout', message: `timed out after ${r.durationMs}ms` };
   if (r.spawnError !== undefined) return { ok: false, kind: 'spawn-failed', message: clip(r.spawnError) };
+  if (r.outputOverflow) return { ok: false, kind: 'output-too-large', message: 'output exceeded the limit' };
   return null;
 }
 

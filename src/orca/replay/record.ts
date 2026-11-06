@@ -1,5 +1,6 @@
 // 録画の包み。実物の CLI と RPC の境界を包んで起きたことを記録し、仮名化と検査を通した録画だけを書き出す。
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import type { CliResult, CliRunner, CliRunOptions } from '../cli.ts';
 import type { RpcCallOptions, RpcOutcome, RpcTransport } from '../rpc.ts';
 import type { CliEntry, CliRecording, Recording, RpcExchangeRecord, RpcRecording } from './recording.ts';
@@ -31,6 +32,7 @@ export class RecordingCliRunner implements CliRunner {
     };
     if (result.timedOut) entry.timedOut = true;
     if (result.spawnError !== undefined) entry.spawnError = result.spawnError;
+    if (result.outputOverflow) entry.outputOverflow = true;
     this.#entries.push(entry);
     return result;
   }
@@ -84,4 +86,22 @@ export class RecordingRpcTransport implements RpcTransport {
 export async function writeRecording(file: string, recording: Recording, options: SafetyOptions = {}): Promise<void> {
   assertRecordingSafe(recording, options);
   await writeFile(file, `${JSON.stringify(recording, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+}
+
+/**
+ * 一緒に再生する録画の組を書き出す。全部を検査してから出力先を作って書くので、1つでも通らなければ何も書かない。
+ * files のキーはファイルの名前（区切りを含まない）。
+ */
+export async function writeRecordingSet(
+  dir: string,
+  files: Record<string, Recording>,
+  options: SafetyOptions = {},
+): Promise<void> {
+  const entries = Object.entries(files);
+  for (const [name, recording] of entries) {
+    if (name !== path.basename(name)) throw new Error(`recording file name must not contain a path: ${name}`);
+    assertRecordingSafe(recording, options);
+  }
+  await mkdir(dir, { recursive: true });
+  for (const [name, recording] of entries) await writeRecording(path.join(dir, name), recording, options);
 }

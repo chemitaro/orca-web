@@ -71,3 +71,11 @@ test('起動できない実行ファイルは spawnError で返す', async () =>
   assert.equal(result.exitCode, null);
   assert.match(result.spawnError ?? '', /ENOENT/);
 });
+
+test('出力が上限を超えたら止め、起動の失敗とは別の outputOverflow で返す', async () => {
+  const runner = new NodeCliRunner({ executable: FAKE, maxOutputBytes: 16 });
+  const result = await runner.run(['stdout', 'x'.repeat(64)]);
+  assert.equal(result.outputOverflow, true);
+  assert.equal(result.spawnError, undefined);
+  assert.equal(result.exitCode, null);
+});
