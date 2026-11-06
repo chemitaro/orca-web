@@ -51,7 +51,14 @@ Host の確かめ（`app.ts` の selfHosts）は、DNS の付け替えへの守�
 
 ## Verification
 
-（コードのレビューと最終品質ゲートの後に書く）
+- 仕様のレビュー（spec-review、spec-reviewer opus / medium、CUE は sha256 で固定）：round 1 は pass（P0・P1 0、P2 3・P3 1）。P2・P3 を小さく直して round 2 も pass（P0・P1 0、P2 1・P3 2）。残りの文の食い違いも合わせた（最終の sha256：requirement 3d78217a…、design 84c09a50…）。
+- コードのレビュー（code-review、code-reviewer sonnet / high、standards と spec の2人、範囲 2e5fc64..c860e2b）：どちらも pass。standards は指摘 0。spec は P3 2（画面が終わった Task と担当を黙って隠す、最初の読みの途中の /api/state が空を返す）。2件とも 206bbfb で直した（テストつき）。
+- 最終品質ゲート（final-quality-gate、quality-gate-reviewer opus / high、1人、ChatGPT なし）：campaign `iss-00006-fqg-1`、試み1で **合格**。合格したコミットは `206bbfb37e8593e09f5a5c739cb26ecf5ce7d8f0`。
+  - レビューのレーン：status pass、coverage complete（functional-correctness、requirements-closure、test-adequacy）、P0 0・P1 0・P2 1・P3 2。
+  - テストのレーン（同じコミット）：`npm run lint` exit 0、`npm test` exit 0（105件すべて成功）、`npm run build` exit 0。
+  - P2・P3（情報のみ）：FQG-001 CLI の stdout が JSON でないとき、Orca の生の stdout が取得元の誤りの文として応答と画面に出うる。FQG-002 録画の検査の JSON の配列の規則が、短い語の並びを安全と判定する。FQG-003 `/api/state` が `noteViewer` を呼ぶ配線のテストがない。
+- 実機：上の「実機の確かめ」。
+- CI（GitHub Actions）：PR で確かめる（結果は PR に残る）。
 
 ## Residual Risks / Follow-ups
 
@@ -60,3 +67,4 @@ Host の確かめ（`app.ts` の selfHosts）は、DNS の付け替えへの守�
 - Host の確かめは 127.0.0.1 と localhost だけ。Tailscale のアドレスで待ち受けるとき（iss-00008）は `extraHosts` に足す。
 - 最後に読めた状態はメモリーだけに持つ。サーバーの再起動の後は、最初の取得まで空。
 - Task の時刻の `YYYY-MM-DD HH:MM:SS` を UTC とみなしている。
+- 最終品質ゲートの P2・P3（FQG-001〜003）は後の Issue で直す候補。特に FQG-001 は、誤りの文に Orca の生の出力を載せないようにする（iss-00007 か後の Issue）。
