@@ -13,7 +13,7 @@ steps: {
 	"S-06": {title: "状態の画面（web/view.js、web/main.js、web/style.css、web/index.html）を作る", realizes: ["R-03", "F-01"], status: "done", after: ["S-05"], session: "impl"}
 	"S-07": {title: "AGENTS.md を今の形に合わせる（FQG-003）", realizes: ["R-01"], status: "done", after: ["S-05"], session: "impl"}
 	"S-08": {title: "この Mac の Orca で、サーバーを起動して /api/state と CORS とブラウザーの画面を確かめ、report.md に件数で書く", realizes: ["R-01", "R-02", "R-03", "R-04"], status: "done", after: ["S-06", "S-07"], session: "impl"}
-	"S-09": {title: "コードのレビューと最終品質ゲートを通し、PR を作って CI の通過を確かめる", realizes: ["R-01"], status: "doing", after: ["S-08"], session: "impl"}
+	"S-09": {title: "コードのレビューと最終品質ゲートを通し、PR を作って CI の通過を確かめる", realizes: ["R-01"], status: "done", after: ["S-08"], session: "impl"}
 }
 
 tests: {

@@ -58,7 +58,7 @@ Host の確かめ（`app.ts` の selfHosts）は、DNS の付け替えへの守�
   - テストのレーン（同じコミット）：`npm run lint` exit 0、`npm test` exit 0（105件すべて成功）、`npm run build` exit 0。
   - P2・P3（情報のみ）：FQG-001 CLI の stdout が JSON でないとき、Orca の生の stdout が取得元の誤りの文として応答と画面に出うる。FQG-002 録画の検査の JSON の配列の規則が、短い語の並びを安全と判定する。FQG-003 `/api/state` が `noteViewer` を呼ぶ配線のテストがない。
 - 実機：上の「実機の確かめ」。
-- CI（GitHub Actions）：PR で確かめる（結果は PR に残る）。
+- PR：https://github.com/chemitaro/orca-web/pull/11（head 206bbfb）。CI（GitHub Actions の CI、run 42202184714）は success、GitHub のマージの状態は CLEAN（2026-11-06T10:23Z に確かめた）。
 
 ## Residual Risks / Follow-ups
 
