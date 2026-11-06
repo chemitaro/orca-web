@@ -42,7 +42,7 @@ design: {
 			- `parseServiceArgs(argv)`：命令（install、uninstall、restart、status）と引数（`--port`、`--tailscale-ip`、`--read-origins`、`--orca-bin`、`--settings-file`、`--dry-run`）を読む。知らない引数は誤り。
 			- `parseTailscaleIpv4(stdout)`：`tailscale ip -4` の行のうち 100.64.0.0/10 の最初の IPv4。なければ null。
 			- `buildServiceEnv(options, tailscaleIp)`：plist の環境変数を作り、`loadConfig` に通して確かめる（誤りは `ConfigError`）。`--read-origins` と `--settings-file` は指定したときだけ書く（なければサーバーの既定）。
-			- `renderPlist(definition)`：決めたキー（`Label`、`ProgramArguments`、`WorkingDirectory`、`EnvironmentVariables`、`RunAtLoad`、`KeepAlive`、`ThrottleInterval`、`ProcessType` Background、`StandardOutPath`、`StandardErrorPath`）だけの XML。文字列は `& < > " '` を逃がす。キーは決めた順。
+			- `renderPlist(definition)`：決めたキー（`Label`、`ProgramArguments`、`WorkingDirectory`、`EnvironmentVariables`、`RunAtLoad`、`KeepAlive`、`ThrottleInterval`、`StandardOutPath`、`StandardErrorPath`）だけの XML。`ProcessType` は書かない（Background にすると、開くボタンへの応答が遅れうる。SpecDock のダッシュボードも書かない）。文字列は `& < > " '` を逃がす。キーは決めた順。
 			"""
 		satisfies: ["R-01", "R-02", "R-03"]
 	}
@@ -114,7 +114,7 @@ design: {
 	}
 }
 
-compatibility: "`/api/health` に `listeners` を足すだけで、`ok` は変えない。CLI の誤りの文が短くなるが、誤りの種類（`kind`）は変えない。既存の環境変数と既定値は変えない。"
+compatibility: "`/api/health` に `pid` と `listeners` を足すだけで、`ok` は変えない。CLI の誤りの文が短くなるが、誤りの種類（`kind`）は変えない。既存の環境変数と既定値は変えない。"
 
 risks: [
 	"Tailscale のアドレスが変わると、定義の IP が古くなる。待ち受けは試し直しを続け、ログに出るので、入れ直す（README に書く）",
