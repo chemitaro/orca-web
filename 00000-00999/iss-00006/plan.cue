@@ -27,7 +27,7 @@ tests: {
 	"T-08": {title: "Orca が動いていない（status が届かない）と connection が unreachable になり、前に読めた値が残って stale が真になり、/api/state は 200 を返す。一度も読めていなければ空の一覧と source-failed", verifies: ["F-01"]}
 	"T-09": {title: "1つの取得元だけ失敗（時間切れ、形の違い）すると、その取得元だけが前の値と誤りで返り、ほかは新しい値になる。readTabs が使えないと tabs を読まず、ps のエージェントで返り、タブの項目は source-unavailable", verifies: ["F-02"]}
 	"T-10": {title: "GET /api/fields が項目の一覧と選択を返し、PUT /api/settings/fields で保存した選択が、作り直した SettingsStore と サーバーで残る。知らない識別子、重複、JSON でない本文、大きすぎる本文は 400 で、ファイルは変わらない", verifies: ["R-03"]}
-	"T-11": {title: "PUT は、Origin がない、別のオリジン、許していない Host、Content-Type が JSON でないとき 403 か 415 で拒まれ、SpecDock のオリジンでも拒まれる", verifies: ["R-03"]}
+	"T-11": {title: "PUT は、Origin がない、別のオリジン、Content-Type が JSON でないとき 403 か 415、許していない Host は 421 で拒まれ、SpecDock のオリジンでも拒まれる", verifies: ["R-03"]}
 	"T-12": {title: "設定のファイルが壊れている、形が違うと既定の選択と理由を返し、書けない場所では PUT が 500 と理由を返し、メモリーの選択も変わらず、サーバーは落ちない", verifies: ["F-03"]}
 	"T-13": {title: "許したオリジンの GET と OPTIONS に Access-Control-Allow-Origin と Vary: Origin が付き、ポートやスキームだけ違うオリジンは 403。ORCA_WEB_READ_ORIGINS で許すオリジンを変えられ、不正なオリジンの設定は起動の誤り。selfHosts にない Host の /api/ の要求は 421", verifies: ["R-04"]}
 	"T-14": {title: "buildView が、選んだ列だけの見出しと行を作り、欠けた値を「—」と理由、モデルを「値（意味）」で出す", verifies: ["R-03"]}

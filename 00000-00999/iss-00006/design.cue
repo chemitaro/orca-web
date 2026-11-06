@@ -62,6 +62,7 @@ design: {
 			  `startOptions.launch.effective`（`launch-resolved`）と `requested`（`launch-requested`）。どれもなければ null で、理由は、担当で `worker-show` を読んでいなければ
 			  `not-fetched`、読めていなければ `source-failed`。担当でなければ、端末のタブのモデルは `not-provided`（Orca が報告しない）、推論は Claude Code なら `not-provided`、ほかの種類なら `no-source`。
 			  構造化 Chat のタブと、タブのない行（`untabbed`）は、モデルも推論も `no-source`（この Issue では `agentSession.options` を読まない）。
+			  ただし `tabs` が一度も読めていない（機能の欠けや失敗）ときの `untabbed` は、モデル、推論、端末を `tabs` の理由（`source-unavailable` か `source-failed`）で返す。
 			- エージェントの作り方：
 			  1. `tabs` の terminal のタブのうち、`agentStatus` か `launchAgent` を持つもの（`kind: "terminal-tab"`、`id` は paneKey `<parentTabId>:<leafId>`）。
 			  2. `tabs` の `agent-session` のタブ（`kind: "chat-tab"`、`id` は `chat:<tab.id>`）。
@@ -77,8 +78,8 @@ design: {
 			- worktree：`worktrees` を基にし、`worktreePs` を `worktreeId` で重ねる（片方にしかない worktree も返す）。ブランチは `refs/heads/` を外す。
 			  パス、ブランチ、表示名、main か、アーカイブか、親（`parentWorktreeId`）、子（`childWorktreeIds`）、最後に動いた時刻（`lastActivityAt`）は `worktrees` を先に、なければ `worktreePs`。
 			  状態は ps の `status`（`working`、`active`、`inactive` など）、最後の出力の時刻は ps の `lastOutputAt`。
-			- Run：`id` と、題名は `objective`（200字で切る）。
 			  PR は `linkedPR` の番号、状態、題名、URL。CI は `linkedPR.checksStatus` と `checksSummary` の件数。PR がなければ両方 `not-provided`。
+			- Run：`id` と、題名は `objective`（200字で切る）。
 			- 担当：`workers` の `dispatchId`、`taskId`、`runId`、`workerState`、`dispatchStatus`、`projection.liveness.verdict`、`agentTerminalHandle`、`projection.workspace.id`。
 			- Task：`task_title`（なければ `display_name`）、`status`、`parent_id`、`deps`（JSON の配列の文字列を解く。解けなければ `invalid-value`）、`created_at` と `completed_at`。
 			- 時刻：数（ミリ秒）と、Orca の `YYYY-MM-DD HH:MM:SS`（SQLite の UTC）を ISO 8601 の UTC にそろえる。
@@ -122,7 +123,7 @@ design: {
 			- `GET /api/fields` は `{ fields: [...], selected: [...], settings: { source: "file"|"default", error } }`。
 			- `PUT /api/settings/fields` は `{ selected: string[] }` を受け、知らない識別子、重複、配列でない値、64KB を超える本文は 400。保存に失敗したら 500 で理由を返し、メモリーの選択も変えない。
 			- 書き込みの小さな守り（iss-00007 が一般の守りを作るまでの形）：`Content-Type` が `application/json`、`Host` がサーバー自身の Host の一覧（既定は `127.0.0.1:<port>` と `localhost:<port>`）と完全に一致し、
-			  `Origin` があって `http://<Host>` と完全に一致するときだけ受ける。違えば 403。SpecDock のオリジンにも書き込みは許さない（CORS は GET だけ）。
+			  `Origin` があって `http://<Host>` と完全に一致するときだけ受ける。Host が違えば D-05 の Host の確かめで 421、ほかが違えば 403（Content-Type は 415）。SpecDock のオリジンにも書き込みは許さない（CORS は GET だけ）。
 			"""
 		satisfies: ["R-03", "F-03"]
 	}
