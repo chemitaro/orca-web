@@ -51,7 +51,7 @@ test('parseServiceArgs は命令と引数を読み、知らない命令と引数
 });
 
 test('parseTailscaleIpv4 は 100.64.0.0/10 の最初の IPv4 を返し、なければ null', () => {
-  assert.equal(parseTailscaleIpv4('100.85.74.8\n'), '100.85.74.8');
+  assert.equal(parseTailscaleIpv4('100.101.102.103\n'), '100.101.102.103');
   assert.equal(parseTailscaleIpv4('fd7a:115c::1\n100.64.0.1\n100.127.255.254\n'), '100.64.0.1');
   for (const none of ['', '192.168.1.2\n', '100.128.0.1\n', '100.63.255.255\n', 'Tailscale is stopped.\n']) {
     assert.equal(parseTailscaleIpv4(none), null, none);
