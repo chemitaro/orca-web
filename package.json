@@ -1,0 +1,25 @@
+{
+  "name": "orca-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Orca の状態を読み、操作するための小さな Web サービス",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "lint": "biome check . && tsc -p tsconfig.json",
+    "format": "biome check --write .",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node src/server/main.ts",
+    "probe:live": "node src/tools/probe-live.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@biomejs/biome": "2.6.2",
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}
