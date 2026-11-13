@@ -17,6 +17,7 @@ ID: "iss-00018"
 - 仕様の変更と再レビュー：合格（round-4、2026-11-13）。S-04 の後に、根の統括の端末の決め方を変えた（`coordinator_handle` が閉じた端末なら、親のない task の作り手のうち今ある端末の最も新しいもの）。新しい S-05（impl-fix）を足し、旧 S-05 を S-06 にした。round-3 は P0/P1 0（P2 1・P3 1 を直した）、round-4 は P0〜P3 0。
   - 合格した文書の sha256：requirement.cue `3948ce5f787b2a9c26c7c57833e1ebb7d42f8d78b4980124e5615cc581db180c`、design.cue `4b6ee1970ac9b5f9a09339921f33d6d6421dfb8a05236ac71ab11eb607184112`、plan.cue `6aca11dce79839c6f4915650e7ddce53cfb8441f9328a3fd8e40b16b13f9ed28`
   - 結果：`.workbench/spec-review/iss-00018/round-4.json`。照合のコミット `bf0d4dc6689da93586327dfa41692c6c2a2bf123`
+- 最終品質ゲート：合格（fqg-iss-00018-1、attempt 1、2026-11-13）。合格のコミット `a207ee9c29ce81f1975f93e65ee809f2a57dac6f`、範囲 `1cab655..a207ee9`。quality-gate-reviewer（Opus 5.5 / medium）は P0/P1/P2 0、P3 1（一覧の画面で、読みの途中にプロジェクトを選び直すと、ポーリングの輪が重複する。直さずに記録）。テスト `npm run lint`・`npm test`（360 pass）・`npm run build` すべて exit 0。closure：`.workbench/final-quality-gate/fqg-iss-00018-1/closure.md`
 
 詳細: [Report Guide](../../../docs/authoring/report.md)
 
@@ -44,6 +45,8 @@ ID: "iss-00018"
   - 画面（ヘッドレス Chrome）：受け箱、一覧、木、プロジェクトの4画面で、1280px と 390px のどちらも横にはみ出さない（scrollWidth が clientWidth と等しい。390px は4画面とも 390）。390px では「Orca で開く」が 0 個。木の札は「orca-web」が 5 つ、根の行に添え書きが出る。プロジェクトの画面に「spec-dock の統括から」が出る。
 
 ## Residual Risks / Follow-ups
+
+- 最終品質ゲートの P3：一覧の画面で、読みの途中にプロジェクトを選び直すと、ポーリングの輪が重複する。
 
 - 終わった worker のモデルと推論は「—」になる（共有のポーリングは、生きている worker の起動時の値だけを読む）。
 - 長く続く Run は節が多い（実機で 94）。畳む・絞る表示は今後の改善。
