@@ -227,3 +227,36 @@ test('受け箱用の lastAssistantMessage と updatedAt は状態の文書に�
   assert.ok(!text.includes('仮の受け箱専用'));
   assert.ok(!text.includes('updatedAt'));
 });
+
+test('統括の worktree は terminals を優先し、なければ agents に結び、欠けた理由を保つ', async () => {
+  const make = async (handle: string | null, terminals: 'original' | 'empty' | 'failed' | 'different') => {
+    const counting = new CountingReader(await staticReader());
+    counting.overrides.runs = async () => ({
+      ok: true,
+      truncated: false,
+      data: [{ id: 'r1', objective: null, updatedAt: null, coordinatorHandle: handle }],
+    });
+    if (terminals === 'different')
+      counting.overrides.terminals = async () => ({
+        ok: true,
+        data: [{ handle: 'term_uuid-12', worktreeId: 'different-wt', connected: true, lastOutputAt: null }],
+        truncated: false,
+      });
+    if (terminals === 'empty') counting.overrides.terminals = async () => ({ ok: true, data: [], truncated: false });
+    if (terminals === 'failed')
+      counting.overrides.terminals = async () => ({ ok: false, error: { kind: 'exception', message: '仮の失敗' } });
+    return (await poller(counting).snapshot()).runs[0];
+  };
+  assert.deepEqual((await make('term_uuid-12', 'original'))?.coordinatorWorktreeId, {
+    value: WT1,
+    source: 'terminals',
+    field: 'worktreeId',
+    missing: null,
+  });
+  assert.equal((await make('term_uuid-12', 'different'))?.coordinatorWorktreeId.value, 'different-wt');
+  assert.equal((await make('term_uuid-12', 'failed'))?.coordinatorWorktreeId.value, WT1);
+  assert.equal((await make('term_uuid-12', 'empty'))?.coordinatorWorktreeId.value, WT1);
+  assert.equal((await make('unknown', 'empty'))?.coordinatorWorktreeId.missing, 'not-linked');
+  assert.equal((await make(null, 'original'))?.coordinatorWorktreeId.missing, 'not-provided');
+  assert.equal((await make('unknown', 'failed'))?.coordinatorWorktreeId.missing, 'source-failed');
+});

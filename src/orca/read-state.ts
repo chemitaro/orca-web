@@ -146,12 +146,14 @@ export interface OrcaTabSnapshot {
 }
 
 export interface OrcaRun {
+  coordinatorHandle: string | null;
   updatedAt: string | null;
   id: string;
   objective: string | null;
 }
 
 export interface OrcaTask {
+  createdByTerminalHandle: string | null;
   id: string;
   runId: string | null;
   parentId: string | null;
@@ -360,6 +362,7 @@ function pickTask(r: Rec): OrcaTask | null {
     id,
     runId: str(r.run_id),
     parentId: str(r.parent_id),
+    createdByTerminalHandle: str(r.created_by_terminal_handle),
     title: str(r.task_title),
     displayName: str(r.display_name),
     status: str(r.status),
@@ -464,11 +467,18 @@ export function createStateReader(cli: ReadOnlyOrcaCli, rpc: RpcTransport): Stat
     },
     runs: () =>
       paged(
-        ['orchestration', 'run-list', '--limit', PAGE_LIMIT],
+        ['orchestration', 'run-list', '--full', '--limit', PAGE_LIMIT],
         'runs',
         (r) => {
           const id = str(r.id);
-          return id ? { id, objective: str(r.objective), updatedAt: str(r.updated_at) } : null;
+          return id
+            ? {
+                id,
+                objective: str(r.objective),
+                updatedAt: str(r.updated_at),
+                coordinatorHandle: str(r.coordinator_handle),
+              }
+            : null;
         },
         (result) => str(result.nextCursor),
       ),

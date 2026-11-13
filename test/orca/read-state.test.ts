@@ -103,6 +103,7 @@ test('read-state は取得元ごとの記録を返し、本文や transcript の
     id: 'task_hex-5',
     runId: 'run_hex-3',
     parentId: 'task_hex-2',
+    createdByTerminalHandle: null,
     title: null,
     displayName: 'text-18',
     status: 'completed',
@@ -142,8 +143,11 @@ test('同じカーソルが2度出たら止めて truncated にする', async ()
     version: 1,
     kind: 'cli',
     entries: [
-      okEntry(['orchestration', 'run-list', '--limit', '100'], { runs: [{ id: 'run_hex-1' }], nextCursor: 'c-1' }),
-      okEntry(['orchestration', 'run-list', '--limit', '100', '--cursor', 'c-1'], {
+      okEntry(['orchestration', 'run-list', '--full', '--limit', '100'], {
+        runs: [{ id: 'run_hex-1' }],
+        nextCursor: 'c-1',
+      }),
+      okEntry(['orchestration', 'run-list', '--full', '--limit', '100', '--cursor', 'c-1'], {
         runs: [{ id: 'run_hex-2' }],
         nextCursor: 'c-1',
       }),
@@ -233,7 +237,7 @@ test('受け箱専用に lastAssistantMessage は500文字、Run は updated_at 
     version: 1,
     kind: 'cli',
     entries: [
-      okEntry(['orchestration', 'run-list', '--limit', '100'], {
+      okEntry(['orchestration', 'run-list', '--full', '--limit', '100'], {
         runs: [{ id: 'r1', updated_at: '2026-11-13' }, { id: 'r2' }],
       }),
     ],
@@ -258,4 +262,31 @@ test('受け箱専用に lastAssistantMessage は500文字、Run は updated_at 
   assert.equal(tabs.ok && tabs.data[0]?.tabs[0]?.agentStatus?.lastAssistantMessage, '仮'.repeat(500));
   const runs = await r.runs();
   assert.deepEqual(runs.ok && runs.data.map((run) => run.updatedAt), ['2026-11-13', null]);
+});
+
+test('Run の full 応答から統括、task から作成端末を拾い、ない値は null にする', async () => {
+  const { reader: r } = reader({
+    version: 1,
+    kind: 'cli',
+    entries: [
+      okEntry(['orchestration', 'run-list', '--full', '--limit', '100'], {
+        runs: [{ id: 'r1', coordinator_handle: 'term-a' }, { id: 'r2' }],
+      }),
+      okEntry(['orchestration', 'task-list', '--run', 'r1', '--full'], {
+        tasks: [{ id: 't1', created_by_terminal_handle: 'term-b' }, { id: 't2' }],
+      }),
+    ],
+  });
+  const runs = await r.runs();
+  assert.ok(runs.ok);
+  assert.deepEqual(
+    runs.data.map((run) => run.coordinatorHandle),
+    ['term-a', null],
+  );
+  const tasks = await r.tasks('r1');
+  assert.ok(tasks.ok);
+  assert.deepEqual(
+    tasks.data.map((task) => task.createdByTerminalHandle),
+    ['term-b', null],
+  );
 });

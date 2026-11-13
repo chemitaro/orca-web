@@ -480,8 +480,18 @@ export function normalizeState(input: NormalizeInput): StateDocument {
   );
 
   // オーケストレーション
+  const coordinatorWorktree = (handle: string | null): Fact<string> => {
+    if (handle === null) return missingFact('terminals', 'worktreeId', 'not-provided');
+    const terminal = terminalsByHandle.get(handle);
+    if (terminal?.worktreeId != null) return first([[terminal.worktreeId, 'terminals', 'worktreeId']]);
+    const agent = agents.find((a) => a.terminalHandle === handle);
+    if (agent) return first([[agent.worktreeId, 'tabs', 'worktree']]);
+    return missingFact('terminals', 'worktreeId', sources.terminals.data === null ? 'source-failed' : 'not-linked');
+  };
   const runs: RunState[] = (sources.runs.data ?? []).map((r) => ({
     id: r.id,
+    coordinatorHandle: r.coordinatorHandle,
+    coordinatorWorktreeId: coordinatorWorktree(r.coordinatorHandle),
     title: first([[clipTitle(r.objective), 'runs', 'objective']]),
   }));
 
@@ -503,6 +513,7 @@ export function normalizeState(input: NormalizeInput): StateDocument {
     return {
       id: t.id,
       runId: t.runId,
+      createdByTerminalHandle: t.createdByTerminalHandle,
       parentId: first([[t.parentId, 'tasks', 'parent_id']]),
       deps,
       title: first([

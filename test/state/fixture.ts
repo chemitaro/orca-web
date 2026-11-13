@@ -307,7 +307,10 @@ export const tabsAll = {
   ],
 };
 
-export const runPage1 = { runs: [{ id: 'run_hex-3', objective: 'text-8' }], nextCursor: 'cursor-1' };
+export const runPage1 = {
+  runs: [{ id: 'run_hex-3', objective: 'text-8', coordinator_handle: 'term_uuid-12' }],
+  nextCursor: 'cursor-1',
+};
 export const runPage2 = { runs: [{ id: 'run_hex-4', objective: 'text-9' }] };
 
 export const tasksRun3 = {
@@ -315,6 +318,7 @@ export const tasksRun3 = {
   tasks: [
     {
       id: 'task_hex-2',
+      created_by_terminal_handle: 'term_uuid-12',
       run_id: 'run_hex-3',
       parent_id: null,
       task_title: 'text-5',
@@ -445,8 +449,8 @@ export function cliRecording(): CliRecording {
       entry(['worktree', 'list', '--limit', '10000'], worktreeList),
       entry(['worktree', 'ps', '--limit', '10000'], worktreePs),
       entry(['terminal', 'list', '--limit', '10000'], terminalList),
-      entry(['orchestration', 'run-list', '--limit', '100'], runPage1),
-      entry(['orchestration', 'run-list', '--limit', '100', '--cursor', 'cursor-1'], runPage2),
+      entry(['orchestration', 'run-list', '--full', '--limit', '100'], runPage1),
+      entry(['orchestration', 'run-list', '--full', '--limit', '100', '--cursor', 'cursor-1'], runPage2),
       entry(['orchestration', 'task-list', '--run', 'run_hex-3', '--full'], tasksRun3),
       entry(['orchestration', 'task-list', '--run', 'run_hex-4', '--full'], tasksRun4),
       entry(['orchestration', 'worker-list', '--full', '--limit', '100'], workerPage1),
