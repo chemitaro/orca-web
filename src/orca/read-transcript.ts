@@ -136,7 +136,7 @@ export function parseNativePage(result: unknown): ReadResult {
   return { ok: true, page: { source: 'nativeChat', rows: result.messages, hasMore: before !== null, before } };
 }
 
-/** agentSession.history の結果を解く。reset でも page を持つので、その page を使う。 */
+/** agentSession.history の結果を解く。reset に添えられた末尾の page は使わない。 */
 export function parseJournalPage(result: unknown): ReadResult {
   if (!isRecord(result) || typeof result.ok !== 'boolean') return { ok: false, error: 'unknown_shape' };
   // reset（ok: false）は末尾のページを添えるが、古いページの代わりに返さない。
@@ -155,6 +155,8 @@ export function parseJournalPage(result: unknown): ReadResult {
 export function createTranscriptReader(deps: {
   rpc: RpcTransport;
   capabilities: () => Promise<CapabilityReport>;
+  /** 共有の状態の最新の文書に、タブのないエージェントとして載るか。 */
+  isUntabbedAgent?: (agentId: string) => boolean;
   now?: () => number;
 }): TranscriptReader {
   const now = deps.now ?? Date.now;
@@ -178,7 +180,11 @@ export function createTranscriptReader(deps: {
       if (!caps.features.readTranscript.available) return { ok: false, error: 'unsupported' };
       const tabs = await listAll();
       if (!tabs.ok) return tabs;
-      return resolveFromTabs(tabs.result, agentId);
+      const resolved = resolveFromTabs(tabs.result, agentId);
+      if (!resolved.ok && resolved.error === 'agent_not_found' && deps.isUntabbedAgent?.(agentId)) {
+        return { ok: false, error: 'no_session' };
+      }
+      return resolved;
     },
     async read(target, options) {
       if (target.source === 'nativeChat') {

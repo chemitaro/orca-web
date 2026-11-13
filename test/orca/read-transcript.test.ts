@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createTranscriptReader, type TranscriptTarget } from '../../src/orca/read-transcript.ts';
+import { createTranscriptReader, sessionKey, type TranscriptTarget } from '../../src/orca/read-transcript.ts';
 import { READ_METHODS, ReadOnlyRpc } from '../../src/orca/rpc.ts';
 import {
   CHAT_TAB,
@@ -21,6 +21,18 @@ import {
 function reader(rpc = fakeOrca(), caps = capabilities()) {
   return { rpc, reader: createTranscriptReader({ rpc: new ReadOnlyRpc(rpc), capabilities: async () => caps }) };
 }
+
+test('タブにない id が最新の状態の untabbed にあれば no_session、なくなれば agent_not_found', async () => {
+  let untabbed = true;
+  const r = createTranscriptReader({
+    rpc: new ReadOnlyRpc(fakeOrca()),
+    capabilities: async () => capabilities(),
+    isUntabbedAgent: (id: string) => untabbed && id === 'tab-9:leaf-9',
+  });
+  assert.deepEqual(await r.resolve('tab-9:leaf-9'), { ok: false, error: 'no_session' });
+  untabbed = false;
+  assert.deepEqual(await r.resolve('tab-9:leaf-9'), { ok: false, error: 'agent_not_found' });
+});
 
 async function target(r: ReturnType<typeof reader>['reader'], id: string): Promise<TranscriptTarget> {
   const resolved = await r.resolve(id);
@@ -167,4 +179,53 @@ test('一覧の読みは1秒の間は共有する', async () => {
   now += 1_000;
   await r.resolve(PANE_CLAUDE);
   assert.equal(rpc.calls.filter((c) => c.method === 'session.tabs.listAll').length, 2);
+});
+
+test('paneKey がない端末はタブ id と launchAgent で解き、種類かセッション id がなければ no_session', async () => {
+  const tab: Record<string, unknown> = {
+    type: 'terminal',
+    id: 'terminal-only',
+    launchAgent: 'codex',
+    agentStatus: { providerSession: { id: SESSION_CODEX } },
+  };
+  const resolve = () =>
+    reader(
+      new FakeRpc({
+        'session.tabs.listAll': () => ok({ snapshots: [{ tabs: [tab] }] }),
+      }),
+    ).reader.resolve('terminal-only');
+  const resolved = await resolve();
+  assert.ok(resolved.ok);
+  assert.equal(resolved.target.agentType, 'codex');
+  assert.equal(resolved.target.sessionId, SESSION_CODEX);
+  delete tab.launchAgent;
+  assert.deepEqual(await resolve(), { ok: false, error: 'no_session' });
+  tab.launchAgent = 'codex';
+  tab.agentStatus = { providerSession: {} };
+  assert.deepEqual(await resolve(), { ok: false, error: 'no_session' });
+});
+
+test('鍵は NUL 区切りの sha256 の先頭16桁で、id・取得元・種類・セッションすべてを区別する', () => {
+  assert.equal(sessionKey('a', 'nativeChat', 'claude', 's'), '6abf6c05d207c59b');
+  const key = sessionKey('a', 'nativeChat', 'claude', 's');
+  assert.notEqual(sessionKey('b', 'nativeChat', 'claude', 's'), key);
+  assert.notEqual(sessionKey('a', 'agentSession', 'claude', 's'), key);
+  assert.notEqual(sessionKey('a', 'nativeChat', 'codex', 's'), key);
+  assert.notEqual(sessionKey('a', 'nativeChat', 'claude', 't'), key);
+});
+
+test('構造化 Chat の誤りも code だけにし、接続断や形の誤りを空の成功にしない', async () => {
+  const cases: [unknown, string][] = [
+    [{ ok: false, kind: 'unavailable', message: 'private detail' }, 'unreachable'],
+    [{ ok: false, kind: 'disconnected', message: 'private detail' }, 'unreachable'],
+    [{ ok: false, kind: 'orca-error', code: 'method_not_found', message: 'private detail' }, 'unsupported'],
+    [{ ok: false, kind: 'orca-error', code: 'other', message: 'private detail' }, 'read_failed'],
+    [ok({ ok: true, page: { items: [], hasOlder: false } }), 'unknown_shape'],
+  ];
+  for (const [outcome, error] of cases) {
+    const rpc = fakeOrca();
+    rpc.handlers['agentSession.history'] = () => outcome as never;
+    const r = reader(rpc).reader;
+    assert.deepEqual(await r.read(await target(r, CHAT_TAB), { limit: 40 }), { ok: false, error });
+  }
 });
