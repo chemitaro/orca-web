@@ -46,7 +46,7 @@ design: {
 			- `checkText(text)`：文字列で、`trim()` が空でなく、UTF-8 で 16384 バイトまで、`\\t` と `\\n` のほかの C0 の制御文字（`\\r` を含む）と DEL を含まない。違えば理由つきで `invalid_text`。画面は送る前に CRLF と CR を LF にする。
 			- `digestText(text)`：本文の UTF-8 の sha256 の16進。
 			- `newOperationId(now, random)`：`<13桁のミリ秒>-<32桁の16進>`。
-			- `TicketStore`：`issue({ target, digest, operationId })` が 32 バイトの乱数の base64url の票と期限（発行から 60 秒）を返す。生きている票は 32 個までで、超えたら古いものから捨てる。`take(ticket)` は、あれば**同期の処理の中で消してから**中身を返し（2回目は `unknown`）、期限切れなら `expired` を返す。時計は差し替えられる。票の値を記録、ログ、inspect に出さない。
+			- `TicketStore`：`issue({ target, digest, operationId })` が 32 バイトの乱数の base64url の票と期限（発行から 60 秒）を返す。生きている票は 32 個までで、超えたら古いものから捨てる。`take(ticket)` は、あれば**同期の処理の中で消してから**中身を返し（2回目は `unknown`）、期限切れなら `expired` を返す。`cancelByOperation(operationId)` は、その操作の ID の票を（期限の内外を問わず）同期の処理の中で消し、消したかを返す。時計は差し替えられる。票の値を記録、ログ、inspect に出さない。
 			"""
 		satisfies: ["R-01", "R-02", "F-05"]
 	}
@@ -111,7 +111,7 @@ design: {
 			| `refused` | 守りを通った確定の要求を、送る前に拒んだもの。`reason`（`ticket_invalid`、`target_changed` と種類、`not_sendable` と reason、`send_disabled`、`busy`、`unsupported`、`unreachable`）と、分かれば `agentId`。本文と票は入れない。operationId は票の操作の ID（票を取り出せないときは、この行のために作る） |
 
 			- `appendBefore` は書いてから `datasync` し、終わってから送る。失敗したら投げる（D-06 が 503 にする）。`appendAfter`、`appendCheck`、`appendRefused` の失敗は投げずに偽を返し、`after` と `check` は `SendJournal` のメモリーにも持つ。
-			- `read(operationId)` は、ファイルを読み、その ID の行を集めて `SendRecord`（before、最後の after、check の並び、refused）にする。メモリーの分を重ねる。行がなければ null（D-06 が `not_found`：送っていない）。before があって after がなければ、outcome を unknown（`code: "no_after_record"`）とする。最後の check の outcome が unknown でなければ、それを今の outcome とする。refused だけなら outcome は refused（送っていない）。壊れた行は飛ばす。
+			- `read(operationId)` は、ファイルを読み、その ID の行を集めて `SendRecord`（before、最後の after、check の並び、refused）にする。メモリーの分を重ねる。行がなければ null（D-06 が処理中か、送っていないかを答える）。before があって after がなければ、outcome を unknown（`code: "no_after_record"`）とする。最後の check の outcome が unknown でなければ、それを今の outcome とする。refused だけなら outcome は refused（送っていない）。壊れた行は飛ばす。
 			- authToken、票、トークンは記録の型に入れない。
 			"""
 		satisfies: ["R-04", "R-05", "F-06"]
@@ -137,14 +137,14 @@ design: {
 			**`confirm({ ticket, text })`** の順。送る前に止めたものは `appendRefused` してから返す。
 			1. 同時に1つだけ。処理中なら `busy`（票は消費しない）。
 			2. `sendEnabled` が真でなければ `send_disabled`（票は消費しない）。
-			3. `TicketStore.take`。なければ・期限切れなら `ticket_invalid`（reason `unknown` か `expired`）。ここから先、票は使い済みで、記録は票の操作の ID で書く。
+			3. `TicketStore.take` と、取り出せたときの処理中の印（`inFlight` の集合に操作の ID を足す）を、同じ同期の処理の中で行う（間に await を入れない）。なければ・期限切れなら `ticket_invalid`（reason `unknown` か `expired`）。ここから先、票は使い済みで、記録は票の操作の ID で書く。処理中の印は、手順 8 の後か、送る前に止めて `appendRefused` を書いた後に（成功・失敗によらず `finally` で）外す。
 			4. `checkText(text)` と `digestText(text) === 票の digest`。違えば `target_changed`（種類 `text_changed`）。
 			5. `preflight` をやり直し、その宛先と票の宛先を `compareTargets`。違えば `target_changed`（種類つき）。preflight の誤りはそのまま返す。
 			6. `appendBefore`（票の操作の ID）。失敗したら `record_failed`（送らない）。
 			7. 経路の送る関数を1回だけ呼び（構造化 Chat は手順 5 で読んだ fence を使う）、`classifyTerminal`／`classifyChat` で分ける。
 			8. `appendAfter`。失敗したら応答に `recordWarning: "after_record_failed"` を付ける。`{ operationId, outcome, detail }` を返す。
 
-			**`check(operationId, { query })`**：記録を `read` する。なければ `not_found`（送っていない）。query が真で今の outcome が unknown で、before があるときだけ、経路の照会（`checkTerminal`、`checkChat`）を1回呼び、`appendCheck` して、記録を読み直して返す。Orca に届かなければ check を足さず、`checkError: "unreachable"` を付けて返す。送る関数は呼ばない。
+			**`check(operationId, { query })`**：記録を `read` する。記録がなければ、`inFlight` にその ID があれば `{ state: "in_progress" }`、なければ `TicketStore.cancelByOperation` を呼んでから `{ state: "not_sent" }`（この2つの判定と取り消しを同じ同期の処理の中で行う）。記録があれば `{ state: "recorded", record }`。query が真で今の outcome が unknown で、before があるときだけ、経路の照会（`checkTerminal`、`checkChat`）を1回呼び、`appendCheck` して、記録を読み直して返す。Orca に届かなければ check を足さず、`checkError: "unreachable"` を付けて返す。送る関数は呼ばない。
 
 			確定の手順 5 の読みから 7 の送信までの間に、記録の書き込みのほかの await を入れない。それでも残る隙は requirement の risks のとおり。
 			"""
@@ -176,10 +176,10 @@ design: {
 			| `/api/send/intent` | POST | Host、同じオリジンの JSON、トークン、物は 128 KiB まで、鍵は `agent`（512 字まで）と `text` だけ | 200 `{ ticket, expiresAt, operationId, preview, text, digest }` |
 			| `/api/send/confirm` | POST | 同上、鍵は `ticket` と `text` だけ | 200 `{ operationId, outcome, detail, recordWarning? }` |
 			| `/api/send/status?agent=` | GET | Host、同じオリジンの読み | 200 `{ enabled, available, route, reason }` |
-			| `/api/send/<操作の ID>`（`?check=1`） | GET | Host、同じオリジンの読み | 200 `SendRecord`（`checkError?`） |
+			| `/api/send/<操作の ID>`（`?check=1`） | GET | Host、同じオリジンの読み | 200 `{ operationId, state: "recorded", record, checkError? }`、`{ operationId, state: "in_progress" }`、`{ operationId, state: "not_sent" }` |
 
 			- 同じオリジンの読み：Origin がないか `http://<Host>`、`Sec-Fetch-Site` がないか `same-origin` か `none`。違えば 403 `forbidden_origin`。CORS を付けない。GET のほかは 405。
-			- 誤りの code と HTTP の状態：`invalid_request` 400、`invalid_text` 400、`send_disabled` 403、`agent_not_found` 404、`not_found` 404（送っていない）、`not_sendable` 409（`reason`）、`target_changed` 409（`reason`）、`ticket_invalid` 409（`reason`）、`busy` 409、`unsupported` 501（`missing`）、`unknown_shape` 502、`unreachable` 503、`record_failed` 503。送った後の結果は、refused と unknown を含めて 200。
+			- 誤りの code と HTTP の状態：`invalid_request` 400、`invalid_text` 400、`send_disabled` 403、`agent_not_found` 404、`not_sendable` 409（`reason`）、`target_changed` 409（`reason`）、`ticket_invalid` 409（`reason`）、`busy` 409、`unsupported` 501（`missing`）、`unknown_shape` 502、`unreachable` 503、`record_failed` 503。送った後の結果は、refused と unknown を含めて 200。
 			- 送信の口の守りで拒んだ要求（405、413、415、401、403 の Origin）は、送信の記録に書かない。道ごと・誤りの code ごとの件数をメモリーで数え、1分に1回まで件数だけをログに出す。421（Host）は道の振り分けの前なので数えない。
 			- 応答とログに本文を出すのは、意図の応答（画面に示すため）と記録の照会の応答だけ。サーバーのログ（`console`）には操作の ID と outcome だけを出す。
 			- `main.ts` が `SendService` を組み立てて `createAppHandler` に `send` として渡す。`wiring.ts` が `SendRpc` を作る。`config.ts` が `ORCA_WEB_SENDS_DIR` を読む（空なら既定）。
@@ -190,7 +190,7 @@ design: {
 		title: "送る欄と確認の画面（`web/embed/agent.html`、`agent-frame.js`、`send-view.js`、`send-dom.js`、`agent.css`）"
 		text: """
 			- 組み立ては純粋な関数の `send-view.js`：画面の状態 `{ phase: "disabled" | "compose" | "checking" | "confirm" | "sending" | "result", reason?, preview?, ticket?, operationId?, expiresAt?, text, result? }` と、出来事（status の応答、意図の応答、確定の応答、確定の失敗（ネットワークの誤りや時間切れ）、照会の応答、やめる、期限の経過）からの次の状態 `reduceSend(state, event)`。表示の言葉の組み立て `buildConfirm(preview, text)`、`buildResult(result)`（5つの outcome の言葉：受け付けた／入力を受けた／送信を確かめた／結果不明／拒んだ。warning の言葉：要確認（Orca がエージェントを確かめずに書いたかもしれない）、本文が入力欄に残っているかもしれない、送った後に権限の確認が出た）、誤りの code の言葉。
-			- 意図の応答の `operationId` を状態に持つ。確定の応答を受けられなかったとき（ネットワークの誤り、時間切れ、JSON でない応答）は、その ID で outcome unknown の結果として示し、「確かめる」を出す。照会が `not_found` なら「送っていません」と示し、書く欄に戻れるようにする。
+			- 意図の応答の `operationId` を状態に持つ。確定の応答を受けられなかったとき（ネットワークの誤り、時間切れ、JSON でない応答）は、その ID で outcome unknown の結果として示し、「確かめる」を出す。照会が `not_sent` なら「送っていません（後から届いても送りません）」と示し、本文を残して書く欄に戻れるようにする。`in_progress` なら「送っている途中です。少し待ってもう一度確かめてください」と示し、「確かめる」を残す（自動で繰り返さない）。
 			- `sending` と `checking` の間は、ボタンを押せなくし、出来事を1つだけ受ける（2回目の押しを捨てる）。自動で送り直さない（write.js の 401 の1回の取り直しは、守りが拒んで何も消費していないので残す）。
 			- 409（`target_changed`、`not_sendable`、`ticket_invalid`）と期限の経過は、理由を示して `compose` に戻り、本文を残す。
 			- `result` で outcome が unknown なら「確かめる」で `GET /api/send/<ID>?check=1` を呼ぶ。

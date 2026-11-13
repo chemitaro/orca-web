@@ -102,12 +102,13 @@ requirements: {
 		text: """
 			`GET /api/send/{操作の ID}` が、記録からその送信（宛先、時刻、本文、結果、確かめの経過）を返す。`?check=1` を付けると、結果が unknown の送信だけ、Orca に読むだけの照会をする（端末は `orchestration.requestShow`、構造化 Chat は `agentSession.sendRecorded`）。
 			照会の結果を記録に追記し、分かったことを返す。照会でも分からなければ unknown のまま、「Orca の画面で確かめてから、必要なら改めて送る」と示す。この口は送る RPC を決して送らない。
-			その ID の記録がない（`not_found`）ことは、送っていないことを意味する（送る前の記録を書いてから送るため）。
+			記録がない ID の照会は、2つに分けて答える。その ID の確定が処理の途中なら `in_progress`（少し待ってもう一度照会する）。そうでなければ、その ID のまだ使われていない票を取り消してから `not_sent`（送っていない。後から確定が届いても送らない）。送る前の記録を書いてから送り、票は1回だけ使えるので、`not_sent` は確かに送っていないことを意味する。
 			"""
 		acceptance: [
 			"結果不明の送信を照会すると、読む RPC だけが送られ、Orca の記録に応じて結果が変わるか unknown のままになる",
 			"送る前の記録だけがあり後の記録がない送信（送っている間にサーバーが止まった）が unknown として返る",
-			"意図で得た操作の ID の確定が届かなかったとき、照会が not_found（送っていない）を返す",
+			"意図で得た操作の ID の確定が届かなかったとき、照会が not_sent を返し、その後に届いた確定は送らない（票が取り消されている）",
+			"確定の処理の途中の ID の照会が in_progress を返し、not_sent を返さない",
 		]
 	}
 	"R-06": {
@@ -204,7 +205,7 @@ failures: {
 }
 
 constraints: [
-	"Orca に送る書き込みは、R-03 の2つの形だけ。読む RPC は、既存のものに `terminal.agentStatus`、`orchestration.requestShow`、`agentSession.sendRecorded` を足すだけ",
+	"Orca に送る書き込みは、R-03 の2つの形だけ。読む RPC は、既存のものに `terminal.agentStatus`、`terminal.inspectProcess`、`orchestration.requestShow`、`agentSession.sendRecorded` を足すだけ",
 	"Orca の authToken とペアリングのコードを、記録、応答、画面、ログ、録画に出さない",
 	"録画の fixture は、自分で作った仮の宛先と本文にする",
 	"実行時の依存を足さない",
@@ -228,7 +229,8 @@ decisions: [
 	"2026-11-13 統括の判断（Q3）：構造化 Chat の送信に `delivery` を付けない（Orca の既定。作業中の turn に合流する）。本人の決定「作業中のエージェントにも送る」（2026-11-06）と合う",
 	"2026-11-13 統括の判断（Q4）：実機の送り先は worktree send-test の Claude（term_33f82ee2…）と Codex（term_0787c5d8…）の2つだけ。構造化 Chat の検証用のセッションは本人に頼み、用意できたら知らせる。それまでは録画と再生",
 	"2026-11-13 タスク担当：操作の ID は意図のときに作って票に結び付け、意図の応答で返す（仕様のレビュー round 1 の P1。確定の応答を失っても照会できるように）。形は `<13桁のミリ秒>-<32桁の16進>`（構造化 Chat の clientOperationId の形。端末の orchestrationRequestId は任意の文字列を受けるので同じ形を使う。Orca は 24 時間より古い clientOperationId を拒むが、票の期限は 60 秒）",
-	"2026-11-13 タスク担当：送る前の確かめに `terminal.inspectProcess` の前面のプロセスがシェルでないことを足す（仕様のレビュー round 1 の P1。`terminal.agentStatus` は題名だけでエージェントありと返す枝がある）。残る隙を risks に書き直し、統括に知らせる",
+	"2026-11-13 タスク担当：送る前の確かめに `terminal.inspectProcess` の前面のプロセスがシェルでないことを足す（仕様のレビュー round 1 の P1。`terminal.agentStatus` は題名だけでエージェントありと返す枝がある）。残る隙を risks に書き直した。統括が了承した（2026-11-13、msg_0d4cef153a1c）",
+	"2026-11-13 タスク担当：記録のない ID の照会は、処理の途中なら in_progress、そうでなければその ID の票を取り消してから not_sent と答える（仕様のレビュー round 2 の P1。照会の後に届いた確定が送ると、「送っていない」を信じた利用者の再送と二重になる）",
 	"2026-11-13 タスク担当：送った後の結果は、記録がある限り HTTP 200 で返し、5つの区別を `outcome` で示す（refused と unknown も 200）。送る前に止めたものだけを 4xx・5xx にする",
 	"2026-11-13 タスク担当：構造化 Chat は、確認待ちのときも Orca が待たせて答えないので、orca-web は状態で拒まない。端末は `terminal.agentStatus` の permission で拒む",
 	"2026-11-13 タスク担当：端末で送った後の Orca の誤りは unknown とする（`agent_prompt_blocked` と `terminal_handle_stale` は本文を書いた後にも起きうる。仕様のレビュー round 1 の P1）。`agent_prompt_blocked` には「本文が入力欄に残っているかもしれない」を添える。`send.accepted` が偽の応答と、`invalid_argument`・`method_not_found` だけが refused",

@@ -52,7 +52,7 @@ steps: {
 	}
 	"S-06": {
 		title:    "送信の処理（D-06）"
-		text:     "対象：`src/send/service.ts`（新規）。確かめ：T-12、T-13、T-23、T-24。完了：`node --test test/send/service.test.ts` が通り、intent と confirm の各手順の止まり方（送る RPC が0回。シェルが前面、前面が読めない、state_out_of_date を含む）、意図の応答に操作の ID があり確定がその ID で記録すること、確定の届かなかった ID の照会が not_found、method_not_found の後に同じ runtime の間その経路が unsupported になり runtime が変わると戻ること、成功で送る RPC がちょうど1回、同時の2つの確定で1回、同じ票の2回目、本文の違い、宛先の各変化、sendEnabled の偽、before の書き込みの失敗、after の書き込みの失敗、check が unknown のときだけ照会して送る RPC を呼ばないこと、のテストがある。ここで二重送信を防ぐ契約が決まるので、区切りのレビュー CP-1 の最後の手順にする。止まって HEAD を報告する"
+		text:     "対象：`src/send/service.ts`（新規）。確かめ：T-12、T-13、T-23、T-24。完了：`node --test test/send/service.test.ts` が通り、intent と confirm の各手順の止まり方（送る RPC が0回。シェルが前面、前面が読めない、state_out_of_date を含む）、意図の応答に操作の ID があり確定がその ID で記録すること、確定の届かなかった ID の照会が not_sent でその後の確定を送らないこと、take の後で送る前の ID の照会が in_progress になること、method_not_found の後に同じ runtime の間その経路が unsupported になり runtime が変わると戻ること、成功で送る RPC がちょうど1回、同時の2つの確定で1回、同じ票の2回目、本文の違い、宛先の各変化、sendEnabled の偽、before の書き込みの失敗、after の書き込みの失敗、check が unknown のときだけ照会して送る RPC を呼ばないこと、のテストがある。ここで二重送信を防ぐ契約が決まるので、区切りのレビュー CP-1 の最後の手順にする。止まって HEAD を報告する"
 		realizes: ["R-01", "R-02", "R-04", "R-05", "R-06", "F-01", "F-02", "F-03", "F-05", "F-06"]
 		after:    ["S-05"]
 		status:   "todo"
@@ -60,7 +60,7 @@ steps: {
 	}
 	"S-07": {
 		title:    "送信の HTTP の口と起動の組み立て（D-09）"
-		text:     "対象：`src/server/app.ts`、`src/server/main.ts`、`src/server/config.ts`、`src/orca/wiring.ts`。確かめ：T-15、T-16。完了：`node --test test/server/*.test.ts` が通り、4つの道の成功、誤りの code と HTTP の状態の表、守りの順（Host、方法、Content-Type、Origin、トークン、物の大きさと鍵）、守りで拒んだ確定の記録、GET の同じオリジンの読み（Sec-Fetch-Site の cross-site を 403）、CORS なし、ORCA_WEB_SENDS_DIR の読み、のテストがある。区切りのレビュー：なし"
+		text:     "対象：`src/server/app.ts`、`src/server/main.ts`、`src/server/config.ts`、`src/orca/wiring.ts`。確かめ：T-15、T-16。完了：`node --test test/server/*.test.ts` が通り、4つの道の成功、誤りの code と HTTP の状態の表、守りの順（Host、方法、Content-Type、Origin、トークン、物の大きさと鍵）、守りで拒んだ要求を送信の記録に書かず件数だけを数えること、GET の同じオリジンの読み（Sec-Fetch-Site の cross-site を 403）、CORS なし、ORCA_WEB_SENDS_DIR の読み、のテストがある。区切りのレビュー：なし"
 		realizes: ["R-01", "R-02", "R-05", "R-06", "F-05"]
 		after:    ["S-06"]
 		status:   "todo"
@@ -108,7 +108,7 @@ tests: {
 	"T-13": {title: "SendService が、記録の書き込みの失敗で送らず、after の失敗を応答に示し、check が unknown のときだけ照会し、送り直さない", verifies: ["R-04", "R-05", "F-03", "F-06"]}
 	"T-14": {title: "機能の確かめが、sendTerminal と sendChat の満たし方と欠け方を返し、確かめのために書き込みの RPC を呼ばない", verifies: ["F-04"]}
 	"T-15": {title: "送信の4つの道の成功と、誤りの code と HTTP の状態、守りの順、CORS なし、GET の同じオリジンの読み", verifies: ["R-01", "R-02", "R-05", "F-05"]}
-	"T-16": {title: "sendEnabled を偽にすると、再起動なしで意図と確定が 403 になり、照会の口は使える。守りで拒んだ確定が記録に残る", verifies: ["R-06", "F-05"]}
+	"T-16": {title: "sendEnabled を偽にすると、再起動なしで意図と確定が 403 になり、照会の口は使える。守りで拒んだ要求は送信の記録に書かれず件数だけが数えられ、守りを通った確定の拒みは記録に残る", verifies: ["R-06", "F-05"]}
 	"T-17": {title: "実機の確かめの道具の守りと集計と、出力に本文・題名・パス・handle・セッションの識別子が出ないこと", verifies: ["R-09"]}
 	"T-18": {title: "送る欄の状態の純粋な関数が、確認の項目、5つの outcome と warning の言葉、unknown の照会、disabled の理由を作る", verifies: ["R-07"]}
 	"T-19": {title: "409 と期限の経過で本文を残して書く欄に戻り、sending の間の2回目の押しを捨て、時間切れで送り直さず意図の操作の ID で結果不明を示す", verifies: ["R-07", "F-01", "F-03"]}
@@ -116,7 +116,7 @@ tests: {
 	"T-21": {title: "実機の確かめ（検証用の端末のエージェントへの送信、結果の区別、照会、送らない場合）", verifies: ["R-09", "R-02", "R-04", "R-05"]}
 	"T-22": {title: "実機の画面で、幅 390px で送る欄と確認の画面が横にはみ出さない（送らずに戻る）", verifies: ["R-07"]}
 	"T-23": {title: "method_not_found の後、同じ runtime の ID の間、その経路の status が送れないと示し、意図と確定が unsupported になり、runtime の ID が変わると戻る", verifies: ["F-04"]}
-	"T-24": {title: "意図の応答に操作の ID があり、確定の応答を失ったときに画面がその ID で照会でき、確定が届かなかった ID の照会が not_found（送っていない）になる", verifies: ["R-01", "R-05", "R-07", "F-03"]}
+	"T-24": {title: "意図の応答に操作の ID があり、確定の応答を失ったときに画面がその ID で照会でき、確定が届かなかった ID の照会が not_sent になりその後の確定は送らず、処理の途中の ID の照会は in_progress になる", verifies: ["R-01", "R-05", "R-07", "F-03"]}
 }
 
 verification: """
