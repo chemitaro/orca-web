@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>プロジェクト</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="inbox runs-page">
+    <header>
+      <div class="bar">
+        <h1 id="project-name">プロジェクト</h1>
+        <nav class="links">
+          <a href="/">受け箱</a>
+          <a href="/runs">Run の一覧</a>
+        </nav>
+      </div>
+      <div id="freshness" role="status" aria-live="polite"><p>読み込み中…</p></div>
+    </header>
+    <main>
+      <section class="part">
+        <h2>受け箱</h2>
+        <div id="inbox-freshness" class="part-freshness"></div>
+        <div id="stages"></div>
+      </section>
+      <section class="part">
+        <h2>このプロジェクトに節がある Run</h2>
+        <div id="runs"></div>
+      </section>
+    </main>
+    <script type="module" src="/project.js"></script>
+  </body>
+</html>

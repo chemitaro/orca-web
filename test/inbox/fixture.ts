@@ -91,6 +91,7 @@ export function task(patch: Partial<TaskState> = {}): TaskState {
     id: 'task-a',
     runId: 'run-a',
     parentId: fact(null),
+    createdByTerminalHandle: null,
     deps: fact([]),
     title: fact('仮の iss-42'),
     status: fact(null),

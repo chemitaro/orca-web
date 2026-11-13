@@ -43,6 +43,7 @@ let listeners: ListenerSet | null = null;
 // 待ち受けのアドレスごとのサーバーが、1つの処理（とトークン）を共有する。
 const handler = createAppHandler({
   poller,
+  runs: poller,
   inbox: { snapshot: () => poller.inboxSnapshot(), noteViewer: () => poller.noteInboxViewer() },
   stallMinutes: config.stallMinutes,
   settings,

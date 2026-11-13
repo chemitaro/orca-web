@@ -8,17 +8,21 @@ function oneLine(value: string | null | undefined): string | null {
   return value == null ? null : value.replace(/\s+/gu, ' ').trim().slice(0, 200);
 }
 
+/** 候補の順で最初に現れる Issue を、受け箱と Run の木で同じ表記にする。 */
+export function findIssue(values: readonly (string | null | undefined)[]): string | null {
+  const issue = values.map((value) => value?.match(/iss-(\d+)/)?.[1]).find((value) => value !== undefined);
+  return issue === undefined ? null : `iss-${issue.padStart(5, '0')}`;
+}
+
 function location(input: BuildInboxInput, worktreeId: string | null, taskId: string | null) {
   const worktree = input.state.worktrees.find((entry) => entry.id === worktreeId);
   const repo = input.state.repos.find((entry) => entry.id === worktree?.repoId);
   const task = input.state.tasks.find((entry) => entry.id === taskId);
-  const issue = [worktree?.branch.value, worktree?.displayName.value, task?.title.value]
-    .map((value) => value?.match(/iss-(\d+)/)?.[1])
-    .find((value) => value !== undefined);
+  const issue = findIssue([worktree?.branch.value, worktree?.displayName.value, task?.title.value]);
   return {
     project: repo?.displayName.value != null ? { id: repo.id, name: repo.displayName.value } : null,
     worktreeId,
-    issue: issue === undefined ? null : `iss-${issue.padStart(5, '0')}`,
+    issue,
   };
 }
 

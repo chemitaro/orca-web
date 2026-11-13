@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>オーケストレーションの木</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="inbox runs-page">
+    <header>
+      <div class="bar">
+        <h1>オーケストレーションの木</h1>
+        <nav class="links">
+          <a href="/">受け箱</a>
+          <a href="/runs">Run の一覧</a>
+        </nav>
+      </div>
+      <p id="run-title" class="run-title"></p>
+      <p id="summary" class="summary"></p>
+      <div id="freshness" role="status" aria-live="polite"><p>読み込み中…</p></div>
+    </header>
+    <main id="tree"></main>
+    <script type="module" src="/run.js"></script>
+  </body>
+</html>

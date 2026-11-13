@@ -223,13 +223,28 @@ export const expectedState = {
     },
   ],
   runs: [
-    { id: 'run_hex-3', title: f('text-8', 'runs', 'objective') },
-    { id: 'run_hex-4', title: f('text-9', 'runs', 'objective') },
+    {
+      id: 'run_hex-3',
+      coordinatorHandle: 'term_uuid-12',
+      activeCoordinatorHandle: 'term_uuid-12',
+      coordinatorResolvedBy: 'run',
+      coordinatorWorktreeId: f(WT1, 'terminals', 'worktreeId'),
+      title: f('text-8', 'runs', 'objective'),
+    },
+    {
+      id: 'run_hex-4',
+      coordinatorHandle: null,
+      activeCoordinatorHandle: null,
+      coordinatorResolvedBy: null,
+      coordinatorWorktreeId: m('terminals', 'worktreeId', 'not-provided'),
+      title: f('text-9', 'runs', 'objective'),
+    },
   ],
   tasks: [
     {
       id: 'task_hex-2',
       runId: 'run_hex-3',
+      createdByTerminalHandle: 'term_uuid-12',
       parentId: m('tasks', 'parent_id', 'not-provided'),
       deps: f([], 'tasks', 'deps'),
       title: f('text-5', 'tasks', 'task_title'),
@@ -240,6 +255,7 @@ export const expectedState = {
     {
       id: 'task_hex-5',
       runId: 'run_hex-3',
+      createdByTerminalHandle: null,
       parentId: f('task_hex-2', 'tasks', 'parent_id'),
       deps: f(['task_hex-2'], 'tasks', 'deps'),
       title: f('text-18', 'tasks', 'display_name'),
@@ -250,6 +266,7 @@ export const expectedState = {
     {
       id: 'task_hex-7',
       runId: 'run_hex-4',
+      createdByTerminalHandle: null,
       parentId: m('tasks', 'parent_id', 'not-provided'),
       deps: m('tasks', 'deps', 'invalid-value'),
       title: f('text-19', 'tasks', 'task_title'),
