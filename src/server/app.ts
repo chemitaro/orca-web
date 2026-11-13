@@ -7,11 +7,11 @@ import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import type { OpenErrorCode, OpenOutcome, OpenRequest } from '../orca/open.ts';
-import type { TranscriptReader } from '../orca/read-transcript.ts';
+import type { TranscriptErrorCode, TranscriptReader } from '../orca/read-transcript.ts';
 import { checkSelection, FIELDS } from '../state/fields.ts';
 import type { StateDocument } from '../state/model.ts';
 import type { SettingsStore } from '../state/settings.ts';
-import type { TranscriptEvent, TranscriptHub } from '../transcript/hub.ts';
+import type { HubErrorCode, TranscriptEvent, TranscriptHub } from '../transcript/hub.ts';
 import { buildDocument, decodeBefore, normalizePage } from '../transcript/normalize.ts';
 import { checkHost, checkSameOriginWrite, checkToken, type GuardResult, TokenStore } from './guard.ts';
 import type { ListenerStatus } from './listen.ts';
@@ -54,8 +54,16 @@ const DEFAULT_TRANSCRIPT_LIMIT = 40;
 const MAX_TRANSCRIPT_LIMIT = 200;
 const SSE_KEEPALIVE_MS = 15_000;
 
+/** 会話の API の誤りの種類。 */
+export type TranscriptApiError =
+  | TranscriptErrorCode
+  | HubErrorCode
+  | 'invalid_request'
+  | 'session_changed'
+  | 'transcript_unavailable';
+
 /** 会話の API の誤りの種類ごとの HTTP の状態。 */
-export const TRANSCRIPT_ERROR_STATUS: Record<string, number> = {
+export const TRANSCRIPT_ERROR_STATUS: Record<TranscriptApiError, number> = {
   invalid_request: 400,
   agent_not_found: 404,
   no_session: 404,
@@ -275,7 +283,7 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
 
   async function handleTranscript(res: ServerResponse, url: URL): Promise<void> {
     const t = options.transcripts;
-    const fail = (error: string): void => sendError(res, TRANSCRIPT_ERROR_STATUS[error] ?? 502, error);
+    const fail = (error: TranscriptApiError): void => sendError(res, TRANSCRIPT_ERROR_STATUS[error], error);
     if (!t) return fail('transcript_unavailable');
     const agent = agentParam(url);
     const limitText = url.searchParams.get('limit');

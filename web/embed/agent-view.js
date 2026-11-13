@@ -247,7 +247,9 @@ export function reduceChat(state, event) {
     case 'unavailable':
       return { ...initialChat(), status: 'unavailable', error: event.error, generation: state.generation + 1 };
     case 'disconnected':
-      return state.status === 'ok' ? state : { ...state, status: 'unavailable', error: 'disconnected' };
+      // 読めた会話は残し（次の snapshot で置き換える）、すでに持つ読めない理由（busy など）は上書きしない。
+      if (state.status === 'ok' || (state.status === 'unavailable' && state.error)) return state;
+      return { ...state, status: 'unavailable', error: 'disconnected' };
     default:
       return state;
   }

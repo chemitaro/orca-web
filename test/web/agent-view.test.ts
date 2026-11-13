@@ -177,3 +177,8 @@ test('reduceChat は unavailable で件を捨てて理由を持ち、読めな�
   });
   assert.deepEqual(ids(kept), ['m1'], 'つなぎ直しの間は読めた会話を残す（次の snapshot で置き換える）');
 });
+
+test('reduceChat は、読めない理由（busy など）を、続く接続の切れで上書きしない', () => {
+  const busy = reduceChat(initialChat(), { type: 'unavailable', error: 'busy' });
+  assert.equal(reduceChat(busy, { type: 'disconnected' }).error, 'busy');
+});

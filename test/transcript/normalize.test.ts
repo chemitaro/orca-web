@@ -170,3 +170,30 @@ test('位置の符号は形の違うものを拒む', () => {
     assert.equal(decodeBefore(token), null, token.slice(0, 20));
   }
 });
+
+test('知らない role の件と system の件の本文でない部分は、端末でも構造化 Chat でも印にする', () => {
+  const blocks = [
+    { type: 'text', text: 'x' },
+    { type: 'tool-call', name: 'Bash', input: 'ls' },
+  ];
+  assert.deepEqual(normalizeNativeMessages([{ id: 's', role: 'system', blocks, timestamp: null }])?.[0]?.parts, [
+    { type: 'text', text: 'x' },
+    { type: 'unsupported', what: 'unknown' },
+  ]);
+  const journal = (role: string) => [
+    { itemId: 'i', sequence: 1, observedAt: 0, body: { kind: 'message', role, blocks } },
+  ];
+  assert.deepEqual(normalizeJournalItems(journal('narrator'))?.[0], {
+    id: 'i',
+    role: 'assistant',
+    at: '1970-01-01T00:00:00.000Z',
+    parts: [
+      { type: 'unsupported', what: 'unknown' },
+      { type: 'unsupported', what: 'unknown' },
+    ],
+  });
+  assert.deepEqual(normalizeJournalItems(journal('system'))?.[0]?.parts, [
+    { type: 'text', text: 'x' },
+    { type: 'unsupported', what: 'unknown' },
+  ]);
+});

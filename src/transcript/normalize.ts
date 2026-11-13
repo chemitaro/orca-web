@@ -107,6 +107,22 @@ function blockPart(block: unknown, shortened: boolean): TranscriptPart {
 }
 
 const ROLES = new Set(['user', 'assistant', 'tool', 'system']);
+const UNKNOWN: TranscriptPart = { type: 'unsupported', what: 'unknown' };
+
+/**
+ * 1つの件の役割と部品。知らない role は assistant にし、部品はすべて印にする（出所の分からない本文を発言として出さない）。
+ * system の件（Orca の知らせ）は本文だけを残し、ほかの部分は印にする。
+ */
+function messageOf(
+  roleValue: unknown,
+  blocks: readonly unknown[],
+  shortened: boolean,
+): { role: TranscriptRole; parts: TranscriptPart[] } {
+  const role = typeof roleValue === 'string' && ROLES.has(roleValue) ? (roleValue as TranscriptRole) : null;
+  if (role === null) return { role: 'assistant', parts: blocks.map(() => UNKNOWN) };
+  const parts = blocks.map((b) => blockPart(b, shortened));
+  return { role, parts: role === 'system' ? parts.map((p) => (p.type === 'text' ? p : UNKNOWN)) : parts };
+}
 
 /** 端末のエージェントの件（nativeChat.readSession の messages）。並べ替えない。思考を落とす。 */
 export function normalizeNativeMessages(messages: readonly unknown[]): TranscriptMessage[] | null {
@@ -114,14 +130,9 @@ export function normalizeNativeMessages(messages: readonly unknown[]): Transcrip
   for (const m of messages) {
     if (!isRecord(m) || typeof m.id !== 'string' || !Array.isArray(m.blocks)) return null;
     if (m.role === 'reasoning') continue;
-    const role = typeof m.role === 'string' && ROLES.has(m.role) ? (m.role as TranscriptRole) : null;
-    const shortened = m.shortened === true;
-    const parts: TranscriptPart[] =
-      role === null
-        ? m.blocks.map(() => ({ type: 'unsupported', what: 'unknown' }))
-        : m.blocks.map((b) => blockPart(b, shortened));
+    const { role, parts } = messageOf(m.role, m.blocks, m.shortened === true);
     if (parts.length === 0) continue;
-    out.push({ id: m.id, role: role ?? 'assistant', at: toIso(m.timestamp), parts });
+    out.push({ id: m.id, role, at: toIso(m.timestamp), parts });
   }
   return out;
 }
@@ -156,8 +167,7 @@ export function normalizeJournalItems(items: readonly unknown[]): TranscriptMess
     const shortened = item.shortened === true;
     if (kind === 'message') {
       if (body.role === 'reasoning') continue;
-      const role = typeof body.role === 'string' && ROLES.has(body.role) ? (body.role as TranscriptRole) : 'assistant';
-      const parts = Array.isArray(body.blocks) ? body.blocks.map((b) => blockPart(b, shortened)) : [];
+      const { role, parts } = messageOf(body.role, Array.isArray(body.blocks) ? body.blocks : [], shortened);
       if (parts.length) out.push({ id, role, at, parts });
       continue;
     }
