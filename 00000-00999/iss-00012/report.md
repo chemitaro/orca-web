@@ -68,7 +68,14 @@ ID: "iss-00012"
 - **画面**：一時の port（8799）で起動し、headless の Chrome（CDP、`Browser.close` で閉じた）で、このリポジトリの worktree のエージェントの `/embed/agent` を開いた。幅 390px：横のはみ出し 0、Orca で開くは出ない。幅 1024px：はみ出し 0、Orca で開くが出る。どちらも詳細 10 行、会話 24 行、会話と詳細の中の `script`・`img` の要素 0、送信の欄（textarea、入力、form）0。Orca で開くは押していない。
 - 検証：`npm run lint` 0、`npm test` 267 件合格、`npm run build` 0（HEAD `5950ebb`）。
 
-（最終品質ゲートの結果は、この後に書く）
+### 最終品質ゲート（final-quality-gate、strict）：合格
+
+- 合格のコミット `5950ebb8b2fe03d7aed3d0b35539ee48adaaf52c`、範囲 `373d026..5950ebb`（前の作業者の分を含む）、試行 1 回。`closure.md`：`.workbench/final-quality-gate/iss-00012-v2/closure.md`
+- 主：quality-gate-reviewer Opus 5.5 / high、pass（P0/P1 0、P3 1、coverage_complete）。観点に security-baseline を足した。
+- 2人目：ChatGPT GPT-6 / Extra High（選択の証拠 verified）、pass（P0/P1 0、P2 2）。
+- テスト：`npm run lint` 0、`npm test` 0（267 件）、`npm run build` 0。
+- P2/P3（直していない）：plan の印の画面の表示名（P3）、`agentSession.history` の返ったページの sessionId を照らしていない（P2）、hasMore が真で位置が欠けるとき最後のページとして扱う（P2）。
+- 記録だけのコミットはない（report.md は Git の外）。
 
 ## Residual Risks / Follow-ups
 
