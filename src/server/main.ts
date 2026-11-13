@@ -28,7 +28,11 @@ const poller = new StatePoller({
   reader: createStateReader(orca.readCli, orca.readRpc),
   capabilities: () => orca.capabilities.get(),
 });
-const transcriptReader = createTranscriptReader({ rpc: orca.readRpc, capabilities: () => orca.capabilities.get() });
+const transcriptReader = createTranscriptReader({
+  rpc: orca.readRpc,
+  capabilities: () => orca.capabilities.get(),
+  isUntabbedAgent: (id) => poller.snapshotSync().agents.some((agent) => agent.id === id && agent.kind === 'untabbed'),
+});
 const transcriptHub = new TranscriptHub({ reader: transcriptReader });
 const settings = new SettingsStore(config.settingsFile);
 await settings.load();

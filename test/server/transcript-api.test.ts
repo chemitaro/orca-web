@@ -5,8 +5,10 @@ import { test } from 'node:test';
 import { createTranscriptReader } from '../../src/orca/read-transcript.ts';
 import { ReadOnlyRpc } from '../../src/orca/rpc.ts';
 import { createAppServer } from '../../src/server/app.ts';
+import { StatePoller } from '../../src/state/poller.ts';
 import { TranscriptHub } from '../../src/transcript/hub.ts';
 import { encodeBefore } from '../../src/transcript/normalize.ts';
+import { report, staticReader } from '../state/helpers.ts';
 import {
   CHAT_TAB,
   capabilities,
@@ -33,13 +35,36 @@ interface Harness {
 
 async function withApp(
   fn: (h: Harness) => Promise<void>,
-  options: { rpc?: FakeRpc; caps?: ReturnType<typeof capabilities>; maxWatches?: number } = {},
+  options: {
+    rpc?: FakeRpc;
+    caps?: ReturnType<typeof capabilities>;
+    maxWatches?: number;
+    maxSubscribers?: number;
+    poller?: StatePoller;
+    now?: () => number;
+  } = {},
 ): Promise<void> {
   const rpc = options.rpc ?? fakeOrca();
   const caps = options.caps ?? capabilities();
-  const reader = createTranscriptReader({ rpc: new ReadOnlyRpc(rpc), capabilities: async () => caps });
-  const hub = new TranscriptHub({ reader, tailIntervalMs: 0, maxWatches: options.maxWatches ?? 8 });
-  const server = createAppServer({ transcripts: { reader, hub }, readOrigins: ['http://127.0.0.1:47800'] });
+  const reader = createTranscriptReader({
+    rpc: new ReadOnlyRpc(rpc),
+    capabilities: async () => caps,
+    isUntabbedAgent: (id) =>
+      options.poller?.snapshotSync().agents.some((a) => a.id === id && a.kind === 'untabbed') ?? false,
+    ...(options.now ? { now: options.now } : {}),
+  });
+  const hub = new TranscriptHub({
+    reader,
+    tailIntervalMs: 0,
+    maxWatches: options.maxWatches ?? 8,
+    maxSubscribers: options.maxSubscribers ?? 32,
+    ...(options.now ? { now: options.now } : {}),
+  });
+  const server = createAppServer({
+    transcripts: { reader, hub },
+    readOrigins: ['http://127.0.0.1:47800'],
+    ...(options.poller ? { poller: options.poller } : {}),
+  });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   const host = `127.0.0.1:${port}`;
@@ -91,10 +116,22 @@ test('limit を渡し、範囲の外や形の違う引数は 400', async () => {
     assert.equal((await h.get(q(PANE_CLAUDE, '&limit=10'))).status, 200);
     const call = h.rpc.calls.find((c) => c.method === 'nativeChat.readSession');
     assert.equal((call?.params as { limit?: number } | undefined)?.limit, 10);
-    for (const bad of ['&limit=0', '&limit=201', '&limit=abc', '&before=***']) {
+    for (const bad of [
+      '&limit=0',
+      '&limit=201',
+      '&limit=abc',
+      '&limit=-1',
+      '&limit=1.5',
+      '&limit=',
+      '&before=***',
+      '&before=',
+    ]) {
       assert.equal((await h.get(q(PANE_CLAUDE, bad))).status, 400, bad);
     }
     assert.equal((await h.get('/api/transcript')).status, 400);
+    const missing = await h.get('/api/transcript/events');
+    assert.equal(missing.status, 400);
+    assert.deepEqual(JSON.parse(missing.text), { ok: false, error: 'invalid_request' });
   });
 });
 
@@ -156,6 +193,46 @@ test('誤りの種類を区別した code と HTTP の状態で返し、0件の�
   );
 });
 
+test('状態の API の untabbed の id は404 no_session になり、記録を読まない', async () => {
+  const poller = new StatePoller({ reader: await staticReader(), capabilities: async () => report() });
+  await withApp(
+    async (h) => {
+      const state = JSON.parse((await h.get('/api/state')).text);
+      const agent = state.agents.find((a: { kind: string }) => a.kind === 'untabbed');
+      assert.ok(agent);
+      const res = await h.get(q(agent.id));
+      assert.equal(res.status, 404);
+      assert.deepEqual(JSON.parse(res.text), { ok: false, error: 'no_session' });
+      assert.equal(
+        h.rpc.calls.filter((c) => c.method === 'nativeChat.readSession' || c.method === 'agentSession.history').length,
+        0,
+      );
+    },
+    { poller },
+  );
+});
+
+test('読み取り失敗の HTTP 状態と本文は固定の code だけで、Orca の文を出さない', async () => {
+  for (const [outcome, status, error] of [
+    [ok({ error: '仮の非公開の詳細' }), 502, 'read_failed'],
+    [ok({ messages: '仮の非公開の詳細', hasMore: false }), 502, 'unknown_shape'],
+    [{ ok: false, kind: 'unavailable', message: '仮の非公開の詳細' }, 503, 'unreachable'],
+    [{ ok: false, kind: 'orca-error', code: 'method_not_found', message: '仮の非公開の詳細' }, 501, 'unsupported'],
+  ] as const) {
+    const rpc = fakeOrca();
+    rpc.handlers['nativeChat.readSession'] = () => outcome;
+    await withApp(
+      async (h) => {
+        const res = await h.get(q(PANE_CLAUDE));
+        assert.equal(res.status, status);
+        assert.deepEqual(JSON.parse(res.text), { ok: false, error });
+        assert.equal(res.headers['access-control-allow-origin'], undefined);
+      },
+      { rpc },
+    );
+  }
+});
+
 test('会話の API は別のオリジンを 403 で拒み、CORS を付けず、GET のほかは 405', async () => {
   await withApp(async (h) => {
     const cross = await h.get(q(PANE_CLAUDE), { origin: 'http://127.0.0.1:47800' });
@@ -185,18 +262,20 @@ test('会話の API は別のオリジンを 403 で拒み、CORS を付けず�
 });
 
 /** SSE を開き、出来事を受ける。 */
-function openEvents(h: Harness, agent: string) {
+function openEvents(h: Harness, agent: string, extraHeaders: Record<string, string> = {}) {
   const events: { event: string; data: unknown }[] = [];
   let buffer = '';
   let headers: Record<string, unknown> = {};
   let status = 0;
+  let ended = false;
+  let retry: number | null = null;
   const waiters: (() => void)[] = [];
   const req = request(
     {
       host: '127.0.0.1',
       port: h.port,
       path: `/api/transcript/events?agent=${encodeURIComponent(agent)}`,
-      headers: { host: h.host },
+      headers: { host: h.host, ...extraHeaders },
       setHost: false,
     },
     (res) => {
@@ -211,21 +290,38 @@ function openEvents(h: Harness, agent: string) {
           buffer = buffer.slice(end + 2);
           const name = /^event: (.+)$/m.exec(block)?.[1];
           const data = /^data: (.+)$/m.exec(block)?.[1];
+          const retryText = /^retry: (\d+)$/m.exec(block)?.[1];
+          if (retryText) retry = Number(retryText);
           if (name && data) events.push({ event: name, data: JSON.parse(data) });
           for (const w of waiters.splice(0)) w();
           end = buffer.indexOf('\n\n');
         }
       });
       res.on('end', () => {
+        ended = true;
         for (const w of waiters.splice(0)) w();
       });
     },
   );
   req.end();
   const until = async (n: number) => {
-    while (events.length < n) await new Promise<void>((resolve) => waiters.push(resolve));
+    while (events.length < n) {
+      assert.equal(ended, false, '必要な出来事が届く前に接続が閉じた');
+      await new Promise<void>((resolve) => waiters.push(resolve));
+    }
   };
-  return { events, until, close: () => req.destroy(), status: () => status, headers: () => headers };
+  const untilClosed = async () => {
+    while (!ended) await new Promise<void>((resolve) => waiters.push(resolve));
+  };
+  return {
+    events,
+    until,
+    untilClosed,
+    retry: () => retry,
+    close: () => req.destroy(),
+    status: () => status,
+    headers: () => headers,
+  };
 }
 
 test('SSE の道は snapshot の文書を送り、足された件を appended で送る。CORS を付けない', async () => {
@@ -237,6 +333,7 @@ test('SSE の道は snapshot の文書を送り、足された件を appended �
       const s = openEvents(h, PANE_CLAUDE);
       await s.until(1);
       assert.equal(s.status(), 200);
+      assert.equal(s.retry(), 5000);
       assert.equal(s.headers()['content-type'], 'text/event-stream; charset=utf-8');
       assert.equal(s.headers()['access-control-allow-origin'], undefined);
       const first = s.events[0];
@@ -275,9 +372,110 @@ test('SSE の道は、見張りの上限で unavailable（busy）を送って閉
       const two = openEvents(h, CHAT_TAB);
       await two.until(1);
       assert.deepEqual(two.events[0], { event: 'unavailable', data: { error: 'busy' } });
+      await two.untilClosed();
       one.close();
     },
     { maxWatches: 1 },
+  );
+});
+
+test('両方の会話の道は GET 以外を405、異なる Origin と Host を拒み、CORS を付けない', async () => {
+  await withApp(async (h) => {
+    for (const route of [q(PANE_CLAUDE), `/api/transcript/events?agent=${encodeURIComponent(PANE_CLAUDE)}`]) {
+      for (const method of ['HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS']) {
+        const res = await fetch(`http://${h.host}${route}`, { method });
+        assert.equal(res.status, 405, `${route} ${method}`);
+        assert.equal(res.headers.get('access-control-allow-origin'), null);
+        await res.arrayBuffer();
+      }
+      for (const origin of ['http://127.0.0.1:47800', 'null', `https://${h.host}`, 'http://evil.example']) {
+        const res = await h.get(route, { origin });
+        assert.equal(res.status, 403);
+        assert.deepEqual(JSON.parse(res.text), { ok: false, error: 'forbidden_origin' });
+        assert.equal(res.headers['access-control-allow-origin'], undefined);
+      }
+      assert.equal((await h.get(route, { host: `evil.example:${h.port}` })).status, 421);
+    }
+    assert.equal(h.rpc.calls.length, 0, '拒否した要求は Orca に届かない');
+  });
+});
+
+test('SSE は更新、書き換え、unavailable、回復、セッション変更の名前と本文を区別する', { timeout: 5_000 }, async () => {
+  const rpc = fakeOrca();
+  let now = 0;
+  const row = (id: string, text: string) => ({ id, role: 'assistant', blocks: [{ type: 'text', text }] });
+  let messages = [row('m1', '仮の開始')];
+  rpc.handlers['nativeChat.readSession'] = () => ok({ messages, hasMore: false });
+  await withApp(
+    async (h) => {
+      const s = openEvents(h, PANE_CLAUDE, { origin: `http://${h.host}` });
+      await s.until(1);
+      const snapshot = s.events[0]?.data as { document: { session: { key: string }; schema: string } };
+      assert.equal(snapshot.document.schema, 'orca-web.transcript/v1');
+      const key = snapshot.document.session.key;
+      const normalized = (id: string, text: string) => ({
+        id,
+        role: 'assistant',
+        at: null,
+        parts: [{ type: 'text', text }],
+      });
+      messages = [row('m1', '仮の完了')];
+      await h.hub.tick();
+      await s.until(2);
+      assert.deepEqual(s.events[1], {
+        event: 'appended',
+        data: { session: { key }, items: [], updated: [normalized('m1', '仮の完了')] },
+      });
+      messages = [row('rewrite', '仮の書き換え')];
+      await h.hub.tick();
+      await s.until(3);
+      const rewritten = s.events[2]?.data as {
+        reason: string;
+        document: { session: { key: string }; messages: unknown[] };
+      };
+      assert.equal(s.events[2]?.event, 'replacement');
+      assert.equal(rewritten.reason, 'rewritten');
+      assert.equal(rewritten.document.session.key, key);
+      assert.deepEqual(rewritten.document.messages, [normalized('rewrite', '仮の書き換え')]);
+      rpc.handlers['nativeChat.readSession'] = () => ok({ error: '仮の非公開の詳細' });
+      await h.hub.tick();
+      await s.until(4);
+      assert.deepEqual(s.events[3], { event: 'unavailable', data: { error: 'read_failed' } });
+      rpc.handlers['nativeChat.readSession'] = () => ok({ messages: [], hasMore: false });
+      await h.hub.tick();
+      await s.until(5);
+      const recovered = s.events[4]?.data as { reason: string; document: { messages: unknown[] } };
+      assert.equal(s.events[4]?.event, 'replacement');
+      assert.equal(recovered.reason, 'recovered');
+      assert.deepEqual(recovered.document.messages, []);
+      rpc.handlers['session.tabs.listAll'] = () => ok(tabsInventory({ claudeSession: 'new-fake-session' }));
+      now += 5_000;
+      await h.hub.tick();
+      await s.until(6);
+      const changed = s.events[5]?.data as { reason: string; document: { session: { key: string } } };
+      assert.equal(s.events[5]?.event, 'replacement');
+      assert.equal(changed.reason, 'session-changed');
+      assert.notEqual(changed.document.session.key, key);
+      assert.equal(s.headers()['access-control-allow-origin'], undefined);
+      s.close();
+    },
+    { rpc, now: () => now },
+  );
+});
+
+test('SSE の購読者の上限でも busy を送って接続を閉じる', { timeout: 5_000 }, async () => {
+  await withApp(
+    async (h) => {
+      const one = openEvents(h, PANE_CLAUDE);
+      await one.until(1);
+      const two = openEvents(h, PANE_CLAUDE);
+      await two.until(1);
+      assert.deepEqual(two.events, [{ event: 'unavailable', data: { error: 'busy' } }]);
+      await two.untilClosed();
+      assert.equal(h.hub.subscriberCount, 1);
+      one.close();
+    },
+    { maxSubscribers: 1 },
   );
 });
 
@@ -305,6 +503,11 @@ test('会話の道を持たないサーバーは 503 を返す', async () => {
   try {
     const res = await fetch(`http://127.0.0.1:${port}/api/transcript?agent=x`);
     assert.equal(res.status, 503);
+    await res.arrayBuffer();
+    const embed = await fetch(`http://127.0.0.1:${port}/embed/agent?id=x`);
+    assert.equal(embed.status, 200);
+    assert.match(embed.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'(;|$)/);
+    await embed.arrayBuffer();
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
