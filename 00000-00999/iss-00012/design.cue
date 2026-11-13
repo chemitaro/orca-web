@@ -60,9 +60,10 @@ design: {
 		title: "窓の差分（`src/transcript/diff.ts`）"
 		text: """
 			`diffWindow(prev, next, { full })` が、前の窓と今の窓（どちらも正規化した件の並び）を比べ、`none`、`appended`（`items`：足された件、`updated`：同じ位置で中身が変わった件）、`replacement` のどれかを返す。
-			`full` は、今の窓が読みの上限まで満ちている（件数が limit と同じか、Orca がより古い件があると返した）ことを示す。
+			`full` は、今の窓の前に、より古い件がある（Orca が hasMore を真で返した）ことを示す。件数が limit と同じでも、hasMore が偽なら会話の全体が窓にあるので `full` ではない。
 			前の窓が空なら、今の窓の全体を appended にする。そうでなければ、前の窓の後ろの部分（offset o から）の id の並びが、今の窓の先頭と一致する最小の o を探す（窓が前に進むと、先頭の件が窓から外れる）。
-			o が 0 より大きい一致は、`full` のときだけ窓の前進として認める。`full` でなければ会話の全体が窓に収まっているので、先頭の件が消えたのは記録の書き換えであり、replacement にする（例：前 [a,b,c]、今 [b,c] は replacement）。
+			o が 0 より大きい一致は、`full` のときだけ窓の前進として認める。`full` でなければ会話の全体が窓に収まっているので、先頭の件が消えたのは記録の書き換えであり、replacement にする（例：前 [a,b,c]、今 [b,c] は replacement。前 [m1..m40]、今 [m2..m41] で hasMore が偽も replacement）。
+			`full` のときに、窓の外へ出た件が書き換えで消えたのか前進で外れたのかは末尾の窓からは区別できない。その件は既に窓の外で、画面の前のページは置き換えのたびに捨てるので、残るリスクとして扱う。
 			見つからなければ（件が消えた、並びが変わった、窓より多い追記）replacement。見つかれば、重なりの中で中身（正規化した件の JSON）が違う件を updated に、重なりの後ろを items にする。両方が空なら none。
 			セッションの鍵が違う窓は比べず、呼ぶ側が replacement にする。
 			"""
@@ -74,7 +75,7 @@ design: {
 			`TranscriptHub` が、エージェントの id ごとに1つの見張り（watch）を持ち、購読者に出来事を配る。
 
 			- 見張りは、1.5秒ごとに末尾（40 件）を読み、5秒ごとにエージェントからセッションを解き直す。読みは重ねない。
-			- 最初の成功で snapshot を窓として持つ。後の読みは D-03 で比べ（`full` は、読んだ件数が 40 か、hasMore が真）、appended か replacement を配る。セッションの鍵が変わったら replacement（reason `session-changed`）。
+			- 最初の成功で snapshot を窓として持つ。後の読みは D-03 で比べ（`full` は、その読みの hasMore が真）、appended か replacement を配る。セッションの鍵が変わったら replacement（reason `session-changed`）。
 			- 読めなければ unavailable（誤りの code）を、code が変わったときだけ配り、窓を捨てる。次に読めたら replacement（reason `recovered`）。
 			- 新しい購読者には、持っている窓（snapshot）か unavailable をすぐ送る。まだどちらもなければ、最初の読みの結果を送る。
 			- 上限：見張り 8、購読者 32。超えたら `busy`。最後の購読者が抜けたら見張りを止めて捨てる。`close()` で、すべての購読を閉じる。
@@ -91,7 +92,7 @@ design: {
 			- `GET /api/transcript/events?agent=`：`text/event-stream`。`retry: 5000`、15秒ごとの注釈の行。出来事（`event:` の名前と、`data:` の JSON）：
 			  `snapshot`（`{ document }`。document は D-02 の文書で、session の鍵、messages、hasMore、before を持つ）、`replacement`（`{ reason, document }`）、
 			  `appended`（`{ session: { key }, items, updated }`）、`unavailable`（`{ error }`）。replacement の `reason` は `rewritten`（記録の書き換え、巻き戻し、窓より多い追記）、`session-changed`、`recovered` のどれか。画面の「前を読む」は、最後に受けた document の before を使う。
-			  見張りの上限では `unavailable`（`busy`）を送って閉じる。
+			  見張りの上限（8）と購読者の上限（32）のどちらでも、`unavailable`（`busy`）を送って閉じる。
 			- どちらも Host を確かめ、Origin があれば同じオリジン（`http://<Host>`）だけを通す（ほかは 403）。CORS を付けない。GET のほかは 405。
 			- `/embed/agent` と、その script と css を静的なファイルとして配る。画面は既存の埋め込みの画面と同じ CSP（`default-src 'none'`、`script-src 'self'`、`style-src 'self'`、
 			  `connect-src 'self'`、frame-ancestors は読み取りのオリジンだけ、なければ 'none'）。

@@ -65,7 +65,7 @@ tests: {
 	"T-02": {title: "正規化で、本文、ツール、表示できない印が返り、思考が返らず、並べ替えず、長い本文を切る", verifies: ["R-01"]}
 	"T-03": {title: "before で、重ならない、より古いページが返り、agentSession の reset（ok: false）は古いページとして返さない（nativeChat と agentSession）", verifies: ["R-01"]}
 	"T-04": {title: "応答と誤りに、記録のパス、authToken、Orca の誤りの文が含まれない", verifies: ["R-01", "F-03"]}
-	"T-05": {title: "窓の差分が、追記、同じ id の更新、満ちた窓の前進、書き換え、巻き戻し、満ちていない窓での先頭の件の消失（replacement）を、appended と replacement に分ける", verifies: ["R-02", "F-02"]}
+	"T-05": {title: "窓の差分が、追記、同じ id の更新、満ちた窓の前進、書き換え、巻き戻し、hasMore が偽の窓での先頭の件の消失（件数が limit と同じ場合を含めて replacement）を、appended と replacement に分ける", verifies: ["R-02", "F-02"]}
 	"T-06": {title: "見張りが、購読者で読みを共有し、セッションの切り替えで replacement、読めないときに unavailable、回復で replacement を配り、最後の購読者で止まり、上限で busy を返す", verifies: ["R-02", "F-01", "F-02"]}
 	"T-07": {title: "誤りの種類（agent_not_found、no_session（状態の API の untabbed のエージェントを含む）、transcript_not_found、unsupported、unreachable、read_failed、unknown_shape）が区別した code と HTTP の状態で返り、0件は読めたときだけ", verifies: ["F-01"]}
 	"T-08": {title: "before のセッションの鍵が今と違えば 409 で読まない", verifies: ["F-02"]}
