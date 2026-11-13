@@ -97,7 +97,7 @@ design: {
 		satisfies: ["R-01", "R-02", "R-05", "F-01", "F-02", "F-03"]
 	}
 	"D-06": {
-		title: "詳細とチャットの画面（`web/embed/agent.html`、`agent-frame.js`、`agent-view.js`、`agent.css`）"
+		title: "詳細とチャットの画面（`web/embed/agent.html`、`agent-frame.js`、`agent-view.js`、`agent-dom.js`、`agent.css`）"
 		text: """
 			素の ES Modules。`agent-view.js` は純粋な関数で、DOM に触らない。
 
@@ -106,7 +106,7 @@ design: {
 			  見つからなければ `null`。取れない値は「—」と欠けた理由。PR のリンクは `https:` の URL のときだけ。値は view.js の `formatValue` を使う。
 			- `buildChat(messages)`：正規化した件から、描く行（吹き出し、ツールの折り畳み、表示できない印、system の本文の知らせの行（中央の小さな文字で、吹き出しにしない））を作る。ツールの結果は、同じ `callId` の呼び出しの行に入れる（なければ単独の行）。
 
-			`agent-frame.js` が DOM を作り、文字をすべて textContent で入れる。
+			`agent-dom.js` が行を DOM の要素にし、文字をすべて textContent で入れる（innerHTML を使わない）。`agent-frame.js` が読み込みと出来事の扱いを持ち、描くのは `agent-dom.js` に任せる。
 
 			- `/api/state` を5秒ごとに読み、詳細を描き直す。「Orca で開く」は `write.js` の短期のトークンで `/api/open` を送る。`matchMedia('(max-width: 390px)')` の間は出さない。
 			- `EventSource('/api/transcript/events?agent=…')` を開き、snapshot と replacement で全体を描き直し（前のページも捨てる）、appended で updated を同じ id の行に差し替え、items を末尾に足す。
@@ -122,7 +122,7 @@ design: {
 		satisfies: ["R-04"]
 	}
 	"D-08": {
-		title: "実機の確かめの道具（`src/tools/transcript-live.ts`、`npm run transcript:live`）"
+		title: "実機の確かめの道具（集計の純な部分は `src/tools/live-transcript.ts`、入口は `src/tools/transcript-live.ts`、`npm run transcript:live`）"
 		text: """
 			実物の Orca の読む口だけで、状態の API と同じ規則でエージェントを集め、D-01 と D-02 で読み、件数だけを出す：取得元とエージェントの種類ごとの、解けた数、読めた数、誤りの code ごとの数、
 			役割と部品の種類ごとの件数、落とした思考の件数、Orca の返す順で `transcriptOrder` が減らないか、2回の読みの差分の種類、前のページの読みが重ならないか。
