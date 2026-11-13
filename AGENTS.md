@@ -35,6 +35,7 @@ orca-web は、この Mac の Orca（stablyai/orca のデスクトップアプ�
 npm ci
 npm test            # node --test "test/**/*.test.ts"
 npm run lint        # biome check と tsc --noEmit（型の検査）
+make -s lint-quick FILES="<相対パス…>"  # 編集した分だけの biome check。編集時のフックが自動で呼ぶ
 npm run build       # tsc で dist/ に出す
 npm run format      # biome で整形する
 npm run probe:live  # この Mac の Orca で読むだけの確かめ（集計だけを出す）
