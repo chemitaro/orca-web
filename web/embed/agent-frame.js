@@ -150,6 +150,9 @@ const applyNarrow = () => {
 };
 applyNarrow();
 narrow.addEventListener('change', applyNarrow);
+// 狭い幅では、会話を広く見せるため、詳細を畳んで始める（押すと広げられる）。
+const detailBox = /** @type {HTMLDetailsElement} */ (document.getElementById('detail-box'));
+if (narrow.matches) detailBox.open = false;
 
 els.open.addEventListener('click', async () => {
   if (!detail?.open) return;
