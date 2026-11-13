@@ -123,7 +123,7 @@ design: {
 			1. `sendEnabled` が真でなければ `send_disabled`。
 			2. `checkText`。
 			3. 機能の確かめ（D-08）。つながらなければ `unreachable`。
-			4. タブの集合を読み、`resolveTarget`。runtime の ID は、タブの集合の応答の `runtimeId` が機能の確かめの値と同じときだけ使い、違えば `unreachable`（理由 `runtime_changed`）。
+			4. タブの集合を読み、`resolveTarget`。runtime の ID は、タブの集合の応答の `runtimeId` が null でなく、機能の確かめの値と同じときだけ使い、null なら `unreachable`、違えば `unreachable`（理由 `runtime_changed`）。
 			5. 経路の機能が使えなければ `unsupported`（`missing` を付ける）。
 			6. 端末なら `readTerminalStatus`：`isRunningAgent` が真でなければ `not_sendable`（`no_agent`）、`status` が `permission` なら `not_sendable`（`permission`）。構造化 Chat なら `readChatFence` が読めること。
 			7. 票を出し、`{ ticket, expiresAt, preview, text, digest }` を返す。
@@ -218,9 +218,3 @@ compatibility: """
 	状態の API、会話の API、開く口の形は変えない。機能の確かめの `features` から `sendGuarded` が消え、`sendTerminal` と `sendChat` が足される（内部の型。状態の文書には出していない。テストを直す）。
 	settings.json に `sendEnabled` が足される（ない間は今のまま送れない）。
 	"""
-
-risks: [
-	"端末の経路の残る隙は requirement の risks のとおり。D-06 の手順 6 から 8 の間を短く保つ",
-	"Chat の結果の形（`value.submission.dispatchState`、`value.queued.state`）は Orca のソースの型から決めた。構造化 Chat の実機の確かめができるまでは録画（手書き）だけで確かめる",
-	"`orchestration.requestShow` が、orca-web の Unix ソケットの呼び出しと同じ呼び手の鍵（ローカルの mutation の呼び手）で receipt を引けることは、実機の確かめ（S-07）で確かめる",
-]
