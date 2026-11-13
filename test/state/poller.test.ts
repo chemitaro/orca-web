@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { CapabilityReport } from '../../src/orca/capabilities.ts';
-import type { StateReader } from '../../src/orca/read-state.ts';
+import type { OrcaTask, StateReader } from '../../src/orca/read-state.ts';
 import { StatePoller } from '../../src/state/poller.ts';
 import { expectedState } from './expected.ts';
 import { ms, PRIVATE_PATHS, PRIVATE_TEXTS, WT1 } from './fixture.ts';
@@ -259,4 +259,125 @@ test('統括の worktree は terminals を優先し、なければ agents に結
   assert.equal((await make('unknown', 'empty'))?.coordinatorWorktreeId.missing, 'not-linked');
   assert.equal((await make(null, 'original'))?.coordinatorWorktreeId.missing, 'not-provided');
   assert.equal((await make('unknown', 'failed'))?.coordinatorWorktreeId.missing, 'source-failed');
+});
+
+test('今ある Run の統括の端末を採用し、決めた根拠を run とする', async () => {
+  const doc = await poller(await staticReader()).snapshot();
+  const run = doc.runs.find((r) => r.coordinatorHandle === 'term_uuid-12');
+  assert.ok(run);
+  assert.equal(run.activeCoordinatorHandle, 'term_uuid-12');
+  assert.equal(run.coordinatorResolvedBy, 'run');
+});
+
+function coordinatorTask(patch: Partial<OrcaTask> = {}): OrcaTask {
+  return {
+    id: 'task-current',
+    runId: 'run-current',
+    parentId: null,
+    deps: null,
+    title: '仮の依頼',
+    displayName: null,
+    status: null,
+    createdAt: '2026-01-02T10:00:00Z',
+    completedAt: null,
+    createdByTerminalHandle: 'term-current',
+    ...patch,
+  };
+}
+
+async function coordinatorReader(handle: string | null, tasks: OrcaTask[]) {
+  const reader = new CountingReader(await staticReader());
+  reader.overrides.runs = async () => ({
+    ok: true,
+    truncated: false,
+    data: [{ id: 'run-current', objective: '仮の統括', updatedAt: null, coordinatorHandle: handle }],
+  });
+  reader.overrides.tasks = async () => ({ ok: true, truncated: false, data: tasks });
+  reader.overrides.terminals = async () => ({
+    ok: true,
+    truncated: false,
+    data: [
+      { handle: 'term-current', worktreeId: 'wt-current', connected: true, lastOutputAt: null },
+      { handle: 'term-old', worktreeId: 'wt-old', connected: true, lastOutputAt: null },
+    ],
+  });
+  return reader;
+}
+
+test('閉じた統括は、同じ Run の親なし task のうち今ある作り手の最新の端末に結ぶ', async () => {
+  const reader = await coordinatorReader('term-closed', [
+    coordinatorTask(),
+    coordinatorTask({ id: 'old', createdAt: '2026-01-01T00:00:00Z', createdByTerminalHandle: 'term-old' }),
+    coordinatorTask({
+      id: 'child',
+      parentId: 'task-current',
+      createdAt: '2026-01-04T00:00:00Z',
+      createdByTerminalHandle: 'term-old',
+    }),
+    coordinatorTask({
+      id: 'other-run',
+      runId: 'run-other',
+      createdAt: '2026-01-05T00:00:00Z',
+      createdByTerminalHandle: 'term-old',
+    }),
+    coordinatorTask({ id: 'closed', createdAt: '2026-01-06T00:00:00Z', createdByTerminalHandle: 'term-closed' }),
+  ]);
+  const run = (await poller(reader).snapshot()).runs[0];
+  assert.ok(run);
+  assert.equal(run.coordinatorHandle, 'term-closed');
+  assert.equal(run.activeCoordinatorHandle, 'term-current');
+  assert.equal(run.coordinatorResolvedBy, 'latest-task');
+  assert.deepEqual(run.coordinatorWorktreeId, {
+    value: 'wt-current',
+    source: 'terminals',
+    field: 'worktreeId',
+    missing: null,
+  });
+});
+
+test('Run の端末が今あれば、新しい task の作り手より優先する', async () => {
+  const reader = await coordinatorReader('term-old', [coordinatorTask()]);
+  const run = (await poller(reader).snapshot()).runs[0];
+  assert.equal(run?.activeCoordinatorHandle, 'term-old');
+  assert.equal(run?.coordinatorResolvedBy, 'run');
+  assert.equal(run?.coordinatorWorktreeId.value, 'wt-old');
+});
+
+test('最新の依頼は時刻を正規化して比べ、同じ時刻なら id の順で最後に決める', async () => {
+  const tasks = [
+    coordinatorTask({ id: 'z-task', createdAt: '2026-01-02 10:00:00' }),
+    coordinatorTask({ id: 'a-task', createdAt: '2026-01-02T19:00:00+09:00', createdByTerminalHandle: 'term-old' }),
+    coordinatorTask({ id: 'zz-task', createdAt: '2026-01-02T18:59:59+09:00', createdByTerminalHandle: 'term-old' }),
+  ];
+  for (const ordered of [tasks, [...tasks].reverse()]) {
+    const reader = await coordinatorReader(null, ordered);
+    const run = (await poller(reader).snapshot()).runs[0];
+    assert.equal(run?.activeCoordinatorHandle, 'term-current');
+    assert.equal(run?.coordinatorResolvedBy, 'latest-task');
+  }
+});
+
+test('今ある端末に結べる親なし task がなければ、登録時の統括と null を保つ', async () => {
+  for (const handle of ['term-closed', null]) {
+    const reader = await coordinatorReader(handle, [
+      coordinatorTask({ createdByTerminalHandle: 'term-closed' }),
+      coordinatorTask({ id: 'no-creator', createdByTerminalHandle: null }),
+      coordinatorTask({ id: 'nested', parentId: 'task-current' }),
+    ]);
+    const run = (await poller(reader).snapshot()).runs[0];
+    assert.equal(run?.activeCoordinatorHandle, handle);
+    assert.equal(run?.coordinatorResolvedBy, null);
+    assert.equal(run?.coordinatorWorktreeId.missing, handle === null ? 'not-provided' : 'not-linked');
+  }
+});
+
+test('terminals が一度も読めなければ task の作り手を採用せず、登録時の統括と null を保つ', async () => {
+  for (const handle of ['term-closed', null]) {
+    const reader = await coordinatorReader(handle, [coordinatorTask()]);
+    reader.overrides.terminals = async () => ({ ok: false, error: { kind: 'exception', message: '仮の失敗' } });
+    const run = (await poller(reader).snapshot()).runs[0];
+    assert.equal(run?.activeCoordinatorHandle, handle);
+    assert.equal(run?.coordinatorResolvedBy, null);
+    assert.equal(run?.coordinatorWorktreeId.missing, handle === null ? 'not-provided' : 'source-failed');
+  }
 });

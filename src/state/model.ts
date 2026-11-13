@@ -132,6 +132,8 @@ export interface AgentState {
 
 export interface RunState {
   coordinatorHandle: string | null;
+  activeCoordinatorHandle: string | null;
+  coordinatorResolvedBy: 'run' | 'latest-task' | null;
   coordinatorWorktreeId: Fact<string>;
   id: string;
   title: Fact<string>;

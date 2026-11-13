@@ -63,7 +63,9 @@ export function buildRunTree(state: StateDocument, runId: string): RunTreeDocume
   const run = state.runs.find((r) => r.id === runId);
   if (!run) return null;
   const coordinator =
-    run.coordinatorHandle === null ? undefined : state.agents.find((a) => a.terminalHandle === run.coordinatorHandle);
+    run.activeCoordinatorHandle === null
+      ? undefined
+      : state.agents.find((a) => a.terminalHandle === run.activeCoordinatorHandle);
   const root = makeNode(
     state,
     `coordinator:${runId}`,
@@ -122,7 +124,12 @@ export function buildRunTree(state: StateDocument, runId: string): RunTreeDocume
   return {
     schema: RUN_TREE_SCHEMA,
     ...freshness(state),
-    run: { id: run.id, title: run.title.value, coordinatorProject: root.project },
+    run: {
+      id: run.id,
+      title: run.title.value,
+      coordinatorProject: root.project,
+      coordinatorResolvedBy: run.coordinatorResolvedBy,
+    },
     root,
     counts: {
       nodes: nodes.size + 1,
@@ -160,7 +167,9 @@ export function buildRunList(state: StateDocument, project: string | null): RunL
     }
     const coordinatorProject = tree.run.coordinatorProject;
     runs.push({
-      ...tree.run,
+      id: tree.run.id,
+      title: tree.run.title,
+      coordinatorProject,
       projects: [...runProjects.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
       workers: tree.counts.workers,
       otherProject: tree.counts.otherProject,

@@ -108,13 +108,14 @@ function detailHref(value) {
   return typeof value === 'string' && value.startsWith(DETAIL_PREFIX) ? value : null;
 }
 
-function nodeRow(node, depth, now) {
+function nodeRow(node, depth, now, coordinatorResolvedBy) {
   const projectName = node.project?.name ?? null;
   return {
     key: String(node.id),
     depth,
     role: node.role,
     roleLabel: ROLE_LABELS[node.role] ?? text(node.role),
+    coordinatorNote: depth === 0 && coordinatorResolvedBy === 'latest-task' ? '最近の依頼から決めた統括' : null,
     issue: text(node.issue),
     title: text(node.title),
     agentType: text(node.agentType),
@@ -130,12 +131,12 @@ function nodeRow(node, depth, now) {
 }
 
 /** 木を深さ優先にたどり、字下げの深さを持つ行の列にする。 */
-function flatten(root, now) {
+function flatten(root, now, coordinatorResolvedBy) {
   const rows = [];
   const stack = [[root, 0]];
   while (stack.length > 0) {
     const [node, depth] = stack.pop();
-    rows.push(nodeRow(node, depth, now));
+    rows.push(nodeRow(node, depth, now, coordinatorResolvedBy));
     const children = Array.isArray(node.children) ? node.children : [];
     for (let i = children.length - 1; i >= 0; i -= 1) stack.push([children[i], depth + 1]);
   }
@@ -156,7 +157,7 @@ export function buildTreeView(doc, options) {
     coordinatorProject: text(doc.run?.coordinatorProject?.name),
     summary: `節 ${counts.nodes ?? 0}・作業者 ${counts.workers ?? 0}・別のプロジェクト ${counts.otherProject ?? 0}・親が分からない ${counts.orphan ?? 0}`,
     freshness: sourceFreshness(doc, formatTime, options.error ?? null),
-    rows: doc.root ? flatten(doc.root, options.now) : [],
+    rows: doc.root ? flatten(doc.root, options.now, doc.run?.coordinatorResolvedBy) : [],
   };
 }
 

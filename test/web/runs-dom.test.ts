@@ -97,14 +97,14 @@ function node(patch: Record<string, unknown>) {
   };
 }
 
-function dangerousTree() {
+function dangerousTree(coordinatorResolvedBy: 'run' | 'latest-task' | null = null) {
   const doc = {
     schema: 'orca-web.run-tree/v1',
     generatedAt: '2026-01-02T10:00:00.000Z',
     stale: false,
     connection: { state: 'connected', reason: null, checkedAt: null },
     sources,
-    run: { id: 'run-a', title: DANGER, coordinatorProject: null },
+    run: { id: 'run-a', title: DANGER, coordinatorProject: null, coordinatorResolvedBy },
     root: node({
       id: 'coordinator:run-a',
       role: 'coordinator',
@@ -121,6 +121,19 @@ function dangerousTree() {
   };
   return buildTreeView(doc as never, { now: 0, formatTime: (s: string) => s });
 }
+
+test('最近の依頼から決めた統括の根だけに、小さな添え書きを描く', () => {
+  for (const resolvedBy of ['latest-task', 'run', null] as const) {
+    const ul = renderTree(fakeDocument, dangerousTree(resolvedBy).rows) as unknown as FakeElement;
+    const notes = ul.all().filter((el) => el.tagName === 'SMALL');
+    assert.equal(notes.length, resolvedBy === 'latest-task' ? 1 : 0);
+    if (resolvedBy === 'latest-task') {
+      assert.equal(notes[0]?.textContent, '最近の依頼から決めた統括');
+      assert.ok(ul.children[0]?.all().includes(notes[0] as FakeElement));
+      assert.ok(ul.children.slice(1).every((li) => !li.textContent.includes('最近の依頼から決めた統括')));
+    }
+  }
+});
 
 test('木の行は textContent だけで描き、<script> の題名やプロジェクト名が要素にならず、字下げを --depth で持つ', () => {
   const ul = renderTree(fakeDocument, dangerousTree().rows) as unknown as FakeElement;

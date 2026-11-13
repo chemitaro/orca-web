@@ -10,10 +10,13 @@ export function reading(value: string | null): ReadingFact {
 }
 
 export function run(patch: Partial<RunState> = {}): RunState {
+  const handle = patch.coordinatorHandle === undefined ? 'term-root' : patch.coordinatorHandle;
   return {
     id: 'run-a',
     title: fact('仮の iss-18 統括'),
-    coordinatorHandle: 'term-root',
+    coordinatorHandle: handle,
+    activeCoordinatorHandle: handle,
+    coordinatorResolvedBy: handle === null ? null : 'run',
     coordinatorWorktreeId: fact('wt-a'),
     ...patch,
   };

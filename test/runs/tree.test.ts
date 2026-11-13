@@ -3,6 +3,38 @@ import { test } from 'node:test';
 import { buildRunList, buildRunTree } from '../../src/runs/tree.ts';
 import { agent, fact, reading, repo, run, state, task, worker, worktree } from './fixture.ts';
 
+test('木の根は今の統括のエージェントに結び、決め方と別プロジェクトの札を返す', () => {
+  const source = state({
+    runs: [
+      run({
+        coordinatorHandle: 'term-past',
+        activeCoordinatorHandle: 'term-current',
+        coordinatorResolvedBy: 'latest-task',
+      }),
+    ],
+    repos: [repo('repo-a', '仮の統括プロジェクト'), repo('repo-b', '仮の作業プロジェクト')],
+    worktrees: [worktree(), worktree({ id: 'wt-b', repoId: 'repo-b' })],
+    agents: [
+      agent('past', { terminalHandle: 'term-past', model: reading('past-model') }),
+      agent('current', { terminalHandle: 'term-current', model: reading('current-model'), effort: reading('high') }),
+    ],
+    workers: [worker({ worktreeId: fact('wt-b') })],
+  });
+  const doc = buildRunTree(source, 'run-a');
+  assert.ok(doc);
+  assert.equal(doc.root.agentId, 'current');
+  assert.equal(doc.root.model, 'current-model');
+  assert.equal(doc.root.effort, 'high');
+  assert.equal(doc.root.links.detail, '/embed/agent?id=current');
+  assert.equal(doc.run.coordinatorResolvedBy, 'latest-task');
+  assert.deepEqual(doc.run.coordinatorProject, { id: 'repo-a', name: '仮の統括プロジェクト' });
+  assert.equal(doc.root.children[0]?.otherProject, true);
+  assert.equal(doc.counts.otherProject, 1);
+  assert.equal(doc.counts.nodes, 2);
+  const list = buildRunList(source, 'repo-b');
+  assert.deepEqual(list.runs[0]?.fromOtherProject, { id: 'repo-a', name: '仮の統括プロジェクト' });
+});
+
 test('統括を根にしてその Run の worker だけを task の親子に結ぶ', () => {
   const doc = buildRunTree(
     state({

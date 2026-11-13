@@ -226,12 +226,16 @@ export const expectedState = {
     {
       id: 'run_hex-3',
       coordinatorHandle: 'term_uuid-12',
+      activeCoordinatorHandle: 'term_uuid-12',
+      coordinatorResolvedBy: 'run',
       coordinatorWorktreeId: f(WT1, 'terminals', 'worktreeId'),
       title: f('text-8', 'runs', 'objective'),
     },
     {
       id: 'run_hex-4',
       coordinatorHandle: null,
+      activeCoordinatorHandle: null,
+      coordinatorResolvedBy: null,
       coordinatorWorktreeId: m('terminals', 'worktreeId', 'not-provided'),
       title: f('text-9', 'runs', 'objective'),
     },

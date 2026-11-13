@@ -116,6 +116,16 @@ test('木の行は深さの順に並び、役割・Issue・題名・種類・モ
   assert.equal(view.summary, '節 4・作業者 3・別のプロジェクト 1・親が分からない 1');
 });
 
+test('最近の依頼で決めた統括だけ、根の行に決め方を添える', () => {
+  const doc = treeDocument();
+  for (const resolvedBy of ['latest-task', 'run', null] as const) {
+    doc.run.coordinatorResolvedBy = resolvedBy;
+    const view = buildTreeView(doc, { now: 0, formatTime: iso });
+    assert.equal(view.rows[0].coordinatorNote, resolvedBy === 'latest-task' ? '最近の依頼から決めた統括' : null);
+    assert.ok(view.rows.slice(1).every((row: { coordinatorNote: string | null }) => row.coordinatorNote === null));
+  }
+});
+
 test('統括の端末が分からない木は、根の項目を「—」にし、知らない状態の値はそのまま出し、決めた形でない詳細のリンクは捨てる', () => {
   const doc = buildRunTree(
     state({

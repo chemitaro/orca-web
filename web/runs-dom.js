@@ -24,6 +24,7 @@ export function renderTreeRow(doc, row) {
 
   const head = make(doc, 'div', null, 'meta');
   head.append(make(doc, 'span', row.roleLabel, 'role'));
+  if (row.coordinatorNote) head.append(make(doc, 'small', row.coordinatorNote));
   head.append(make(doc, 'span', row.issue, 'issue'));
   head.append(make(doc, 'span', row.project, 'project-name'));
   if (row.badge) head.append(make(doc, 'span', row.badge, 'badge'));

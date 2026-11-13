@@ -1,4 +1,4 @@
-import type { Connection, SourceStatus } from '../state/model.ts';
+import type { Connection, RunState, SourceStatus } from '../state/model.ts';
 
 export const RUN_TREE_SCHEMA = 'orca-web.run-tree/v1';
 export const RUN_LIST_SCHEMA = 'orca-web.runs/v1';
@@ -41,7 +41,12 @@ interface RunFreshness {
 
 export interface RunTreeDocument extends RunFreshness {
   schema: typeof RUN_TREE_SCHEMA;
-  run: { id: string; title: string | null; coordinatorProject: RunProject | null };
+  run: {
+    id: string;
+    title: string | null;
+    coordinatorProject: RunProject | null;
+    coordinatorResolvedBy: RunState['coordinatorResolvedBy'];
+  };
   root: RunNode;
   counts: { nodes: number; workers: number; otherProject: number; orphan: number };
 }

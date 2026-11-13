@@ -488,13 +488,6 @@ export function normalizeState(input: NormalizeInput): StateDocument {
     if (agent) return first([[agent.worktreeId, 'tabs', 'worktree']]);
     return missingFact('terminals', 'worktreeId', sources.terminals.data === null ? 'source-failed' : 'not-linked');
   };
-  const runs: RunState[] = (sources.runs.data ?? []).map((r) => ({
-    id: r.id,
-    coordinatorHandle: r.coordinatorHandle,
-    coordinatorWorktreeId: coordinatorWorktree(r.coordinatorHandle),
-    title: first([[clipTitle(r.objective), 'runs', 'objective']]),
-  }));
-
   const tasks: TaskState[] = (sources.tasks.data ?? []).map((t) => {
     let deps: Fact<string[]>;
     if (t.deps === null) deps = first<string[]>([[null, 'tasks', 'deps']]);
@@ -531,6 +524,35 @@ export function normalizeState(input: NormalizeInput): StateDocument {
       (a.createdAt.value ?? '').localeCompare(b.createdAt.value ?? '') ||
       a.id.localeCompare(b.id),
   );
+
+  const runs: RunState[] = (sources.runs.data ?? []).map((r) => {
+    let activeCoordinatorHandle = r.coordinatorHandle;
+    let coordinatorResolvedBy: RunState['coordinatorResolvedBy'] = null;
+    if (r.coordinatorHandle !== null && terminalsByHandle.has(r.coordinatorHandle)) {
+      coordinatorResolvedBy = 'run';
+    } else {
+      // tasks は Run、正規化した時刻、id の順。最後の候補が今の統括。
+      const latest = tasks.findLast(
+        (t) =>
+          t.runId === r.id &&
+          t.parentId.value === null &&
+          t.createdByTerminalHandle !== null &&
+          terminalsByHandle.has(t.createdByTerminalHandle),
+      );
+      if (latest) {
+        activeCoordinatorHandle = latest.createdByTerminalHandle;
+        coordinatorResolvedBy = 'latest-task';
+      }
+    }
+    return {
+      id: r.id,
+      coordinatorHandle: r.coordinatorHandle,
+      activeCoordinatorHandle,
+      coordinatorResolvedBy,
+      coordinatorWorktreeId: coordinatorWorktree(activeCoordinatorHandle),
+      title: first([[clipTitle(r.objective), 'runs', 'objective']]),
+    };
+  });
 
   const workers: WorkerState[] = (sources.workers.data ?? []).map((w) => ({
     dispatchId: w.dispatchId,
