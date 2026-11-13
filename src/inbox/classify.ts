@@ -2,6 +2,14 @@ import type { AgentState } from '../state/model.ts';
 import type { BuildInboxInput, InboxDocument, InboxItem, InboxMessage, InboxStage } from './model.ts';
 import { INBOX_SCHEMA } from './model.ts';
 
+export type AgentMark = 'working' | 'blocked' | 'waiting' | 'done' | 'sleeping' | 'unknown';
+
+export function agentMark(agent: AgentState): AgentMark {
+  const state = agent.state.value;
+  if (state === 'working' || state === 'blocked' || state === 'waiting' || state === 'done') return state;
+  return state === null && agent.terminal.value === 'awaiting-restore' ? 'sleeping' : 'unknown';
+}
+
 const STAGES: readonly InboxStage[] = ['needs_action', 'stalled', 'running', 'unknown', 'finished'];
 
 function oneLine(value: string | null | undefined): string | null {
@@ -67,8 +75,9 @@ function agentItem(agent: AgentState, input: BuildInboxInput): InboxItem {
     missing: [],
     mail: [],
   };
-  if (agent.state.value === 'blocked' || agent.state.value === 'waiting') {
-    item.reasons.push(agent.state.value);
+  const mark = agentMark(agent);
+  if (mark === 'blocked' || mark === 'waiting') {
+    item.reasons.push(mark);
   }
   for (const type of ['question', 'decision_gate'] as const) {
     const messages = input.mail.messages.filter(
@@ -90,14 +99,14 @@ function agentItem(agent: AgentState, input: BuildInboxInput): InboxItem {
     return item;
   }
   if (
-    agent.state.value === 'working' &&
+    mark === 'working' &&
     agent.lastOutputAt.value !== null &&
     input.now - Date.parse(agent.lastOutputAt.value) >= input.stallMs
   ) {
     item.reasons.push('no_output');
   }
   if (
-    agent.state.value !== 'done' &&
+    mark !== 'done' &&
     agent.terminal.value !== null &&
     !['attached', 'awaiting-restore'].includes(agent.terminal.value)
   ) {
@@ -105,13 +114,13 @@ function agentItem(agent: AgentState, input: BuildInboxInput): InboxItem {
   }
   if (item.reasons.length > 0) {
     item.stage = 'stalled';
-  } else if (agent.state.value === 'working') {
+  } else if (mark === 'working') {
     item.stage = 'running';
     item.reasons.push('working');
-  } else if (agent.state.value === 'done') {
+  } else if (mark === 'done') {
     item.stage = 'finished';
     item.reasons.push('done');
-  } else if (agent.state.value === null && agent.terminal.value === 'awaiting-restore') {
+  } else if (mark === 'sleeping') {
     item.stage = 'finished';
     item.reasons.push('sleeping');
   } else {
