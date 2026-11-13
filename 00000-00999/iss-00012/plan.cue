@@ -46,6 +46,6 @@ execution: {
 	reviews: {
 		spec: {role: "仕様のレビュー（spec-reviewer）", after: "S-01", model: "opus", effort: "medium"}
 		code: {role: "コードのレビュー（code-reviewer）", after: "S-07", model: "sonnet", effort: "high"}
-		gate: {role: "最終品質ゲート（quality-gate-reviewer、1人）", after: "S-07", model: "opus", effort: "high"}
+		gate: {role: "最終品質ゲート（quality-gate-reviewer、1人。観点に security-baseline を足す。ChatGPT は統括の指示で使わない）", after: "S-07", model: "opus", effort: "high"}
 	}
 }
