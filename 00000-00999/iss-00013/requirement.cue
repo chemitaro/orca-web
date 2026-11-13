@@ -221,6 +221,7 @@ risks: [
 	"構造化 Chat の結果の形（`value.submission.dispatchState`、`value.queued.state`）は Orca のソースの型から決めた。構造化 Chat の実機の確かめができるまでは録画（手書き）だけで確かめる",
 	"`orchestration.requestShow` が、orca-web の Unix ソケットの呼び出しと同じ呼び手の鍵（ローカルの mutation の呼び手）で receipt を引けることは、実機の確かめ（S-10、応答を捨てる場面）で確かめる",
 	"権限の確認待ちの端末を拒むことは、検証用の宛先で安全に作れないので、録画と再生だけで確かめる",
+	"項目の選択の保存は、設定のファイルを比べてから入れ替えるが、直前の読みと入れ替えの間（マイクロ秒）に手で sendEnabled を書き換えると、その書き換えが上書きされうる。止めたいときは、書き換えた後に送れるかの口（画面の送る欄）で止まったことを確かめる（README に書く）",
 ]
 
 decisions: [
@@ -230,6 +231,7 @@ decisions: [
 	"2026-11-13 統括の判断（Q4）：実機の送り先は worktree send-test の Claude（term_33f82ee2…）と Codex（term_0787c5d8…）の2つだけ。構造化 Chat の検証用のセッションは本人に頼み、用意できたら知らせる。それまでは録画と再生",
 	"2026-11-13 タスク担当：操作の ID は意図のときに作って票に結び付け、意図の応答で返す（仕様のレビュー round 1 の P1。確定の応答を失っても照会できるように）。形は `<13桁のミリ秒>-<32桁の16進>`（構造化 Chat の clientOperationId の形。端末の orchestrationRequestId は任意の文字列を受けるので同じ形を使う。Orca は 24 時間より古い clientOperationId を拒むが、票の期限は 60 秒）",
 	"2026-11-13 タスク担当：送る前の確かめに `terminal.inspectProcess` の前面のプロセスがシェルでないことを足す（仕様のレビュー round 1 の P1。`terminal.agentStatus` は題名だけでエージェントありと返す枝がある）。残る隙を risks に書き直した。統括が了承した（2026-11-13、msg_0d4cef153a1c）",
+	"2026-11-13 タスク担当（仕様のレビュー round 3 の P1）：照会は、await の前に処理中の判定と票の取り消しを済ませてから記録を読む。確定のときの宛先の消失（タブがない、runtime の変化、スリープ）は 409 `target_changed` にする。端末の receipt の provider が確かめたエージェントの種類と違えば unknown（`agent_mismatch`）にする。項目の保存は設定のファイルを比べてから入れ替える",
 	"2026-11-13 タスク担当：構造化 Chat のスリープは送る前に拒まない。Orca v1.4.258 で、スリープの印 `sleptAt` は購読の口（`agentSession.subscribeStatus`）の要約だけにあり、Unix ソケットで使える読む口（`session.tabs.listAll` の `chatStatus`、`agentSession.history`）にはない。送ると、Orca の画面の入力欄から送るのと同じく Orca が扱う（受けない場合は Orca が拒み、refused になる）。端末のスリープは PTY がなく送れないので拒む",
 	"2026-11-13 タスク担当：記録のない ID の照会は、処理の途中なら in_progress、そうでなければその ID の票を取り消してから not_sent と答える（仕様のレビュー round 2 の P1。照会の後に届いた確定が送ると、「送っていない」を信じた利用者の再送と二重になる）",
 	"2026-11-13 タスク担当：送った後の結果は、記録がある限り HTTP 200 で返し、5つの区別を `outcome` で示す（refused と unknown も 200）。送る前に止めたものだけを 4xx・5xx にする",

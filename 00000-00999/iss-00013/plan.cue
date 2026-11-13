@@ -36,7 +36,7 @@ steps: {
 	}
 	"S-04": {
 		title:    "送る経路のアダプターと結果の分け方と指紋（D-04）"
-		text:     "対象：`src/orca/send.ts`（新規）。確かめ：T-07、T-08、T-09。完了：`node --test test/orca/send.test.ts` が通り、D-04 の表の各行、readForeground のシェルの判定（Orca の isShellProcess と同じ例）、checkChat の sendRecorded の真から history を探す分け方、指紋の固定の値（Orca v1.4.258 の canonicalize を写した手計算の値）、送る関数が再試行しないこと（時間切れでも1回）、照会が送る RPC を呼ばないことのテストがある。区切りのレビュー：なし"
+		text:     "対象：`src/orca/send.ts`（新規）。確かめ：T-07、T-08、T-09。完了：`node --test test/orca/send.test.ts` が通り、D-04 の表の各行、readForeground のシェルの判定（Orca の isShellProcess と同じ例）、receipt の provider が宛先の種類と違うときの unknown（agent_mismatch）、checkChat の sendRecorded の真から history を探す分け方、指紋の固定の値（Orca v1.4.258 の canonicalize を写した手計算の値）、送る関数が再試行しないこと（時間切れでも1回）、照会が送る RPC を呼ばないことのテストがある。区切りのレビュー：なし"
 		realizes: ["R-02", "R-03", "R-05", "F-02", "F-03", "F-04"]
 		after:    ["S-03"]
 		status:   "todo"
@@ -44,7 +44,7 @@ steps: {
 	}
 	"S-05": {
 		title:    "送信の記録と sendEnabled（D-05、D-07）"
-		text:     "対象：`src/send/journal.ts`（新規）、`src/state/settings.ts`。確かめ：T-10、T-11。完了：`node --test test/send/journal.test.ts test/state/settings.test.ts` が通り、権限（0700、0600）、before の datasync の後に戻ること、書けないときに投げること、after と check のメモリーの持ち方、after のない before が unknown になること、壊れた行を飛ばすこと、sendEnabled の各場合（なし、偽、壊れたファイル、version 違い、真）と、保存で消えないこと、版の違うファイルや壊れたファイルの上の保存が sendEnabled を書かないことのテストがある。テストは一時のディレクトリだけを使う。区切りのレビュー：なし"
+		text:     "対象：`src/send/journal.ts`（新規）、`src/state/settings.ts`。確かめ：T-10、T-11。完了：`node --test test/send/journal.test.ts test/state/settings.test.ts` が通り、権限（0700、0600）、before の datasync の後に戻ること、書けないときに投げること、after と check のメモリーの持ち方、after のない before が unknown になること、壊れた行を飛ばすこと、sendEnabled の各場合（なし、偽、壊れたファイル、version 違い、真）と、保存で消えないこと、版の違うファイルや壊れたファイルの上の保存が sendEnabled を書かないこと、保存の途中でファイルが書き換わったら（偽の読みで）やり直して書き換えを上書きしないことのテストがある。テストは一時のディレクトリだけを使う。区切りのレビュー：なし"
 		realizes: ["R-04", "R-06", "F-06"]
 		after:    ["S-04"]
 		status:   "todo"
@@ -52,7 +52,7 @@ steps: {
 	}
 	"S-06": {
 		title:    "送信の処理（D-06）"
-		text:     "対象：`src/send/service.ts`（新規）。確かめ：T-12、T-13、T-23、T-24。完了：`node --test test/send/service.test.ts` が通り、intent と confirm の各手順の止まり方（送る RPC が0回。シェルが前面、前面が読めない、state_out_of_date を含む）、意図の応答に操作の ID があり確定がその ID で記録すること、確定の届かなかった ID の照会が not_sent でその後の確定を送らないこと、take の後で送る前の ID の照会が in_progress になること、method_not_found の後に同じ runtime の間その経路が unsupported になり runtime が変わると戻ること、成功で送る RPC がちょうど1回、同時の2つの確定で1回、同じ票の2回目、本文の違い、宛先の各変化、sendEnabled の偽、before の書き込みの失敗、after の書き込みの失敗、check が unknown のときだけ照会して送る RPC を呼ばないこと、のテストがある。ここで二重送信を防ぐ契約が決まるので、区切りのレビュー CP-1 の最後の手順にする。止まって HEAD を報告する"
+		text:     "対象：`src/send/service.ts`（新規）。確かめ：T-12、T-13、T-23、T-24。完了：`node --test test/send/service.test.ts` が通り、intent と confirm の各手順の止まり方（送る RPC が0回。シェルが前面、前面が読めない、state_out_of_date を含む）、意図の応答に操作の ID があり確定がその ID で記録すること、確定の届かなかった ID の照会が not_sent でその後の確定を送らないこと、take の後で送る前の ID の照会が in_progress になること、照会の記録の読みが遅れて解ける間に確定が送り終えても not_sent を返さないこと（読みを遅らせる偽の記録で）、確定のときのタブの消失と runtime の変化が 409 target_changed になること、method_not_found の後に同じ runtime の間その経路が unsupported になり runtime が変わると戻ること、成功で送る RPC がちょうど1回、同時の2つの確定で1回、同じ票の2回目、本文の違い、宛先の各変化、sendEnabled の偽、before の書き込みの失敗、after の書き込みの失敗、check が unknown のときだけ照会して送る RPC を呼ばないこと、のテストがある。ここで二重送信を防ぐ契約が決まるので、区切りのレビュー CP-1 の最後の手順にする。止まって HEAD を報告する"
 		realizes: ["R-01", "R-02", "R-04", "R-05", "R-06", "F-01", "F-02", "F-03", "F-05", "F-06"]
 		after:    ["S-05"]
 		status:   "todo"

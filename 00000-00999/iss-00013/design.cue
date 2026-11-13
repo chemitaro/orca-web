@@ -65,7 +65,7 @@ design: {
 			- `sendChat(target, text, operationId, fence)`：`body = { kind: "message", role: "user", blocks: [{ type: "text", text }] }`、`payloadFingerprint = chatFingerprint(target.sessionId, body)`、envelope `{ sessionId, clientOperationId: operationId, expectedRuntimeFence: fence, payloadFingerprint }`、時間切れ 15 秒。
 			- `chatFingerprint(sessionId, body)`：`sha256_hex(canonicalize({ method: "agentSession.send", sessionId, fields: { body } }))`。`canonicalize` は Orca v1.4.258 の `agent-session-mutation-envelope.ts` と同じ（値が undefined の鍵を落とし、鍵を UTF-16 の符号の順に並べ、空白なしの JSON。配列は順のまま、原始の値と null は `JSON.stringify`）。
 
-			**結果の分け方** `classifyTerminal(outcome)`、`classifyChat(outcome)` は RPC の結果から `{ outcome, detail }` を返す。detail は決めた鍵だけ（`code`、`method`、`refusedReason`、`stages`、`provider`、`observation`、`dispatchState`、`queuedState`、`replayed`、`warning`）。Orca の誤りの文は入れない。
+			**結果の分け方** `classifyTerminal(outcome, target)`、`classifyChat(outcome)` は RPC の結果から `{ outcome, detail }` を返す。detail は決めた鍵だけ（`code`、`method`、`refusedReason`、`stages`、`provider`、`observation`、`dispatchState`、`queuedState`、`replayed`、`warning`）。Orca の誤りの文は入れない。
 			原則：Orca が何も書いていないと確かに言えるものだけを refused にし、まだ届きうるものを accepted、届いたと確かめたものを submitted・input_accepted、それ以外を unknown にする。
 
 			| 経路 | RPC の結果 | outcome | detail |
@@ -78,7 +78,8 @@ design: {
 			| 端末 | そのほかの Orca の誤り（`terminal_handle_stale`、`operation_unknown` を含む。本文を書いた後にも起きうる） | unknown | `code` |
 			| 端末 | 受けた、`send.prompt` がない、または provider が `unsupported`・`old-host` | unknown | `warning: "agent_not_verified"`（要確認） |
 			| 端末 | 受けた、observation が `incarnation_replaced` | unknown | `observation` |
-			| 端末 | 受けた、provider が claude・codex・antigravity、stages に `turn_started` | submitted | `stages`、`provider`、`observation` |
+			| 端末 | 受けた、provider が claude・codex・antigravity だが `target.agentType` と違う | unknown | `provider`、`warning: "agent_mismatch"`（確かめたのと別のエージェントに書いたかもしれない） |
+			| 端末 | 受けた、provider が `target.agentType` と同じ、stages に `turn_started` | submitted | `stages`、`provider`、`observation` |
 			| 端末 | 同上で stages が `input_accepted` だけ | input_accepted | 同上（observation が `permission` なら `warning: "permission_after_submit"`） |
 			| Chat | `ok: false` の refusal（受け入れの前に拒んだ） | refused | `code` |
 			| Chat | `value.queued` の state が `waiting`・`returned`（カードがまだ送られうる） | accepted | `queuedState` |
@@ -93,7 +94,7 @@ design: {
 			`replayed: true` が返ったとき（新しい ID では起きないはず）は、上の分け方に `replayed: true` を添える。
 
 			**照会**（読むだけ）
-			- `checkTerminal(operationId)`：`orchestration.requestShow { request: operationId }`。`completed` で receipt に `send` があれば、その receipt を上の端末の表で分けて返す。`pending` は unknown（`code: "orca_pending"`）、`absent` は unknown（`code: "orca_absent"`。届いていない証拠ではない）。
+			- `checkTerminal(target, operationId)`：`orchestration.requestShow { request: operationId }`。`completed` で receipt に `send` があれば、その receipt を上の端末の表で（記録の before の宛先を target として）分けて返す。`pending` は unknown（`code: "orca_pending"`）、`absent` は unknown（`code: "orca_absent"`。届いていない証拠ではない）。
 			- `checkChat(target, operationId)`：`agentSession.sendRecorded { sessionId, clientMessageId: operationId }`。偽は unknown（`code: "orca_not_recorded"`）。真なら続けて `agentSession.history { sessionId, direction: "tail", limit: 200 }` の `page.queuedMessages` から `messageId` が操作の ID のカード、なければ `page.submissions` から `clientMessageId` が操作の ID のもの、なければ `queuedMessageId` が操作の ID のもの（カードから渡したもの。`submittedSequence` が最大のもの）を探し、あれば上の Chat の表で分ける（`page.sessionId` が違えば探さない）。見つからなければ unknown（`code: "orca_recorded"`。Orca は受けた記録を持つが、届いたかは分からない）。
 			"""
 		satisfies: ["R-02", "R-03", "R-05", "F-02", "F-03", "F-04"]
@@ -139,12 +140,12 @@ design: {
 			2. `sendEnabled` が真でなければ `send_disabled`（票は消費しない）。
 			3. `TicketStore.take` と、取り出せたときの処理中の印（`inFlight` の集合に操作の ID を足す）を、同じ同期の処理の中で行う（間に await を入れない）。なければ・期限切れなら `ticket_invalid`（reason `unknown` か `expired`）。ここから先、票は使い済みで、記録は票の操作の ID で書く。処理中の印は、手順 8 の後か、送る前に止めて `appendRefused` を書いた後に（成功・失敗によらず `finally` で）外す。
 			4. `checkText(text)` と `digestText(text) === 票の digest`。違えば `target_changed`（種類 `text_changed`）。
-			5. `preflight` をやり直し、その宛先と票の宛先を `compareTargets`。違えば `target_changed`（種類つき）。preflight の誤りはそのまま返す。
+			5. `preflight` をやり直し、その宛先と票の宛先を `compareTargets`。違えば `target_changed`（種類つき）。preflight の誤りのうち、宛先が消えたか変わったことを示すもの（`agent_not_found` は種類 `tab_gone`、`unreachable` の理由 `runtime_changed` は種類 `runtime_changed`、`not_sendable` の reason `asleep`・`untabbed`・`no_session`・`identity_unavailable`・`state_out_of_date` は同じ名前の種類）は `target_changed` にする。`not_sendable` の `no_agent`・`permission`・`shell_foreground`・`foreground_unknown` はそのまま `not_sendable`（409）。つながらない `unreachable` は 503 のまま。どれも送らない。
 			6. `appendBefore`（票の操作の ID）。失敗したら `record_failed`（送らない）。
 			7. 経路の送る関数を1回だけ呼び（構造化 Chat は手順 5 で読んだ fence を使う）、`classifyTerminal`／`classifyChat` で分ける。
 			8. `appendAfter`。失敗したら応答に `recordWarning: "after_record_failed"` を付ける。`{ operationId, outcome, detail }` を返す。
 
-			**`check(operationId, { query })`**：記録を `read` する。記録がなければ、`inFlight` にその ID があれば `{ state: "in_progress" }`、なければ `TicketStore.cancelByOperation` を呼んでから `{ state: "not_sent" }`（この2つの判定と取り消しを同じ同期の処理の中で行う）。記録があれば `{ state: "recorded", record }`。query が真で今の outcome が unknown で、before があるときだけ、経路の照会（`checkTerminal`、`checkChat`）を1回呼び、`appendCheck` して、記録を読み直して返す。Orca に届かなければ check を足さず、`checkError: "unreachable"` を付けて返す。送る関数は呼ばない。
+			**`check(operationId, { query })`**：最初に、await の前の同じ同期の処理の中で、(a) `inFlight` にその ID があれば `{ state: "in_progress" }` と決め、(b) なければ `TicketStore.cancelByOperation` で票を取り消す。(b) の後は、その ID を新しく送る確定は始まりえない（票がなく、取り出し済みの確定は inFlight にあるため）。そのうえで記録を `read` し、記録があれば `{ state: "recorded", record }`、なければ `{ state: "not_sent" }`。inFlight の印は `appendAfter`（または `appendRefused`）を書き終えてから外すので、(a) で処理中でないと決めた ID の記録は、その後の read で必ず見える。query が真で今の outcome が unknown で、before があるときだけ、経路の照会（`checkTerminal`、`checkChat`）を1回呼び、`appendCheck` して、記録を読み直して返す。Orca に届かなければ check を足さず、`checkError: "unreachable"` を付けて返す。送る関数は呼ばない。
 
 			確定の手順 5 の読みから 7 の送信までの間に、記録の書き込みのほかの await を入れない。それでも残る隙は requirement の risks のとおり。
 			"""
@@ -154,7 +155,8 @@ design: {
 		title: "送信を止める設定（`src/state/settings.ts`）"
 		text: """
 			`SettingsStore.readSendEnabled(): Promise<boolean>` が、呼ぶたびに設定のファイルを読み、JSON の最上位の `sendEnabled === true` のときだけ真を返す。ファイルがない、読めない、JSON でない、`version` が 1 でない、`sendEnabled` が真の真偽でないときは偽。例外を投げない。
-			`saveSelected` は、書く前にファイルを読み、そのファイルが JSON で `version` が 1 で `sendEnabled` が真偽のときだけ、その値を残して書く（`{ version: 1, fields, sendEnabled? }`）。それ以外（ない、読めない、壊れている、版が違う）は `sendEnabled` を書かない（送れない側に倒す。版の違うファイルの `sendEnabled: true` を項目の保存が有効にしないため）。項目の選択を読む `load` の振る舞いは変えない。HTTP に `sendEnabled` を変える口を作らない。
+			`saveSelected` は、書く前にファイルを読み、そのファイルが JSON で `version` が 1 で `sendEnabled` が真偽のときだけ、その値を残して書く（`{ version: 1, fields, sendEnabled? }`）。それ以外（ない、読めない、壊れている、版が違う）は `sendEnabled` を書かない（送れない側に倒す。版の違うファイルの `sendEnabled: true` を項目の保存が有効にしないため）。
+			手で書き換えた停止を項目の保存が上書きしないよう、比べてから入れ替える：最初に読んだファイルの中身（バイト列。なければ「ない」）を覚え、一時ファイルを書いた後、`rename` の直前にもう一度読み、違えば一時ファイルを消して最初からやり直す（3回まで。3回とも違えば保存の誤りにする）。直前の読みと rename の間の隙は残る（requirement の risks）。項目の選択を読む `load` の振る舞いは変えない。HTTP に `sendEnabled` を変える口を作らない。
 			"""
 		satisfies: ["R-06"]
 	}
