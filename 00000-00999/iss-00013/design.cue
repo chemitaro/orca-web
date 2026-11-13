@@ -57,7 +57,7 @@ design: {
 
 			**送る前の読み**
 			- `readTerminalStatus(handle)`：`terminal.agentStatus { terminal: handle }`。`{ ok, isRunningAgent, status }` か、誤り（`unreachable`、`unsupported`（method_not_found）、`terminal_gone`（`terminal_handle_stale`、`terminal_not_found`、`terminal_gone`、`terminal_exited`）、`unknown_shape`）。
-			- `readForeground(handle, incarnationId, agentType)`：`terminal.inspectProcess { terminal: handle, expectedIncarnationId: incarnationId }`。`process.foregroundProcess` が空でない文字なら `{ ok, isShell, matchesAgent }`。`isShell` は Orca v1.4.258 の `shell-process-detection.ts` の `isShellProcess` と同じ規則（前後の引用符を除き小文字にし、パスの最後の部分と、`.exe`・`.cmd`・`.bat`・`.ps1` を除いた名前のどれかが、bash、zsh、sh、fish、cmd、powershell、pwsh、nu、ksh、mksh、dash、ash、tcsh、csh、elvish、xonsh（と `.exe` つき）に当たる）。`matchesAgent` は Orca v1.4.258 の `agent-process-recognition.ts` の `normalizeProcessName` と `isExpectedAgentProcess` と同じ規則で、正規化した名前（前後の引用符を除き、パスの最後の部分を小文字にし、`.exe`・`.cmd`・`.bat`・`.ps1` を除く）が、agentType が `claude` なら `claude` か `claude.` で始まる、`codex` なら `codex` か `codex.` か `codex-` で始まるとき真。ほかの agentType は常に偽。null や形の違いは `foreground_unknown`、誤りは `readTerminalStatus` と同じ分け方。
+			- `readForeground(handle, incarnationId, agentType)`：`terminal.inspectProcess { terminal: handle, expectedIncarnationId: incarnationId }`。`process.foregroundProcess` が空でない文字なら `{ ok, isShell, matchesAgent }`。`isShell` は Orca v1.4.258 の `shell-process-detection.ts` の `isShellProcess` と同じ規則（前後の引用符を除き小文字にし、パスの最後の部分と、`.exe`・`.cmd`・`.bat`・`.ps1` を除いた名前のどれかが、bash、zsh、sh、fish、cmd、powershell、pwsh、nu、ksh、mksh、dash、ash、tcsh、csh、elvish、xonsh（と `.exe` つき）に当たる）。`matchesAgent` は Orca v1.4.258 の `agent-process-recognition.ts` の `normalizeProcessName` と `recognizeAgentProcess`（保護つきで書くかを決める `isTerminalRunningSettledPromptAgent` が使う）と同じ規則で、正規化した名前（前後の引用符を除き、パスの最後の部分を小文字にし、`.exe`・`.cmd`・`.bat`・`.ps1` を除く）が、agentType が `claude` なら `claude` と完全に一致、`codex` なら `codex` と完全に一致か `codex-` で始まるとき真。ほかの agentType は常に偽。null や形の違いは `foreground_unknown`、誤りは `readTerminalStatus` と同じ分け方。
 			- `readChatFence(sessionId)`：`agentSession.history { sessionId, direction: "tail", limit: 1 }`。`ok: true`、`page.sessionId` が頼んだものと同じ、`page.fence` が正の整数のときだけ `{ ok, fence }`。違えば `unknown_shape`。
 
 			**送る**
@@ -111,7 +111,7 @@ design: {
 			| `check` | `outcome`、`detail`（照会の結果） |
 			| `refused` | 守りを通った確定の要求を、送る前に拒んだもの。`reason`（`ticket_invalid`、`target_changed` と種類、`not_sendable` と reason、`send_disabled`、`busy`、`unsupported`、`unreachable`）と、分かれば `agentId`。本文と票は入れない。operationId は票の操作の ID（票を取り出せないときは、この行のために作る） |
 
-			- `appendBefore` は書いてから `datasync` し、終わってから送る。失敗したら投げる（D-06 が 503 にする）。`appendAfter`、`appendCheck`、`appendRefused` の失敗は投げずに偽を返し、`after` と `check` は `SendJournal` のメモリーにも持つ。
+			- `appendBefore` は書いてから `datasync` し、終わってから送る。失敗したら投げる（D-06 が 503 にする）。`appendAfter`、`appendCheck`、`appendRefused` の失敗は投げずに偽を返し、`after`、`check`、`refused` は `SendJournal` のメモリーにも持つ（ファイルに書けなかった拒みも、サーバーが動いている間は照会で見える）。
 			- `read(operationId)` は、ファイルを読み、その ID の行を集めて `SendRecord`（before、最後の after、check の並び、refused）にする。メモリーの分を重ねる。行がなければ null（D-06 が処理中か、送っていないかを答える）。before があって after がなければ、outcome を unknown（`code: "no_after_record"`）とする。最後の check の outcome が unknown でなければ、それを今の outcome とする。refused だけなら outcome は refused（送っていない）。壊れた行は飛ばす。
 			- authToken、票、トークンは記録の型に入れない。
 			"""
@@ -128,7 +128,7 @@ design: {
 			1. 機能の確かめ（D-08）。つながらなければ `unreachable`。
 			2. タブの集合を読み、`resolveTarget`。runtime の ID は、タブの集合の応答の `runtimeId` が null でなく、機能の確かめの値と同じときだけ使い、null なら `unreachable`、違えば `unreachable`（理由 `runtime_changed`）。
 			3. 経路の機能が使えないか、止めた経路なら `unsupported`（`missing` を付ける）。
-			4. 端末なら `readTerminalStatus`：`isRunningAgent` が真でなければ `not_sendable`（`no_agent`）、`status` が `permission` なら `not_sendable`（`permission`）。続けて `readForeground`：`isShell` なら `not_sendable`（`shell_foreground`）、`matchesAgent` が偽なら `not_sendable`（`foreground_mismatch`）、読めなければ `not_sendable`（`foreground_unknown`）。構造化 Chat なら `readChatFence`。
+			4. 端末なら `readTerminalStatus`：`isRunningAgent` が真でなければ `not_sendable`（`no_agent`）、`status` が `permission` なら `not_sendable`（`permission`）。続けて `readForeground`：`isShell` なら `not_sendable`（`shell_foreground`）、`matchesAgent` が偽なら `not_sendable`（`foreground_mismatch`）、読めなければ `not_sendable`（`foreground_unknown`）。どちらの読みも `terminal_gone` なら `not_sendable`（`identity_unavailable`）。構造化 Chat なら `readChatFence`。
 			5. `buildPreview` が null なら `not_sendable`（`state_out_of_date`）。
 
 			**`status(agentId)`**：`{ enabled, available, route, reason }`。enabled は `sendEnabled`。route と available と reason は `preflight` の結果。送る RPC は送らない。
@@ -136,7 +136,7 @@ design: {
 			**`intent({ agent, text })`**：`sendEnabled` が真でなければ `send_disabled`。`checkText`。`preflight`。操作の ID を作り、票を出し、`{ ticket, expiresAt, operationId, preview, text, digest }` を返す。どこかで止まれば票を出さない。
 
 			**`confirm({ ticket, text })`** の順。送る前に止めたものは `appendRefused` してから返す。
-			1. 同時に1つだけ。処理中なら `busy`（票は消費しない）。
+			1. 同時に1つだけ。処理中の印（busy）の判定と立てを、await の前の同じ同期の処理で行い、確定の終わりに `finally` で外す。処理中なら `busy`（票は消費しない）。
 			2. `sendEnabled` が真でなければ `send_disabled`（票は消費しない）。
 			3. `TicketStore.take` と、取り出せたときの処理中の印（`inFlight` の集合に操作の ID を足す）を、同じ同期の処理の中で行う（間に await を入れない）。なければ・期限切れなら `ticket_invalid`（reason `unknown` か `expired`）。ここから先、票は使い済みで、記録は票の操作の ID で書く。処理中の印は、手順 8 の後か、送る前に止めて `appendRefused` を書いた後に（成功・失敗によらず `finally` で）外す。
 			4. `checkText(text)` と `digestText(text) === 票の digest`。違えば `target_changed`（種類 `text_changed`）。

@@ -63,7 +63,7 @@ requirements: {
 		title: "利用者が確定すると、確かめ直したうえで、その宛先にだけ1回だけ届く（確定）"
 		text: """
 			`POST /api/send/confirm`（物は `{ ticket, text }`）が、票を使い済みにしてから、Orca の最新の読みで次を確かめ直す：Orca の runtime の ID、宛先の同一性（端末はタブ、leaf、端末の handle、ptyId、incarnation、エージェントの種類、provider のセッションの識別子。構造化 Chat はタブ、セッションの識別子、エージェントの種類）、本文の sha256、送れる状態（端末は `terminal.agentStatus` でエージェントがいて権限の確認待ちでなく、`terminal.inspectProcess` で前面のプロセスが宛先のエージェントそのもの）。
-			1つでも違えば、送らずに 409 で確かめに戻す。同じでなければ送る経路で1回だけ送り、結果を返す。同時に送るのは1つだけで、送っている間の確定は断る。
+			1つでも違えば、送らずに 409 で確かめに戻す。すべて同じなら、送る経路で1回だけ送り、結果を返す。同時に送るのは1つだけで、送っている間の確定は断る。
 			"""
 		acceptance: [
 			"録画の再生で、確かめた宛先にだけ、送る RPC が1回だけ送られる",
@@ -168,7 +168,7 @@ failures: {
 	"F-02": {
 		title: "権限の確認待ちや、エージェントが動いていない端末には送らない。シェルへの代わりの送信もしない"
 		text: """
-			意図と確定の両方で `terminal.agentStatus` を読み、`isRunningAgent` が真でないか `status` が `permission` なら 409 `not_sendable` で送らない。さらに `terminal.inspectProcess`（`expectedIncarnationId` つき）で前面のプロセスを読み、宛先のエージェントの種類そのもの（Orca の `isExpectedAgentProcess` と同じ名前の規則。claude は `claude`、codex は `codex`・`codex-…`）でなければ送らない。シェル、ほかのプログラム（例：`python3`）、読めない前面は、どれも送らない（`terminal.agentStatus` は題名の状態だけでエージェントありと返すことがあり、Orca が保護つきで書くかの判定とは別物のため）。
+			意図と確定の両方で `terminal.agentStatus` を読み、`isRunningAgent` が真でないか `status` が `permission` なら 409 `not_sendable` で送らない。さらに `terminal.inspectProcess`（`expectedIncarnationId` つき）で前面のプロセスを読み、宛先のエージェントの種類そのもの（Orca が保護つきで書くかを決める `recognizeAgentProcess` と同じ名前の規則。claude は `claude`、codex は `codex`・`codex-…`）でなければ送らない。シェル、ほかのプログラム（例：`python3`）、読めない前面は、どれも送らない（`terminal.agentStatus` は題名の状態だけでエージェントありと返すことがあり、Orca が保護つきで書くかの判定とは別物のため）。
 			Orca が `refusedReason`（`no-agent`、`permission`）で拒んだら refused として記録する。送った後の Orca の誤り（`agent_prompt_blocked`、`terminal_handle_stale` など。本文を書いた後にも起きうる）は unknown として記録する。どちらも送り直さない。
 			送った後の receipt に、エージェントの経路で書いた証（`send.prompt` の provider が claude、codex、antigravity）がなければ、unknown（要確認）として記録し、画面にその旨を示す。
 			"""
@@ -213,7 +213,7 @@ constraints: [
 ]
 
 risks: [
-	"端末の経路の残る隙：Orca は、その時に前面のプロセスをエージェントと認めないと（v1.4.258 の `isTerminalRunningSettledPromptAgent` が偽、`useSettledAgentPrompt` が偽の枝）、守りなしで本文と Enter を生のまま端末に書く。この判定は RPC で外に出ていない。orca-web は前面のプロセスが宛先のエージェントそのものであることを確かめる（F-02）ので、残るのは確かめ直しと Orca の書き込みの間（ミリ秒。送る前の記録の書き込みを含む）の競合だけ。その間にエージェントが終わると、終わった後の前面（シェルなど）に生のまま書かれうる。送った後の receipt で検出して unknown（要確認）と示すが、書いたことは取り消せない。Orca 1.4.258 には、書き込みの時点で守りつきかつ耐久の経路がない（守りの経路は2段で receipt がない）",
+	"端末の経路の残る隙：Orca は、その時に前面のプロセスをエージェントと認めないと（v1.4.258 の `isTerminalRunningSettledPromptAgent` が偽、`useSettledAgentPrompt` が偽の枝）、守りなしで本文と Enter を生のまま端末に書く。この判定は RPC で外に出ていない。orca-web は前面のプロセスが宛先のエージェントそのものであることを確かめる（F-02）ので、シェルや関係のないプログラムに生のまま書かれるのは、確かめ直しと Orca の書き込みの間（ミリ秒。送る前の記録の書き込みを含む）にエージェントが終わる競合だけ。ほかに、Orca がエージェントの居る証（`isTerminalRunningAgent`。管理の画面の題名のときなど）を認めない場合は、前面のエージェントのプロセスに枠なしで書かれうる（シェルではない）。送った後の receipt で検出して unknown（要確認）と示すが、書いたことは取り消せない。Orca 1.4.258 には、書き込みの時点で守りつきかつ耐久の経路がない（守りの経路は2段で receipt がない）",
 	"構造化 Chat の宛先の同一性は sessionId だけで確かめる（Orca 1.4.258 は送信で `expectedRuntimeFence` を見ない）",
 	"`agentSession.sendRecorded` の偽と、`orchestration.requestShow` の absent は、届いていない証拠ではない。`agentSession.sendRecorded` の真は、受けた記録があることだけを示し、届いたかは示さない",
 	"`terminal.send`、`agentSession.send`、`orchestration.requestShow`、`agentSession.sendRecorded` は Orca の非公開の口。版が変わったら、録画を取り直し、実機の確かめをやり直す",

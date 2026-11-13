@@ -15,7 +15,7 @@ steps: {
 		title:    "会話の読み手の直し（D-11）"
 		text:     "対象：`src/orca/read-transcript.ts`。確かめ：T-01。完了：`node --test test/orca/read-transcript.test.ts` が通り、別の sessionId のページ、hasMore（hasOlder）が真で位置が欠けるか形が違うページの両方の取得元について unknown_shape のテストがある。区切りのレビュー：なし"
 		realizes: ["R-08"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -23,7 +23,7 @@ steps: {
 		text:     "対象：`src/orca/rpc.ts`、`src/orca/runtime.ts`、`src/orca/send-gates.ts`（新規）、`src/orca/capabilities.ts`、`src/orca/wiring.ts`（SendRpc を作るだけ）、`sendGuarded` を持つテストのヘルパー（`test/state/helpers.ts`、`test/transcript/fixture.ts` など、`rg sendGuarded src test` で見つかるもの）。確かめ：T-02、T-03、T-14。完了：`node --test test/orca/*.test.ts` と `npm run lint` が通り、封筒の位置と authToken を伏せること、門が決めた形だけを通して各種の違う形と一覧にない RPC を送らずに拒むこと、READ_METHODS が変わらないこと、sendTerminal と sendChat の確かめの満たし方と欠け方のテストがある。区切りのレビュー：なし"
 		realizes: ["R-03", "F-04"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-03": {
@@ -31,7 +31,7 @@ steps: {
 		text:     "対象：`src/send/model.ts`（型）、`src/send/target.ts`、`src/send/ticket.ts`（新規、純な関数と票の倉庫）、`test/send/fixture.ts`（自分で作った仮のタブの集合）。確かめ：T-04、T-05、T-06。完了：`node --test test/send/target.test.ts test/send/ticket.test.ts` が通り、resolve の各 reason、compareTargets の各種類（worktree_changed を含む）、buildPreview が宛先と違う worktree の状態で null を返すこと、本文の各拒み方、操作の ID の形、票の期限・1回だけ・上限・同期の消費・操作の ID の保持のテストがある。Codex の実装担当 impl の最後の手順なので、止まって HEAD を報告する。区切りのレビュー：なし"
 		realizes: ["R-01", "R-02", "F-01", "F-04", "F-05"]
 		after:    ["S-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-04": {
@@ -39,7 +39,7 @@ steps: {
 		text:     "対象：`src/orca/send.ts`（新規）。確かめ：T-07、T-08、T-09。完了：`node --test test/orca/send.test.ts` が通り、D-04 の表の各行、readForeground のシェルの判定（Orca の isShellProcess と同じ例）、receipt の provider が宛先の種類と違うときの unknown（agent_mismatch）、checkChat の sendRecorded の真から history を探す分け方、指紋の固定の値（Orca v1.4.258 の canonicalize を写した手計算の値）、送る関数が再試行しないこと（時間切れでも1回）、照会が送る RPC を呼ばないことのテストがある。区切りのレビュー：なし"
 		realizes: ["R-02", "R-03", "R-05", "F-02", "F-03", "F-04"]
 		after:    ["S-03"]
-		status:   "todo"
+		status:   "done"
 		session:  "logic"
 	}
 	"S-05": {
@@ -47,7 +47,7 @@ steps: {
 		text:     "対象：`src/send/journal.ts`（新規）、`src/state/settings.ts`。確かめ：T-10、T-11。完了：`node --test test/send/journal.test.ts test/state/settings.test.ts` が通り、権限（0700、0600）、before の datasync の後に戻ること、書けないときに投げること、after と check のメモリーの持ち方、after のない before が unknown になること、壊れた行を飛ばすこと、sendEnabled の各場合（なし、偽、壊れたファイル、version 違い、真）と、保存で消えないこと、版の違うファイルや壊れたファイルの上の保存が sendEnabled を書かないこと、保存の途中でファイルが書き換わったら（偽の読みで）やり直して書き換えを上書きしないことのテストがある。テストは一時のディレクトリだけを使う。区切りのレビュー：なし"
 		realizes: ["R-04", "R-06", "F-06"]
 		after:    ["S-04"]
-		status:   "todo"
+		status:   "done"
 		session:  "logic"
 	}
 	"S-06": {
@@ -55,7 +55,7 @@ steps: {
 		text:     "対象：`src/send/service.ts`（新規）。確かめ：T-12、T-13、T-23、T-24。完了：`node --test test/send/service.test.ts` が通り、intent と confirm の各手順の止まり方（送る RPC が0回。シェルが前面、前面が読めない、state_out_of_date を含む）、意図の応答に操作の ID があり確定がその ID で記録すること、確定の届かなかった ID の照会が not_sent でその後の確定を送らないこと、take の後で送る前の ID の照会が in_progress になること、照会の記録の読みが遅れて解ける間に確定が送り終えても not_sent を返さないこと（読みを遅らせる偽の記録で）、確定のときのタブの消失と runtime の変化が 409 target_changed になること、method_not_found の後に同じ runtime の間その経路が unsupported になり runtime が変わると戻ること、成功で送る RPC がちょうど1回、同時の2つの確定で1回、同じ票の2回目、本文の違い、宛先の各変化、sendEnabled の偽、before の書き込みの失敗、after の書き込みの失敗、check が unknown のときだけ照会して送る RPC を呼ばないこと、のテストがある。ここで二重送信を防ぐ契約が決まるので、区切りのレビュー CP-1 の最後の手順にする。止まって HEAD を報告する"
 		realizes: ["R-01", "R-02", "R-04", "R-05", "R-06", "F-01", "F-02", "F-03", "F-05", "F-06"]
 		after:    ["S-05"]
-		status:   "todo"
+		status:   "done"
 		session:  "logic"
 	}
 	"S-07": {
@@ -63,7 +63,7 @@ steps: {
 		text:     "対象：`src/server/app.ts`、`src/server/main.ts`、`src/server/config.ts`、`src/orca/wiring.ts`。確かめ：T-15、T-16。完了：`node --test test/server/*.test.ts` が通り、4つの道の成功、誤りの code と HTTP の状態の表、守りの順（Host、方法、Content-Type、Origin、トークン、物の大きさと鍵）、守りで拒んだ要求を送信の記録に書かず件数だけを数えること、GET の同じオリジンの読み（Sec-Fetch-Site の cross-site を 403）、CORS なし、ORCA_WEB_SENDS_DIR の読み、のテストがある。区切りのレビュー：なし"
 		realizes: ["R-01", "R-02", "R-05", "R-06", "F-05"]
 		after:    ["S-06"]
-		status:   "todo"
+		status:   "done"
 		session:  "api"
 	}
 	"S-08": {
@@ -71,7 +71,7 @@ steps: {
 		text:     "対象：`src/tools/send-live.ts`（新規）、`package.json` の `send:live`。確かめ：T-17。完了：`node --test test/tools/*.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、handle と worktree の守り（見つからない handle、2つに当たる handle、違う worktree、main の worktree、3つ以上の handle の拒み）、場面 (1)〜(5) の数え方（応答を捨てる包みで送る RPC が1回だけ届き照会が requestShow を呼ぶこと、票を書き換えた確定と送らない場合で送る RPC が0回）、出力に本文・題名・パス・handle・セッションの識別子が出ないことのテストがある（偽の SendService と偽の口で。実物の Orca に送らない）。Codex の実装担当 api の最後の手順で、区切りのレビュー CP-2 の最後の手順。止まって HEAD を報告する"
 		realizes: ["R-09"]
 		after:    ["S-07"]
-		status:   "todo"
+		status:   "done"
 		session:  "api"
 	}
 	"S-09": {
@@ -79,7 +79,7 @@ steps: {
 		text:     "対象：`web/embed/agent.html`、`web/embed/agent-frame.js`、`web/embed/send-view.js`、`web/embed/send-dom.js`（新規）、`web/embed/agent.css`、`src/server/app.ts` の STATIC_FILES（2つの js を足すだけ）。確かめ：T-18、T-19、T-20、T-24（画面の側）。完了：`node --test test/web/*.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、reduceSend の各出来事、5つの outcome と warning の言葉、409 と期限の経過で本文を残して戻ること、sending の間の2回目の押しを捨てること、unknown の照会、disabled の理由、textContent だけで描くことのテストがある。画面の実装担当（Claude Opus 5.5）の手順。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-07", "F-01", "F-03"]
 		after:    ["S-08"]
-		status:   "todo"
+		status:   "done"
 		session:  "ui"
 	}
 	"S-10": {
@@ -87,8 +87,16 @@ steps: {
 		text:     "タスク担当が行う（文書と、送る RPC を実物の Orca に送る手順）。`npm run send:live -- --worktree <send-test のパス> --handle <Claude の handle> --handle <Codex の handle>` を、統括が許した2つの宛先だけで実行し、件数と結論だけを report.md に書く。構造化 Chat の検証用のセッションが届いていれば同じく確かめ、なければ録画と再生だけと書く。`npm start` を一時の port と一時の settings（sendEnabled: true）と一時の記録の置き場で起動し、send-test のエージェントの `/embed/agent` を幅 390px と広い幅で見て、確認の画面まで進めて「やめる」で戻る（送らない）。README.md と AGENTS.md に送信の口、記録、sendEnabled、send:live を書く。確かめ：T-21、T-22。完了：report.md の Verification に実機の表と結論がある"
 		realizes: ["R-09", "R-07"]
 		after:    ["S-09"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
+	}
+	"S-11": {
+		title:    "最終品質ゲート attempt 01 の直し：前面のプロセスが宛先のエージェントそのものであることの確かめと、拒みの記録のメモリー（D-04、D-05、D-06）"
+		text:     "対象：`src/orca/send.ts`（readForeground に agentType を渡し matchesAgent を返す）、`src/send/service.ts`（preflight の foreground_mismatch）、`src/send/journal.ts`（refused をメモリーにも持つ）とそれぞれのテスト。確かめ：T-25、T-26。完了：`node --test test/orca/send.test.ts test/send/service.test.ts test/send/journal.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、T-25（claude、codex、codex-…、パスや .exe つきを通し、シェルを shell_foreground、python3・node・版の番号の名前・claude.<…>・種類の違うエージェントを foreground_mismatch で、送る RPC を送らずに拒む。intent と confirm の両方）と T-26 のテストがある。fix1 の実装担当（Codex GPT-6 Astra / high）の手順。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートの次の attempt で見る）"
+		realizes: ["F-02", "R-02", "R-04"]
+		after:    ["S-10"]
+		status:   "todo"
+		session:  "fix1"
 	}
 }
 
@@ -117,6 +125,7 @@ tests: {
 	"T-22": {title: "実機の画面で、幅 390px で送る欄と確認の画面が横にはみ出さない（送らずに戻る）", verifies: ["R-07"]}
 	"T-23": {title: "method_not_found の後、同じ runtime の ID の間、その経路の status が送れないと示し、意図と確定が unsupported になり、runtime の ID が変わると戻る", verifies: ["F-04"]}
 	"T-25": {title: "readForeground と preflight が、前面のプロセスが宛先の種類そのもの（claude、codex、codex-…、パスや .exe つき）のときだけ通し、シェルを shell_foreground、ほかのプログラム（python3、node、版の番号の名前、種類の違うエージェント）を foreground_mismatch で、送る RPC を送らずに拒む", verifies: ["F-02", "R-02"]}
+	"T-26": {title: "送信の記録が、ファイルに書けなかった refused の行をメモリーに持ち、照会で refused として返す", verifies: ["R-04", "F-05"]}
 	"T-24": {title: "意図の応答に操作の ID があり、確定の応答を失ったときに画面がその ID で照会でき、確定が届かなかった ID の照会が not_sent になりその後の確定は送らず、処理の途中の ID の照会は in_progress になる", verifies: ["R-01", "R-05", "R-07", "F-03"]}
 }
 
@@ -147,6 +156,6 @@ execution: {
 		spec: {role: "仕様のレビュー（spec-reviewer。strict なので ChatGPT GPT-6 / Extra High の2人目を並べる）", model: "opus", effort: "high"}
 		cp1: {role: "区切りのレビュー CP-1（code-reviewer ×2：standards と spec）", after: "S-06", model: "opus", effort: "medium"}
 		cp2: {role: "区切りのレビュー CP-2（code-reviewer ×1）", after: "S-08", model: "opus", effort: "medium"}
-		gate: {role: "最終品質ゲート（quality-gate-reviewer。2人目は ChatGPT GPT-6 / Extra High、取れなければ GPT-6 Astra / high）", after: "S-10", model: "opus", effort: "high"}
+		gate: {role: "最終品質ゲート（quality-gate-reviewer。2人目は ChatGPT GPT-6 / Extra High、取れなければ GPT-6 Astra / high）", after: "S-11", model: "opus", effort: "high"}
 	}
 }
