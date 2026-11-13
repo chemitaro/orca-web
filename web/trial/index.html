@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>orca-web の試し</title>
+    <link rel="stylesheet" href="./trial.css" />
+  </head>
+  <body>
+    <header class="top">
+      <span class="sample">試しの画面（SpecDock とは別のオリジン）</span>
+      <h1>稼働の印</h1>
+      <p class="lead">worktree ごとのエージェントの印。丸を選ぶと詳細とチャットが開きます。</p>
+      <p id="banner" class="banner" role="status" aria-live="polite" hidden></p>
+      <p id="status" class="note"></p>
+    </header>
+    <main class="layout">
+      <section id="sections" class="sections" aria-label="worktree"></section>
+      <aside id="panel" class="panel" aria-label="詳細とチャット" hidden>
+        <h2 id="panel-title">詳細とチャット</h2>
+        <div id="panel-slot" class="slot"></div>
+      </aside>
+    </main>
+    <script type="module" src="./trial.js"></script>
+  </body>
+</html>

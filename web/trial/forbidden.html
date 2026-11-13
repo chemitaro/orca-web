@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>orca-web の試し（許さないオリジン）</title>
+    <link rel="stylesheet" href="./trial.css" />
+  </head>
+  <body>
+    <header class="top">
+      <span class="sample">許さないオリジン（試しの orca-web はこのオリジンを許していない）</span>
+      <h1>拒まれることの確かめ</h1>
+      <p class="lead">5つとも拒まれるのが正しい結果です。(2)(3) は枠の中が描かれないことを見ます。</p>
+      <p id="banner" class="banner" role="status" aria-live="polite" hidden></p>
+    </header>
+    <main class="checks">
+      <section class="check">
+        <h2>(1) 要約を読む（GET /api/worktrees/summary）</h2>
+        <p id="r-summary" class="result">確かめています…</p>
+      </section>
+      <section class="check">
+        <h2>(2) 詳細とチャットの iframe（/embed/agent）</h2>
+        <p class="note">frame-ancestors で拒まれ、枠の中が描かれないのが正しい結果です。</p>
+        <div id="agent-slot"></div>
+      </section>
+      <section class="check">
+        <h2>(3) 開くボタン（open-button.js）</h2>
+        <p class="note">ボタンが描かれないのが正しい結果です。押さないでください。</p>
+        <div id="button-slot"></div>
+      </section>
+      <section class="check">
+        <h2>(4) 書き込みのトークン（POST /api/token）</h2>
+        <p id="r-token" class="result">確かめています…</p>
+      </section>
+      <section class="check">
+        <h2>(5) 送る意図（POST /api/send/intent）</h2>
+        <p id="r-intent" class="result">確かめています…</p>
+      </section>
+    </main>
+    <script type="module" src="./forbidden.js"></script>
+  </body>
+</html>

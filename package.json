@@ -14,6 +14,7 @@
     "format": "biome check --write .",
     "build": "tsc -p tsconfig.build.json",
     "start": "node src/server/main.ts",
+    "trial": "node src/tools/trial.ts",
     "probe:live": "node src/tools/probe-live.ts",
     "open:live": "node src/tools/open-live.ts",
     "send:live": "node src/tools/send-live.ts",

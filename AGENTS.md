@@ -30,8 +30,9 @@ orca-web は、この Mac の Orca（stablyai/orca のデスクトップアプ�
   - `listen.ts`：待ち受け。127.0.0.1 と Tailscale の IP の2つだけで、いつもアドレスを付けて listen する（0.0.0.0 や `::` にしない）。Tailscale の IP で待ち受けられなければ 127.0.0.1 だけで続けて試し直す。
   - `main.ts`：起動（設定の誤りは終了コード2、127.0.0.1 で待ち受けられなければ 1、SIGTERM と SIGINT で 0）。
 - `src/service/launchd.ts`：LaunchAgent（ラベル `io.github.chemitaro.orca-web`）の定義の組み立てと操作（`ServiceManager`）。入口は `src/tools/service.ts`。
-- `src/tools/`：実機の確かめ（`probe-live.ts`、`open-live.ts`、`transcript-live.ts`、`send-live.ts`）、録画、常駐の命令（`service.ts`）の道具。
+- `src/tools/`：実機の確かめ（`probe-live.ts`、`open-live.ts`、`transcript-live.ts`、`send-live.ts`）、録画、常駐の命令（`service.ts`）、SpecDock に渡す部品の試し（`trial.ts`：試し用の orca-web と試しの画面を起動してまとめて止める。`trial-host.ts`：`web/trial/` を決めた表だけ配る静的なサーバー）の道具。
 - `web/`：受け箱の画面（`/`。`index.html`、`inbox.js`、組み立ては純粋な関数の `inbox-view.js`、DOM は `inbox-dom.js`）と、状態の画面（`/settings`。`settings.html`）と、木・一覧・プロジェクトの画面（`/runs/<id>` は `run.html`・`run.js`、`/runs` は `runs.html`・`runs.js`、`/projects/<id>` は `project.html`・`project.js`。組み立ては純粋な関数の `runs-view.js`、DOM は textContent だけで描く `runs-dom.js`）（素の ES Modules。ビルドしない）。表の組み立ては純粋な関数の `view.js`、書き込みのトークンの扱いは `write.js`。ボタンの部品は `web/embed/`（1行のスクリプト `open-button.js` と、iframe の `open-button.html`・`open-button-frame.js`・`open-button.css`）。エージェントの詳細とチャットは `web/embed/agent.*`（組み立ては純粋な関数の `agent-view.js`、DOM は textContent だけで描く `agent-dom.js`）。送る欄と確認の画面は `web/embed/send-view.js`（状態の移り変わりの純粋な関数。自動で送り直さない）と `send-dom.js`（textContent だけ）。
+- `web/trial/`：SpecDock とは別のオリジンの試しの画面（`index.html`、`trial.js`、組み立ては純粋な関数の `trial-view.js`、幅 390px の枠 `phone.html`、許していないオリジンの確かめ `forbidden.html`・`forbidden.js`）。orca-web 自身は配らない（`STATIC_FILES` にない）。`npm run trial` の静的なサーバーだけが配る。
 - `test/`：`node:test` のテストと、録画の fixture（`test/fixtures/`、状態の API の手書きの録画は `test/state/fixture.ts`、会話の仮の Orca は `test/transcript/fixture.ts`）。
 - 依存は devDependencies（`typescript`、`@types/node`、`@biomejs/biome`）だけです。実行時の依存を足さないでください。
 
@@ -49,6 +50,7 @@ npm run open:live   # この Mac の Orca で開く口を確かめる（前面�
 npm run send:live -- --worktree <パス> --handle <handle>  # 実物の Orca に送る確かめ。統括か利用者が用意した検証用の宛先だけに使う
 npm run transcript:live  # この Mac の Orca で会話を読むだけで確かめる（件数と結論だけ。会話の中身は出さない）
 npm start           # http://127.0.0.1:8791/ で状態の API、画面、開く口を出す
+npm run trial       # 試し用の orca-web（8792）と試しの画面（47900、許さないオリジン 47901）を起動する。止めるのは kill -TERM $(cat .workbench/trial/trial.pid)
 node src/tools/service.ts install --dry-run   # LaunchAgent の定義と命令を見るだけ（ビルドせず、何も書かない）
 ```
 

@@ -1,0 +1,349 @@
+/* 試しの画面。画面案 A の色（working 緑、waiting 黄、blocked 赤、done 灰、sleeping 紫）と明暗。 */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --ink: #18212b;
+  --muted: #5b6876;
+  --line: #d8dee5;
+  --accent: #1f5fbf;
+  --chip: #eef2f6;
+  --warn-bg: #fff4d6;
+  --work: #1f9d55;
+  --wait: #a87600;
+  --stop: #c0392b;
+  --done: #6b7785;
+  --sleep: #7a5cc4;
+  --sans: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --mono: ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12171d;
+    --surface: #1b222b;
+    --ink: #e6ebf0;
+    --muted: #9aa7b4;
+    --line: #2e3a46;
+    --accent: #6ea3f0;
+    --chip: #26303b;
+    --warn-bg: #3a3016;
+    --work: #3ccf7a;
+    --wait: #e5b23a;
+    --stop: #ef6b5d;
+    --done: #8d99a6;
+    --sleep: #a68cf0;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 16px 16px 40px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px / 1.6 var(--sans);
+}
+
+h1 {
+  font-size: 22px;
+  margin: 0;
+}
+
+h2 {
+  font-size: 14px;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+.top {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.sample {
+  width: max-content;
+  max-width: 100%;
+  font-size: 12px;
+  background: var(--chip);
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.lead,
+.note {
+  color: var(--muted);
+}
+
+.note {
+  font-size: 12px;
+}
+
+.banner {
+  background: var(--warn-bg);
+  border: 1px solid var(--wait);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* 幅 720px より広いときは節の一覧の横に欄。狭いときは1列で、選んだ節の下に開く。 */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 721px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) minmax(420px, 44%);
+  }
+}
+
+.sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .sections {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.node {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.node.highlight {
+  border-color: var(--accent);
+}
+
+.node.sel {
+  outline: 2px solid var(--accent);
+}
+
+.node-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.node-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tag-send {
+  font-size: 11px;
+  color: var(--surface);
+  background: var(--accent);
+  border-radius: 4px;
+  padding: 0 6px;
+}
+
+.node-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.counts,
+.dots {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.count {
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--chip);
+}
+
+.dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: transparent;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.dot::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.dot[aria-pressed="true"] {
+  background: var(--chip);
+  font-weight: 600;
+}
+
+.dot:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.dot-type {
+  color: var(--ink);
+}
+
+.dot-time {
+  color: var(--muted);
+}
+
+.mark-working {
+  color: var(--work);
+}
+
+.mark-waiting {
+  color: var(--wait);
+}
+
+.mark-blocked {
+  color: var(--stop);
+}
+
+.mark-done,
+.mark-unknown {
+  color: var(--done);
+}
+
+.mark-sleeping {
+  color: var(--sleep);
+}
+
+.node-open:empty {
+  display: none;
+}
+
+.node-slot:empty {
+  display: none;
+}
+
+.panel {
+  position: sticky;
+  top: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.panel h2 {
+  overflow-wrap: anywhere;
+}
+
+.agent-frame {
+  display: block;
+  width: 100%;
+  height: 640px;
+  border: 0;
+  border-radius: 6px;
+}
+
+.node-slot .agent-frame {
+  height: 560px;
+}
+
+/* 幅 390px の枠の画面（phone.html）。 */
+.phone-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 枠の太さを外に足し、中の画面（ビューポート）をちょうど 390px × 844px にする。
+   狭い窓では、枠を含めた外の幅が親の幅に収まるまで中を縮める。 */
+.phone-frame {
+  box-sizing: content-box;
+  width: 390px;
+  max-width: calc(100% - 20px);
+  height: 844px;
+  border: 10px solid var(--line);
+  border-radius: 32px;
+  background: var(--surface);
+}
+
+/* 許さないオリジンの画面（forbidden.html）。 */
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 760px;
+}
+
+.check {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.result {
+  font-weight: 600;
+}
+
+.result.ok {
+  color: var(--work);
+}
+
+.result.ng {
+  color: var(--stop);
+}
+
+.probe-frame {
+  width: 100%;
+  height: 120px;
+  border: 1px dashed var(--line);
+}
