@@ -22,8 +22,9 @@ design: {
 			  端末のタブは id が paneKey（`<parentTabId>:<leafId>`）かタブの id、構造化 Chat のタブは `chat:<タブの id>`。
 			  端末のタブは、Orca の画面（`resolveNativeChatSession`）と同じく、`agentStatus.agentType`（なければ `launchAgent`）と `agentStatus.providerSession` の `id` と `transcriptPath` を使う。
 			  構造化 Chat は、タブの `agent` と `sessionId` を使う。
+			  タブに当たらない id でも、共有のポーリング（`src/state/poller.ts`）の最新の文書に `kind: untabbed` のエージェントとして載っていれば、セッションを解けないので `no_session` にする（`agent_not_found` にしない）。読み手は、その判定のための関数（id が状態の文書にあるか）を受け取る。
 			  結果は `TranscriptTarget`（agentId、source：`nativeChat` か `agentSession`、エージェントの種類、セッションの識別子、記録のパス、セッションの鍵）か、誤り：
-			  `agent_not_found`（タブがない）、`no_session`（セッションの識別子かエージェントの種類がない）、`unreachable`、`unsupported`、`read_failed`、`unknown_shape`。
+			  `agent_not_found`（タブがなく、状態の API の最新の文書にもそのエージェントがない）、`no_session`（セッションの識別子かエージェントの種類がない）、`unreachable`、`unsupported`、`read_failed`、`unknown_shape`。
 			- `read(target, { limit, before })`：`nativeChat.readSession`（`agent`、`sessionId`、`transcriptPath`、`limit`、`beforeOffset`、`capabilities: { transcriptSourceOrder: 1 }`）か、
 			  `agentSession.history`（`sessionId`、`direction`：`tail` か `before`、`cursor`、`limit`）。Orca が `{ error, notFound }` を返したら `transcript_not_found`（notFound）か `read_failed`。
 			  `agentSession.history` は `ok: true` の `page` だけを使い、`ok: false`（reset。添えられた末尾のページを含む）は `read_failed` にする（古いページの代わりに末尾を返さない）。
@@ -43,9 +44,9 @@ design: {
 
 			- 思考（role が `reasoning`）は件ごと落とし、印を付けない。
 			- `image-ref`、`subagent-group`、`subagent`、`background-task`、知らないブロックは `unsupported` の印にする。role が `system` の件（Orca の知らせ）は、本文を残し、ほかの部分は同じく印にする。知らない role は `assistant` にし、部品はすべて印にする。
-			- `unsupported` の `what` は決めた名前（image、subagent、background-task、diff、approval、question、status、unknown）だけにし、Orca の文字をそのまま入れない。
+			- `unsupported` の `what` は決めた名前（image、subagent、background-task、diff、approval、question、status、plan、unknown）だけにし、Orca の文字をそのまま入れない。
 			- 構造化 Chat の `message` は同じ扱い。`tool-call` は role `tool` の件で、呼び出しと（あれば）出力の `head`（`truncated` を引き継ぐ）。`turn`、`agent-start`、`agent-handoff` は出さない。
-			  `diff`、`approval`、`question`、`status`、知らない kind は `unsupported`。並びは（sequence、sequenceIndex）の順。
+			  `diff`、`approval`、`question`、`status`、`plan` は同じ名前の `unsupported`、知らない kind は `unknown` の `unsupported`。並びは（sequence、sequenceIndex）の順。
 			- 端末のエージェントの件は並べ替えない（Orca が返す順のまま）。
 			- 本文は 100,000 文字、ツールの入力は 4,000 文字、出力は 8,000 文字で切る。Orca の `shortened`、bounded payload の `truncated` も `truncated` にする。
 			- 時刻は epoch ms を ISO にし、なければ null。部品が1つもない件は落とす。
@@ -58,8 +59,10 @@ design: {
 	"D-03": {
 		title: "窓の差分（`src/transcript/diff.ts`）"
 		text: """
-			`diffWindow(prev, next)` が、前の窓と今の窓（どちらも正規化した件の並び）を比べ、`none`、`appended`（`items`：足された件、`updated`：同じ位置で中身が変わった件）、`replacement` のどれかを返す。
+			`diffWindow(prev, next, { full })` が、前の窓と今の窓（どちらも正規化した件の並び）を比べ、`none`、`appended`（`items`：足された件、`updated`：同じ位置で中身が変わった件）、`replacement` のどれかを返す。
+			`full` は、今の窓が読みの上限まで満ちている（件数が limit と同じか、Orca がより古い件があると返した）ことを示す。
 			前の窓が空なら、今の窓の全体を appended にする。そうでなければ、前の窓の後ろの部分（offset o から）の id の並びが、今の窓の先頭と一致する最小の o を探す（窓が前に進むと、先頭の件が窓から外れる）。
+			o が 0 より大きい一致は、`full` のときだけ窓の前進として認める。`full` でなければ会話の全体が窓に収まっているので、先頭の件が消えたのは記録の書き換えであり、replacement にする（例：前 [a,b,c]、今 [b,c] は replacement）。
 			見つからなければ（件が消えた、並びが変わった、窓より多い追記）replacement。見つかれば、重なりの中で中身（正規化した件の JSON）が違う件を updated に、重なりの後ろを items にする。両方が空なら none。
 			セッションの鍵が違う窓は比べず、呼ぶ側が replacement にする。
 			"""
@@ -71,7 +74,7 @@ design: {
 			`TranscriptHub` が、エージェントの id ごとに1つの見張り（watch）を持ち、購読者に出来事を配る。
 
 			- 見張りは、1.5秒ごとに末尾（40 件）を読み、5秒ごとにエージェントからセッションを解き直す。読みは重ねない。
-			- 最初の成功で snapshot を窓として持つ。後の読みは D-03 で比べ、appended か replacement を配る。セッションの鍵が変わったら replacement（reason `session-changed`）。
+			- 最初の成功で snapshot を窓として持つ。後の読みは D-03 で比べ（`full` は、読んだ件数が 40 か、hasMore が真）、appended か replacement を配る。セッションの鍵が変わったら replacement（reason `session-changed`）。
 			- 読めなければ unavailable（誤りの code）を、code が変わったときだけ配り、窓を捨てる。次に読めたら replacement（reason `recovered`）。
 			- 新しい購読者には、持っている窓（snapshot）か unavailable をすぐ送る。まだどちらもなければ、最初の読みの結果を送る。
 			- 上限：見張り 8、購読者 32。超えたら `busy`。最後の購読者が抜けたら見張りを止めて捨てる。`close()` で、すべての購読を閉じる。
@@ -87,7 +90,7 @@ design: {
 			  誤りの本文は `{ ok: false, error }`。Orca の誤りの文は返さない。
 			- `GET /api/transcript/events?agent=`：`text/event-stream`。`retry: 5000`、15秒ごとの注釈の行。出来事（`event:` の名前と、`data:` の JSON）：
 			  `snapshot`（`{ document }`。document は D-02 の文書で、session の鍵、messages、hasMore、before を持つ）、`replacement`（`{ reason, document }`）、
-			  `appended`（`{ session: { key }, items, updated }`）、`unavailable`（`{ error }`）。画面の「前を読む」は、最後に受けた document の before を使う。
+			  `appended`（`{ session: { key }, items, updated }`）、`unavailable`（`{ error }`）。replacement の `reason` は `rewritten`（記録の書き換え、巻き戻し、窓より多い追記）、`session-changed`、`recovered` のどれか。画面の「前を読む」は、最後に受けた document の before を使う。
 			  見張りの上限では `unavailable`（`busy`）を送って閉じる。
 			- どちらも Host を確かめ、Origin があれば同じオリジン（`http://<Host>`）だけを通す（ほかは 403）。CORS を付けない。GET のほかは 405。
 			- `/embed/agent` と、その script と css を静的なファイルとして配る。画面は既存の埋め込みの画面と同じ CSP（`default-src 'none'`、`script-src 'self'`、`style-src 'self'`、

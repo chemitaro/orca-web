@@ -53,7 +53,7 @@ steps: {
 	}
 	"S-07": {
 		title:    "実機の確かめ（読むだけ）と 390px の表示を確かめ、report.md、README.md、AGENTS.md を書く"
-		text:     "タスク担当が行う（文書の手順。方針の「文書を書くステップはタスク担当が書く」）。`npm run transcript:live` を実行し、件数と結論だけを report.md に書く。`npm start` を一時の port で起動し、このリポジトリの worktree のエージェントの `/embed/agent` を幅 390px と広い幅で見る（Orca で開くは押さない）。会話の中身は記録に写さない。README.md と AGENTS.md の説明が、出来上がったものと食い違えば直す。確かめ：T-16。完了：report.md の Verification に実機の表と結論がある"
+		text:     "タスク担当が行う（文書の手順。方針の「文書を書くステップはタスク担当が書く」）。`npm run transcript:live` を実行し、件数と結論だけを report.md に書く。Orca の版（`orca --version`）と、購読の口が Unix ソケットで使えないことをソースで確かめた結論も書く。`npm start` を一時の port で起動し、このリポジトリの worktree のエージェントの `/embed/agent` を幅 390px と広い幅で見る（Orca で開くは押さない）。会話の中身は記録に写さない。README.md と AGENTS.md の説明が、出来上がったものと食い違えば直す。確かめ：T-16。完了：report.md の Verification に実機の表と結論がある"
 		realizes: ["R-06", "R-03"]
 		after:    ["S-06"]
 		session:  "doc"
@@ -65,9 +65,9 @@ tests: {
 	"T-02": {title: "正規化で、本文、ツール、表示できない印が返り、思考が返らず、並べ替えず、長い本文を切る", verifies: ["R-01"]}
 	"T-03": {title: "before で、重ならない、より古いページが返り、agentSession の reset（ok: false）は古いページとして返さない（nativeChat と agentSession）", verifies: ["R-01"]}
 	"T-04": {title: "応答と誤りに、記録のパス、authToken、Orca の誤りの文が含まれない", verifies: ["R-01", "F-03"]}
-	"T-05": {title: "窓の差分が、追記、同じ id の更新、窓の前進、書き換え、巻き戻しを、appended と replacement に分ける", verifies: ["R-02", "F-02"]}
+	"T-05": {title: "窓の差分が、追記、同じ id の更新、満ちた窓の前進、書き換え、巻き戻し、満ちていない窓での先頭の件の消失（replacement）を、appended と replacement に分ける", verifies: ["R-02", "F-02"]}
 	"T-06": {title: "見張りが、購読者で読みを共有し、セッションの切り替えで replacement、読めないときに unavailable、回復で replacement を配り、最後の購読者で止まり、上限で busy を返す", verifies: ["R-02", "F-01", "F-02"]}
-	"T-07": {title: "誤りの種類（agent_not_found、no_session、transcript_not_found、unsupported、unreachable、read_failed、unknown_shape）が区別した code と HTTP の状態で返り、0件は読めたときだけ", verifies: ["F-01"]}
+	"T-07": {title: "誤りの種類（agent_not_found、no_session（状態の API の untabbed のエージェントを含む）、transcript_not_found、unsupported、unreachable、read_failed、unknown_shape）が区別した code と HTTP の状態で返り、0件は読めたときだけ", verifies: ["F-01"]}
 	"T-08": {title: "before のセッションの鍵が今と違えば 409 で読まない", verifies: ["F-02"]}
 	"T-09": {title: "SSE の道が snapshot と appended を配り、別のオリジンを 403 で拒み、CORS を付けない", verifies: ["R-02", "F-03"]}
 	"T-10": {title: "/embed/agent の CSP が inline を許さず、frame-ancestors が読み取りのオリジンだけ", verifies: ["R-05", "F-03"]}
@@ -90,7 +90,7 @@ verification: """
 	- record_paths：なし（記録の report.md は Git の外で、SpecDock が保存する。合格の後に Git の記録だけのコミットは作らない）
 	"""
 rollback: "PR を戻せば、会話の API と画面がなくなり、既存の状態の API と開く口は元のまま動く。"
-exit:     "区切りのレビューと最終品質ゲートが同じ範囲で合格し、実機の確かめが report.md にあり、PR の CI が通ってマージできる状態になっている。"
+exit:     "区切りのレビュー CP-1 が `373d026..<S-04 の後の HEAD>` で、最終品質ゲートが `373d026..HEAD`（全体）で合格し、実機の確かめが report.md にあり、PR の CI が通ってマージできる状態になっている。"
 
 execution: {
 	sessions: {
