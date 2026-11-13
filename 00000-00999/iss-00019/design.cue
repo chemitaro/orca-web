@@ -39,7 +39,7 @@ design: {
 
 			- 状態の決め方 `agentMark(agent: AgentState): AgentMark` を `src/inbox/classify.ts` から export する（または `src/state/` の小さなモジュールに置き、受け箱と要約が共有する）。
 			  規則：`agent.state.value` が `working`・`blocked`・`waiting`・`done` ならそれ。値が null で `agent.terminal.value === 'awaiting-restore'` なら `sleeping`。ほかは `unknown`。
-			  受け箱の `agentItem` の段の決め方（stalled、needs_action の判定）は変えない。受け箱は `sleeping` の判定だけをこの関数に置き換えてもよいが、受け箱のテストの期待値を変えない。
+			  受け箱の `agentItem` は、working・done・sleeping と状態の欠け（`state_missing`・`state_unknown`）の判定にこの関数を使う（同じ規則を2か所に持たない）。段の決め方（stalled、needs_action の判定と順）と受け箱のテストの期待値は変えない。
 			- worktree は、状態の文書の agents の `worktreeId` で集める。agents が1つもない worktree は出さない。worktrees にない id の agents も、その id の worktree として出し、path・branch・project・issue を null にする（F-02）。
 			- 並び：worktree は path の文字列の順（null は最後、同じなら id の順）。agents は id の順。
 			- `since` は `agent.stateStartedAt.value`。`agentType` は `agent.agentType.value`。`detail` は `/embed/agent?id=${encodeURIComponent(agent.id)}`。
@@ -91,7 +91,8 @@ design: {
 			一時の port の `npm start`（`ORCA_WEB_TAILSCALE_IP` は付けない）で、読むだけで確かめる：
 			- `/api/worktrees/summary` の worktree の数、エージェントの総数と状態ごとの数を、同じ時の `/api/state` のエージェントの数と比べる。
 			- `Origin: http://127.0.0.1:47800` の GET と OPTIONS に CORS の見出しが付き、`Origin: http://127.0.0.1:47801` が 403。
-			- `/api/inbox` を読み（連絡は `--peek`）、`run_b7c4f4c08bbc` が連絡を読む Run に入ったこと（その Run の連絡の件数、`runsRead`）と、連絡の `createdAt` がすべて ISO 8601 の形であることを、件数だけで記録する。
+			- 連絡を読む Run の選び方：読むだけの一時のスクリプト（`.workbench/` に置き、コミットしない）で、`src/orca/wiring.ts` の組み立てから共有のポーリングを1回読み、その Run・worker・状態の文書を `selectMailRuns` に通す。`run_b7c4f4c08bbc` が選ばれること、当たった理由（生きている worker、今ある統括の端末、最近の task、`updated_at`）と、`updatedAt` を8日前に置き換えた入力でも選ばれることを記録する。その Run の連絡を `createMailReader` の `readRunMail`（`--peek`）で読んだ件数を記録する（中身は記録しない）。
+			- `/api/inbox` を読み、`sources.mail` の `runsRead` と、項目の `mail[].createdAt` と連絡・関門の `since` がすべて ISO 8601 の形（`toISOString()` と同じ）であることを、件数だけで記録する。
 			README.md と AGENTS.md に、要約の API、文書の版、CORS、`src/summary/` を書く。
 			"""
 		satisfies: ["R-01", "R-02", "R-03", "R-04"]

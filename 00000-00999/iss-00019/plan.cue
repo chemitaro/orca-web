@@ -51,14 +51,14 @@ steps: {
 
 tests: {
 	"T-01": {title: "手書きの状態の文書から、エージェントのいる worktree だけが path の順に出て、各 worktree の agents（id の順、mark、agentType、since、detail は encodeURIComponent）と counts（6つの状態と total）、project（repo の表示名がなければ null）、issue が期待どおり。worktrees にない id のエージェントは path・branch・project・issue が null の worktree で出る。generatedAt、stale、connection（reason は出さない）を写す。題名や最後の一言が文書に出ない", verifies: ["R-01", "F-02"]}
-	"T-02": {title: "状態の決め方：working・blocked・waiting・done はそのまま、null で端末が awaiting-restore なら sleeping、null でほかの端末、または知らない値は unknown。受け箱の既存のテストが変わらず通る", verifies: ["R-01", "F-02"]}
+	"T-02": {title: "状態の決め方：working・blocked・waiting・done はそのまま、null で端末が awaiting-restore なら sleeping、null でほかの端末、または知らない値は unknown。受け箱の `agentItem` がこの関数を使い（classify.ts に同じ規則の分岐が残らない）、受け箱の既存のテストが変わらず通る", verifies: ["R-01", "F-02"]}
 	"T-03": {title: "`GET /api/worktrees/summary` が文書を返し noteViewer を呼ぶ。Origin なしと自分のオリジンは CORS なしで通り、許したオリジンの GET と OPTIONS に `Access-Control-Allow-Origin` と `Vary: Origin` が付き（OPTIONS は 204、allow-methods GET）、ポートやスキームだけ違うオリジンは 403、GET・OPTIONS 以外は 405、知らない Host は 421", verifies: ["R-01", "R-02"]}
 	"T-04": {title: "poller がなければ 503 `summary_unavailable`。状態の文書が stale なら要約も stale: true で 200", verifies: ["F-01"]}
 	"T-05": {title: "`selectMailRuns`：`updated_at` が8日前でも、needsLaunch の worker がいる Run、coordinatorResolvedBy のある Run、task の createdAt か completedAt が7日以内の Run が選ばれ、どれにも当たらない古い Run は選ばれない。updatedAt が null の Run は選ばれる。上限を超えると動いている Run が先に、次に新しい順（null は最後、同じなら id）", verifies: ["R-03"]}
 	"T-06": {title: "poller の受け箱の連絡の読みが `selectMailRuns` の Run を読む（`updated_at` の古い、生きている worker のいる Run の連絡が mail に入る）。読む命令は `--peek` のまま", verifies: ["R-03"]}
 	"T-07": {title: "連絡と関門の `createdAt`：SQLite の形、Z 付き、オフセット付きが `toISOString()` の形に、解けない値と、ない値が null になる", verifies: ["R-04"]}
 	"T-08": {title: "一覧の画面のポーリング：読みの途中に選び直すと、両方の読みが終わった後の予約が1つだけ。古い選択の結果では描かない", verifies: ["R-05"]}
-	"T-09": {title: "実機の確かめ：要約の worktree とエージェントの数が状態の API と合う。CORS が 47800 だけに付く。`run_b7c4f4c08bbc` が連絡を読む Run に入り、連絡の時刻が ISO 8601", verifies: ["R-01", "R-02", "R-03", "R-04"]}
+	"T-09": {title: "実機の確かめ：要約の worktree とエージェントの数が状態の API と合う。CORS が 47800 だけに付く。実機の入力の `selectMailRuns` で `run_b7c4f4c08bbc` が選ばれ（理由を示し、`updatedAt` を8日前にしても選ばれる）、その Run の連絡を `--peek` で読んだ件数を記録する。受け箱の時刻が ISO 8601", verifies: ["R-01", "R-02", "R-03", "R-04"]}
 }
 
 verification: """
