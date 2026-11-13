@@ -22,7 +22,12 @@ ID: "iss-00012"
 
 ## レビュー記録
 
-（仕様のレビューの合格を書く）
+### 仕様のレビュー（spec-review、保証レベル strict）：合格
+
+- 合格の固定（sha256）：requirement.cue `0931f609abdccbd1499967f35854399ad3698f41515480e643ac85d67c9a4fa8`、design.cue `808181800c9502a54d4a3a5bbe6c96b78a60d8107e284fb07b57f6699b179253`、plan.cue `e23d1ae2aaa6a866812e254cc3126c67dd5e14964212b19f549aec2e64ceffba`（canonical の `20fb7235d3a589ddb46257e52aceb0d46586bc4b`）
+- 結果：`.workbench/spec-review/iss-00012-v2/round-3.json`（Claude spec-reviewer Opus 5.5 / high。P0〜P3 0）。応答の記録は同じ場所の `review-response.md`
+- 経過：round 1 Claude pass（P2 1、P3 3）、ChatGPT GPT-6 / Extra High fail（P1 2、P2 1：窓の先頭の削除、計画の範囲と完了条件の食い違い、untabbed）。直した。round 2 Claude pass（P3 1）、ChatGPT fail（P1 1：満ちた窓での削除と追記。モデルの選択の証拠が verified=no のため有効な結果としては受けず、中身を手元で確かめて採った）。直した。round 3 Claude pass（0）、ChatGPT は送信が2回とも失敗して取れなかった
+- P2/P3 の残り：0（すべて直した）
 
 ## Verification
 
