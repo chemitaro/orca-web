@@ -35,6 +35,11 @@ ID: "iss-00012"
 - 合格の固定（sha256）：requirement.cue `e6c3306274f6a3b2b2c66e6d5b4ecfe3d1d6e0e12155c51c4c6ebd9907bb7ac9`、design.cue `808181800c9502a54d4a3a5bbe6c96b78a60d8107e284fb07b57f6699b179253`、plan.cue `5f53439f2695c118c4b47abbc922e6bb65ddb30869df3cc690370ee648d99137`
 - 結果：`.workbench/spec-review/iss-00012-v2/round-4.json`（Claude、P0〜P3 0）。ChatGPT は送っていない（理由は review-response.md）
 
+### 区切りのレビュー CP-1（code-review）：合格
+
+- 範囲 `373d026..d6aa5fbb7ea53cea485b1f7c097ca030a3065f1c`（前の作業者の分を含む）。Claude `code-reviewer` Opus 5.5 / medium を2人（standards、spec）並べた。どちらも P0〜P3 0。
+- 結果：`.workbench/code-review/iss-00012-cp1/round-1-{standards,spec}.json` と `.check.json`。計画は CP-1 に ChatGPT を置いていない。
+
 ## Verification
 
 （ゲートの結果と実機の確かめを書く）
