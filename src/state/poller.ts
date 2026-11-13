@@ -2,6 +2,7 @@
 // 取得元を3つの組に分け、組ごとに間隔と次の時刻を持つ。見る人がいなければ間隔を遅くする。
 // 失敗しても、取得元ごとに最後に成功した値を残す。
 import type { InboxGate, InboxInputs, InboxMessage, MailSnapshot } from '../inbox/model.ts';
+import { selectMailRuns } from '../inbox/select-runs.ts';
 import type { CapabilityReport } from '../orca/capabilities.ts';
 import type { MailReader } from '../orca/read-mail.ts';
 import type {
@@ -18,7 +19,6 @@ import type {
 import { SOURCE_NAMES } from '../orca/read-state.ts';
 import type { Connection, StateDocument } from './model.ts';
 import {
-  isoFromText,
   type NormalizeSources,
   needsLaunch,
   normalizeState,
@@ -382,22 +382,12 @@ export class StatePoller {
       };
       return;
     }
-    const runs = (this.#sources.runs.data as OrcaRun[])
-      .filter(
-        (r) =>
-          r.updatedAt === null ||
-          (Number.isFinite(Date.parse(isoFromText(r.updatedAt) ?? '')) &&
-            at - Date.parse(isoFromText(r.updatedAt) ?? '') <= 7 * 86_400_000),
-      )
-      .sort((a, b) => {
-        if (a.updatedAt === null) return b.updatedAt === null ? a.id.localeCompare(b.id) : 1;
-        if (b.updatedAt === null) return -1;
-        return (
-          Date.parse(isoFromText(b.updatedAt) ?? '') - Date.parse(isoFromText(a.updatedAt) ?? '') ||
-          a.id.localeCompare(b.id)
-        );
-      })
-      .slice(0, 50);
+    const runs = selectMailRuns({
+      runs: this.#sources.runs.data as OrcaRun[],
+      workers: (this.#sources.workers.data as OrcaWorker[] | null) ?? [],
+      state: this.snapshotSync(),
+      now: at,
+    });
     const sourceError = this.#sources.runs.error;
     if (!this.#mailReader || sourceError?.kind === 'unreachable' || sourceError?.kind === 'unavailable') {
       this.#mail = {

@@ -1,4 +1,5 @@
 import type { InboxGate, InboxMessage } from '../inbox/model.ts';
+import { isoFromText } from '../state/normalize.ts';
 import type { ReadOnlyOrcaCli } from './orca-cli.ts';
 import type { SourceRead } from './read-state.ts';
 
@@ -33,7 +34,7 @@ export function createMailReader(cli: ReadOnlyOrcaCli): MailReader {
           runId: str(r.run_id) as string,
           type: str(r.type) as string,
           toHandle: str(r.to_handle) as string,
-          createdAt: str(r.created_at),
+          createdAt: isoFromText(str(r.created_at) ?? '') ?? null,
           subject: str(r.subject)?.slice(0, 200) ?? null,
           dispatchId: str(p?.dispatchId),
           taskId: str(p?.taskId),
@@ -61,7 +62,7 @@ export function createMailReader(cli: ReadOnlyOrcaCli): MailReader {
           id: str(r.id) as string,
           taskId: str(r.taskId) ?? str(r.task_id),
           status: 'pending',
-          createdAt: str(r.createdAt) ?? str(r.created_at),
+          createdAt: isoFromText(str(r.createdAt) ?? str(r.created_at) ?? '') ?? null,
           question: str(r.question)?.slice(0, 200) ?? null,
         });
       }

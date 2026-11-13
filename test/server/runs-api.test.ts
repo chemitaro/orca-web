@@ -231,7 +231,7 @@ test('木・一覧・プロジェクトの画面は絶対パスのスクリプ�
       assert.ok(!/<script>[^<]/.test(page.text), 'no inline script');
       assert.ok(!/\sstyle=/.test(page.text), 'no inline style');
     }
-    for (const path of ['/runs.js', '/run.js', '/project.js', '/runs-view.js', '/runs-dom.js']) {
+    for (const path of ['/runs.js', '/run.js', '/project.js', '/runs-view.js', '/runs-dom.js', '/poll-loop.js']) {
       const reply = await send(path);
       assert.equal(reply.status, 200, path);
       assert.equal(reply.headers['content-type'], 'text/javascript; charset=utf-8');

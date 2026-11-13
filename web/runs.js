@@ -1,7 +1,8 @@
-// Run の一覧の画面（/runs）。/api/runs を 10 秒ごとに読み、各 Run から木の画面へ進める。
+// Run の一覧の画面（/runs）。/api/runs を 10 秒ごとに読み（輪は poll-loop.js で1本に保つ）、各 Run から木の画面へ進める。
 // プロジェクトの選択は ?project= に残す（history.replaceState）。読めなければ前の内容を残して「更新できない」と示す。
 import { renderFreshness } from './inbox-dom.js';
 import { projectFromSearch, searchForProject } from './inbox-view.js';
+import { createPollLoop } from './poll-loop.js';
 import { renderRunList } from './runs-dom.js';
 import { buildRunListView, projectHref, runsApiPath } from './runs-view.js';
 
@@ -17,7 +18,6 @@ const els = {
 let project = projectFromSearch(location.search);
 let lastDoc = null;
 let lastError = null;
-let timer = null;
 
 function render() {
   els.projectLink.hidden = !project;
@@ -41,31 +41,35 @@ function render() {
   els.runs.replaceChildren(renderRunList(document, view.rows, 'Run はありません'));
 }
 
-async function poll() {
-  clearTimeout(timer);
+/** 1回の読み。読む間に選び直されたら（isCurrent が偽）、古い選択の結果で描かない。 */
+async function load(isCurrent) {
   const asked = project;
   try {
     const res = await fetch(runsApiPath(asked), { cache: 'no-store' });
     if (!res.ok) throw new Error(String(res.status));
     const doc = await res.json();
-    // 読む間に選択が変わったら、古い選択の結果で描かない。
-    if (asked === project) {
-      lastDoc = doc;
-      lastError = null;
-    }
+    if (!isCurrent()) return;
+    lastDoc = doc;
+    lastError = null;
   } catch (error) {
+    if (!isCurrent()) return;
     lastError = error.message;
-  } finally {
-    render();
-    timer = setTimeout(poll, POLL_MS);
   }
+  render();
 }
+
+const loop = createPollLoop({
+  load,
+  schedule: (fn, ms) => setTimeout(fn, ms),
+  cancel: (timer) => clearTimeout(timer),
+  delayMs: POLL_MS,
+});
 
 els.project.addEventListener('change', () => {
   project = els.project.value || null;
   history.replaceState(null, '', `${location.pathname}${searchForProject(location.search, project)}${location.hash}`);
-  void poll();
+  loop.restart();
 });
 
 render();
-void poll();
+loop.restart();

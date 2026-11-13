@@ -15,6 +15,7 @@ import type { SendFailure, SendService } from '../send/service.ts';
 import { checkSelection, FIELDS } from '../state/fields.ts';
 import type { StateDocument } from '../state/model.ts';
 import type { SettingsStore } from '../state/settings.ts';
+import { buildWorktreeSummary } from '../summary/build.ts';
 import type { HubErrorCode, TranscriptEvent, TranscriptHub } from '../transcript/hub.ts';
 import { buildDocument, decodeBefore, normalizePage } from '../transcript/normalize.ts';
 import { checkHost, checkSameOriginWrite, checkToken, type GuardResult, TokenStore } from './guard.ts';
@@ -72,7 +73,7 @@ const MAX_SETTINGS_BODY_BYTES = 64 * 1024;
 const MAX_OPEN_BODY_BYTES = 4 * 1024;
 const MAX_WORKTREE_CHARS = 4096;
 const MAX_AGENT_CHARS = 512;
-const READ_ROUTES = new Set(['/api/state', '/api/fields']);
+const READ_ROUTES = new Set(['/api/state', '/api/fields', '/api/worktrees/summary']);
 const TRANSCRIPT_ROUTES = new Set(['/api/transcript', '/api/transcript/events']);
 const DEFAULT_TRANSCRIPT_LIMIT = 40;
 const MAX_TRANSCRIPT_LIMIT = 200;
@@ -127,6 +128,7 @@ const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?:
   '/project.js': { file: 'project.js', type: 'text/javascript; charset=utf-8' },
   '/runs-view.js': { file: 'runs-view.js', type: 'text/javascript; charset=utf-8' },
   '/runs-dom.js': { file: 'runs-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/poll-loop.js': { file: 'poll-loop.js', type: 'text/javascript; charset=utf-8' },
   '/settings': { file: 'settings.html', type: 'text/html; charset=utf-8', page: 'index' },
   '/main.js': { file: 'main.js', type: 'text/javascript; charset=utf-8' },
   '/view.js': { file: 'view.js', type: 'text/javascript; charset=utf-8' },
@@ -551,6 +553,15 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
         }
         if (method !== 'GET') {
           sendError(res, 405, 'method_not_allowed', access);
+          return;
+        }
+        if (pathname === '/api/worktrees/summary') {
+          if (!options.poller) {
+            sendError(res, 503, 'summary_unavailable', access);
+            return;
+          }
+          options.poller.noteViewer();
+          sendJson(res, 200, buildWorktreeSummary(await options.poller.snapshot()), access);
           return;
         }
         if (pathname === '/api/state') {

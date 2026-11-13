@@ -276,3 +276,33 @@ test('初回の同時要求は進行中の連絡の読みを共有する', async
   await Promise.all([first, second]);
   assert.deepEqual(h.calls, ['r1']);
 });
+
+test('updatedAt が8日前でも生きている worker の Run の連絡を読む', async () => {
+  const h = await harness([
+    {
+      id: 'old-active',
+      coordinatorHandle: null,
+      objective: null,
+      updatedAt: new Date(NOW - 8 * 86400000).toISOString(),
+    },
+  ]);
+  h.reader.workers = async () =>
+    ok([
+      {
+        dispatchId: 'fake-dispatch',
+        taskId: null,
+        runId: 'old-active',
+        workerState: 'working',
+        dispatchStatus: null,
+        liveness: null,
+        terminalHandle: null,
+        terminalState: 'attached',
+        worktreeId: null,
+      },
+    ]);
+  h.p.noteInboxViewer();
+  const snapshot = await h.p.inboxSnapshot();
+  assert.deepEqual(h.calls, ['old-active']);
+  assert.equal(snapshot.mail.messages[0]?.id, 'm:old-active');
+  assert.equal(snapshot.mail.runsRead, 1);
+});
