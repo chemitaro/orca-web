@@ -6,6 +6,7 @@ import { OpenOrcaCli, OpenRpc } from './open-gates.ts';
 import { OrcaCli, ReadOnlyOrcaCli } from './orca-cli.ts';
 import { ReadOnlyRpc, UnixSocketRpc } from './rpc.ts';
 import { RuntimeLocator } from './runtime.ts';
+import { SendRpc } from './send-gates.ts';
 
 export interface OrcaWiring {
   open: OpenService;
@@ -16,6 +17,7 @@ export interface OrcaWiring {
   /** 開く門（実機の確かめで経路を指定して送る）。 */
   openRpc: OpenRpc;
   openCli: OpenOrcaCli;
+  sendRpc: SendRpc;
 }
 
 export function wireOrca(options: { executable: string; userDataDir?: string }): OrcaWiring {
@@ -34,5 +36,6 @@ export function wireOrca(options: { executable: string; userDataDir?: string }):
   const openCli = new OpenOrcaCli(cli);
   const openRpc = new OpenRpc(rpc);
   const open = new OpenService({ cli: openCli, rpc: openRpc, capabilities: () => capabilities.get() });
-  return { open, capabilities, readRpc, readCli, openRpc, openCli };
+  const sendRpc = new SendRpc(rpc);
+  return { open, capabilities, readRpc, readCli, openRpc, openCli, sendRpc };
 }

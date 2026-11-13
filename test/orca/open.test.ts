@@ -31,7 +31,8 @@ function report(open = feature(true)): CapabilityReport {
       readTabs: feature(true),
       openExistingTab: open,
       readTranscript: feature(true),
-      sendGuarded: feature(false),
+      sendTerminal: feature(false),
+      sendChat: feature(false),
     },
   };
 }

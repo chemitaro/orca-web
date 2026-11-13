@@ -6,7 +6,7 @@ import { after, before, test } from 'node:test';
 import { inspect } from 'node:util';
 import { ReplayRpcServer, type RpcExchange } from '../../src/orca/replay/rpc-server.ts';
 import { ReadOnlyRpc, UnixSocketRpc } from '../../src/orca/rpc.ts';
-import { RuntimeLocator } from '../../src/orca/runtime.ts';
+import { RuntimeEndpoint, RuntimeLocator } from '../../src/orca/runtime.ts';
 
 const TOKEN = 'secret-token-0123456789abcdef';
 let dir = '';
@@ -272,5 +272,48 @@ test('ReadOnlyRpc は一覧にない method を送らずに誤りにする', asy
     );
   } finally {
     await server.stop();
+  }
+});
+
+test('要求の行の最上位に操作の ID だけを足し、封筒なしの行と秘密の非表示を保つ', () => {
+  const endpoint = new RuntimeEndpoint('rt-1', '/test.sock', TOKEN);
+  const base = { id: 'r', authToken: TOKEN, method: 'terminal.send', params: { text: 'hello' } };
+  assert.equal(endpoint.requestLine('r', 'terminal.send', base.params), `${JSON.stringify(base)}\n`);
+  const envelope = { orchestrationRequestId: '1760000000000-0123456789abcdef0123456789abcdef', extra: 'drop' };
+  assert.deepEqual(JSON.parse(endpoint.requestLine('r', 'terminal.send', base.params, envelope)), {
+    ...base,
+    orchestrationRequestId: envelope.orchestrationRequestId,
+  });
+  noToken(endpoint);
+});
+
+test('UnixSocketRpc は options の封筒を Unix の要求の最上位まで届ける', async () => {
+  const { createServer } = await import('node:net');
+  const sub = await mkdtemp(path.join(dir, 'envelope-'));
+  const socketPath = path.join(sub, 's.sock');
+  let received: Record<string, unknown> | null = null;
+  const server = createServer((socket) => {
+    socket.setEncoding('utf8');
+    socket.once('data', (line: string) => {
+      received = JSON.parse(line);
+      socket.end(`${JSON.stringify({ id: received?.id, ok: true, result: null })}\n`);
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+  await writeFile(
+    path.join(sub, 'orca-runtime.json'),
+    JSON.stringify({
+      runtimeId: 'rt-1',
+      transports: [{ kind: 'unix', endpoint: socketPath }],
+      authToken: TOKEN,
+    }),
+  );
+  try {
+    const rpc = new UnixSocketRpc(new RuntimeLocator({ userDataDir: sub }));
+    const operationId = '1760000000000-0123456789abcdef0123456789abcdef';
+    assert.ok((await rpc.call('terminal.send', {}, { envelope: { orchestrationRequestId: operationId } })).ok);
+    assert.equal((received as Record<string, unknown> | null)?.orchestrationRequestId, operationId);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });

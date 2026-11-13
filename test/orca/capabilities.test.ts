@@ -72,12 +72,17 @@ test('揃った録画から、機能ごとの期待する結果を返す', async
     readTabs: true,
     openExistingTab: true,
     readTranscript: true,
-    sendGuarded: false,
+    sendTerminal: true,
+    sendChat: false,
   });
   assert.deepEqual(report.features.openExistingTab.deferred, ['rpc:session.tabs.activate', 'rpc:worktree.activate']);
   assert.deepEqual(report.features.openExistingTab.missing, []);
-  assert.deepEqual(report.features.sendGuarded.missing, ['orca-web:guarded-send-verified']);
-  assert.ok(report.features.sendGuarded.satisfied.includes('capability:terminal.prompt-delivery.v1'));
+  assert.deepEqual(report.features.sendTerminal.missing, []);
+  assert.deepEqual(report.features.sendChat.missing, [
+    'capability:agent-session.structured.v1',
+    'capability:agent-session.send-recorded.v1',
+  ]);
+  assert.ok(report.features.sendTerminal.satisfied.includes('capability:terminal.prompt-delivery.v1'));
   assert.ok(report.features.readState.satisfied.includes('command:orchestration worker-show'));
   // 確かめで送るのは読む RPC だけ
   assert.deepEqual(rpc.calls.map((c) => c.method).sort(), ['nativeChat.readSession', 'session.tabs.listAll']);
@@ -154,7 +159,7 @@ test('runtime の ID が食い違うと、書き込みの機能が使えず、�
   assert.equal(report.runtimeIdConsistent, false);
   assert.equal(report.features.openExistingTab.available, false);
   assert.ok(report.features.openExistingTab.missing.includes('runtime-id:consistent'));
-  assert.ok(report.features.sendGuarded.missing.includes('runtime-id:consistent'));
+  assert.ok(report.features.sendTerminal.missing.includes('runtime-id:consistent'));
   assert.equal(report.features.readState.available, true);
   assert.equal(report.features.readTabs.available, true);
 });
@@ -167,7 +172,7 @@ test('RPC の応答の _meta.runtimeId だけが食い違っても、書き込�
   assert.equal(report.runtimeId, 'uuid-1');
   assert.equal(report.runtimeIdConsistent, false);
   assert.ok(report.features.openExistingTab.missing.includes('runtime-id:consistent'));
-  assert.ok(report.features.sendGuarded.missing.includes('runtime-id:consistent'));
+  assert.ok(report.features.sendTerminal.missing.includes('runtime-id:consistent'));
   assert.equal(report.features.readTabs.available, true);
 
   const { report: same } = await probe(undefined, undefined, 'uuid-1');
@@ -250,4 +255,49 @@ test('CapabilityCache は接続できなかった結果を持たない', async (
   await cache.get();
   await cache.get();
   assert.equal(probes, 2);
+});
+
+test('送信の各 capability と読む機能の不足を分け、書く RPC は確かめない', async () => {
+  const caps = ['terminal.prompt-delivery.v1', 'agent-session.structured.v1', 'agent-session.send-recorded.v1'];
+  const cliWith = (missing?: string) =>
+    editCli((argv0, doc) => {
+      if (argv0 === 'status') ((doc.result as Json).runtime as Json).capabilities = caps.filter((c) => c !== missing);
+    });
+  const { report, rpc } = await probe(cliWith());
+  assert.ok(report.features.sendTerminal.available);
+  assert.ok(report.features.sendChat.available);
+  assert.deepEqual(report.features.sendTerminal.deferred, [
+    'rpc:terminal.send',
+    'rpc:terminal.agentStatus',
+    'rpc:terminal.inspectProcess',
+    'rpc:orchestration.requestShow',
+  ]);
+  assert.deepEqual(report.features.sendChat.deferred, ['rpc:agentSession.send', 'rpc:agentSession.sendRecorded']);
+  assert.deepEqual(rpc.calls.map((c) => c.method).sort(), ['nativeChat.readSession', 'session.tabs.listAll']);
+  for (const cap of caps) {
+    const { report: r } = await probe(cliWith(cap));
+    assert.ok(
+      (cap.startsWith('terminal') ? r.features.sendTerminal : r.features.sendChat).missing.includes(
+        `capability:${cap}`,
+      ),
+    );
+  }
+  const { report: noTabs } = await probe(
+    cliWith(),
+    editRpc((method, frame) => {
+      if (method === 'session.tabs.listAll') frame.result = { wrong: [] };
+    }),
+  );
+  assert.ok(noTabs.features.sendTerminal.missing.includes('feature:readTabs'));
+  assert.ok(noTabs.features.sendChat.missing.includes('feature:readTabs'));
+  const { report: noTranscript } = await probe(
+    cliWith(),
+    editRpc((method, frame) => {
+      if (method === 'nativeChat.readSession') frame.error = { code: 'method_not_found' };
+    }),
+  );
+  assert.ok(noTranscript.features.sendTerminal.available);
+  assert.ok(noTranscript.features.sendChat.missing.includes('feature:readTranscript'));
+  const { report: inconsistent } = await probe(cliWith(), undefined, 'other-runtime');
+  assert.ok(inconsistent.features.sendChat.missing.includes('runtime-id:consistent'));
 });

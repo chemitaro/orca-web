@@ -221,7 +221,8 @@ export function capabilities(options: { connected?: boolean; readTranscript?: bo
       readTabs: feature(connected),
       openExistingTab: feature(false),
       readTranscript: feature(connected && (options.readTranscript ?? true)),
-      sendGuarded: feature(false),
+      sendTerminal: feature(false),
+      sendChat: feature(false),
     },
   };
 }
