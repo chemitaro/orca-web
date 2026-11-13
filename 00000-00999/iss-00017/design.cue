@@ -26,7 +26,7 @@ design: {
 			**エージェントの項目**：状態の文書の `agents` の1件ごとに1つ。段は次の順で最初に当たったもの：
 			1. needs_action：`state` が `blocked`（理由 `blocked`）か `waiting`（`waiting`）、または結び付いた未読の question・decision_gate の連絡（`question`、`decision_gate`）か、待っている判断の門（`gate`）がある。
 			2. stalled：`state` が `working` で、`lastOutputAt` から `stallMs` 以上たった（`no_output`）。`terminal` の値が `attached`・`awaiting-restore` 以外の値で、`state` が `done` でない（`terminal_ended`）。
-			   その worktree の PR の state が `open` で CI の status が `failure`（`ci_failed`）。ただし `state` が `done` のエージェントには `ci_failed` を当てない（PR の項目が受ける）。
+			   CI の失敗はエージェントの項目に当てない（下の PR の項目が受ける。二重に出さない）。
 			3. running：`state` が `working`（`working`）。
 			4. finished：`state` が `done`（`done`）、または `state` が null で `terminal` が `awaiting-restore`（`sleeping`）。
 			5. unknown：上のどれでもない。`missing` に、state が欠けた（`state_missing`）か、知らない値（`state_unknown`）かを入れる。
@@ -38,21 +38,26 @@ design: {
 			その project と worktreeId は、`dispatchId` の worker の `worktreeId` から決め、分からなければ null。lastWords は subject、since は createdAt、links.detail は null。
 			判断の門（`gate-list` の待っているもの）も同じく、`taskId` → worker → エージェントで結び、結び付かなければ `kind: gate` の項目にする。
 
-			**PR の項目**：状態の文書の worktree のうち、PR の state が `open` で、その worktree に `state` が `succeeded` の worker が1つでもあるものごとに1つ（`kind: pr`、needs_action、理由 `merge_pending`）。
-			未読の worker_done の本文から取った PR の URL で、同じ URL（または repo の PR の番号）の PR の項目があれば、その `mail` に重ねる。
-			URL が状態のどの worktree の PR とも合わない未読の worker_done は、`kind: pr` の unknown（`missing: ["pr_state_missing"]`）にする。
-			CI が failure で open の PR の項目は、`reasons` に `ci_failed` を足し、段は needs_action のまま。PR の state が `merged`・`closed` なら項目を作らない。
-			lastWords は PR の題名、since は worker の終わりの時刻か null、links.pr は https の URL のときだけ。
+			**PR の項目**（`kind: pr`。worktree ごとに高々1つ）：状態の文書の各 worktree について、次の順で最初に当たったもの。
+			1. PR の state が `open` で CI の status が `failure`：stalled、理由 `ci_failed`（その worktree に `state` が `succeeded` の worker があれば `merge_pending` も足す。CI が落ちた PR はマージを待てないので stalled に置く）。
+			2. PR の state が `open` で、その worktree に `state` が `succeeded` の worker が1つでもある：needs_action、理由 `merge_pending`。
+			3. その worktree に `state` が `succeeded` の worker があり、PR の Fact が欠けている（`missing` が `not-provided` 以外。読めなかった、結べなかった）：unknown、`missing: ["pr_state_missing"]`。
+			   `not-provided`（PR がない）なら項目を作らない。PR の state が `merged`・`closed` なら項目を作らない。
+			未読の worker_done の本文から取った PR の URL で、同じ URL の PR の項目があれば、その `mail` に重ねる。
+			URL が状態のどの worktree の PR とも合わない未読の worker_done は、`kind: pr` の unknown（`missing: ["pr_state_missing"]`）にする（project と worktreeId は dispatchId の worker から）。
+			lastWords は PR の題名（なければ null）、since は null（Orca に、worker の終わりの時刻を表す読める項目がないため）、links.pr は https の URL のときだけ。
 
 			**Issue**：worktree の branch か displayName に `iss-\\d+` があればそれを（5桁に0埋め）、なければ結び付いた task の title の同じ形、なければ null。
 
 			**絞り込み**：`project` が null でなければ、`project.id` が等しい項目だけを残す。`projects` には、絞り込む前の全項目に出てくるプロジェクトの `{ id, name, count }` を名前の順で入れる。
 
-			**並び**：各段の中は、needs_action と stalled は since の古い順（null は最後）、running と finished は since の新しい順。finished は `collapsed: true` を文書に付ける（画面が畳む）。
+			**並び**：各段の中は、needs_action、stalled、unknown は since の古い順、running と finished は since の新しい順。どの段でも since が null の項目は最後に置き、同じ since（null どうしを含む）は item の id の順。
+			段の配列の形は `stages: [{ stage, collapsed, items }]` で、並びは needs_action、stalled、running、unknown、finished。finished だけ `collapsed: true`（画面が畳む）。
 
-			**鮮度**：文書の `generatedAt`、`stale`（状態の文書の stale か、連絡の写しが stale）、`connection`（状態の文書の写し）、
-			`sources`：`state`（状態の文書の stale と、取得元のうち誤りのある名前の配列）、`mail`（`fetchedAt`、`lastSuccessAt`、`stale`、`error`、読めなかった Run の数）、
-			`stallMinutes`。連絡の写しが一度も成功していなければ `sources.mail.lastSuccessAt` は null で、画面は質問を「読めない」と示す。
+			**鮮度**：文書の `generatedAt`、`stale`（状態の文書の stale か、連絡の写しが stale）、`connection`（状態の文書の写し）、`stallMinutes`、`sources`：
+			- `state`：状態の文書の `sources` の各取得元の `{ lastSuccessAt, stale, error }` をそのまま写した表と、全体の `stale`。最後に読めた時刻はここから示す。
+			- `mail`：`{ fetchedAt, lastSuccessAt, stale, error, runsRead, runsFailed }`（MailSnapshot がそのまま持つ。stale の決め方は D-03）。
+			連絡の写しが一度も成功していなければ `sources.mail.lastSuccessAt` は null で、画面は質問を「読めない」と示す。
 			"""
 		satisfies: ["R-01", "R-02", "F-01", "F-02"]
 	}
@@ -70,6 +75,7 @@ design: {
 			`check` は引数に `--peek` があり、`--ack`・`--all`・`--unread`・`--wait`・`--retry-request` がないときだけ通す（ほかは呼ばずに例外）。
 			状態の読み取り（`read-state.ts` の `pickAgentStatus`）は `lastAssistantMessage` を拾い（500 文字で切る）、`OrcaAgentStatus.lastAssistantMessage` に入れる。
 			状態の正規化（`normalize.ts`）はこれを状態の文書に出さない。
+			同じく `runs` の読み取り（`OrcaRun`）に `updatedAt`（`updated_at` の文字列。なければ null）を足す。状態の文書の `runs` には出さない（ポーリングが Run を選ぶのにだけ使う）。
 			"""
 		satisfies: ["R-01", "F-01"]
 	}
@@ -78,8 +84,11 @@ design: {
 		text: """
 			連絡の取得元を、状態の文書の `sources` とは別に持つ（状態の文書の形を変えない）。
 			`noteInboxViewer()` が呼ばれてから `VIEWER_WINDOW_MS` の間だけ、orchestration の組の間隔で連絡を読む（見る人がいなければ読まない）。
-			読む Run は、`runs` の取得元の写しのうち、`updated_at` が 7 日以内のもの（上限 50。新しい順）。Run ごとに `readRunMail` と `readGates` を、同時に 4 までで読む。
-			Run ごとに最後に成功した値を残し、失敗した Run は前の値を使って、読めなかった Run の数に数える。全部の Run が失敗したら写しの error に入れる。
+			読む Run は、`runs` の取得元の写しのうち、`updatedAt` が 7 日以内のものを新しい順に、続けて `updatedAt` が null のものを id の順に、合わせて上限 50。
+			Run ごとに `readRunMail` と `readGates` を、同時に 4 までで読む。
+			Run ごとに最後に成功した値を残し、失敗した Run は前の値を使って、`runsFailed` に数える（`runsRead` は成功した数）。1回の読みで全部の Run が失敗したら写しの `error` に入れ、1つでも成功すれば `error` は null。
+			写しの `stale`：一度も成功していない、`error` がある、または最後に成功してから orchestration の組の今の間隔の 3 倍（状態の正規化の STALE_FACTOR と同じ倍数）を超えた、のどれか。
+			見る人がいなくなって読みを止めている間も、この規則のまま（時間がたてば stale になる）。読む Run が 0 件なら、読みは成功として扱う（`runsRead: 0`）。
 			`inboxSnapshot(): Promise<{ state: StateDocument, mail: MailSnapshot, lastWords: Map }>` を出す。`lastWords` は、正規化と同じ id の決め方（`paneKey`、なければタブの id）で、
 			端末のタブの `lastAssistantMessage` から作る（id の作り方は normalize の関数を共有して、二重に書かない）。
 			連絡の取得元の記録と再生は、既存の `ReplayCliRunner` で行う（録画の fixture は手書きの仮の文）。

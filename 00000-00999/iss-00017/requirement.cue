@@ -35,7 +35,7 @@ requirements: {
 		text: """
 			要対応：state が blocked（許可待ち）・waiting（入力待ち）のエージェント、統括あての未読の question・decision_gate の連絡と待っている判断の門、
 			マージ待ちの PR（worker_done で成功を報告した作業者の worktree の、開いている PR）。
-			止まっている：開いている PR の CI の失敗、最後の出力から `ORCA_WEB_STALL_MINUTES`（既定 30）分以上たった working、終了した端末。
+			止まっている：開いている PR の CI の失敗（マージ待ちの PR でも、CI が落ちていればこちら）、最後の出力から `ORCA_WEB_STALL_MINUTES`（既定 30）分以上たった working、終了した端末。
 			動いている：working。終わった：done とスリープ（Orca が復元を待つ端末で、エージェントが動いていないもの）。終わった段は畳み、最後の一言を見せる。
 			各項目に、プロジェクト、Issue（分かれば）、エージェントの種類、経過の時間、最後の一言を出し、詳細とチャット（`/embed/agent?id=…`）、
 			Orca で開く（Mac だけ）、PR へ進める。

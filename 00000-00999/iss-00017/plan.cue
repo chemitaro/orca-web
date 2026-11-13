@@ -17,7 +17,7 @@ steps: {
 	}
 	"S-02": {
 		title:    "連絡と門の読み取り、読む口の一覧、最後の一言の拾い方（D-02）を作る"
-		text:     "対象：`src/orca/read-mail.ts`、`src/orca/orca-cli.ts`（READ_COMMANDS と refuse）、`src/orca/read-state.ts`（lastAssistantMessage）、`test/orca/`。確かめ：T-06、T-07、T-08。完了：`node --test test/orca/*.test.ts` が通り、状態の API の文書に lastAssistantMessage が出ないことを既存の状態のテストで確かめている。区切りのレビュー：なし"
+		text:     "対象：`src/orca/read-mail.ts`、`src/orca/orca-cli.ts`（READ_COMMANDS と refuse）、`src/orca/read-state.ts`（lastAssistantMessage と OrcaRun.updatedAt）、`test/orca/`。確かめ：T-06、T-07、T-08。完了：`node --test test/orca/*.test.ts` が通り、状態の API の文書に lastAssistantMessage と updatedAt が出ないことを既存の状態のテストで確かめている。区切りのレビュー：なし"
 		realizes: ["R-01", "F-01"]
 		after:    ["S-01"]
 		status:   "todo"
@@ -51,14 +51,14 @@ steps: {
 
 tests: {
 	"T-01": {title: "blocked・waiting・未読の question・decision_gate・待っている門のあるエージェントが needs_action に、理由つきで入る", verifies: ["R-01"]}
-	"T-02": {title: "最後の出力から閾値以上の working、終了した端末、開いた PR の CI の失敗が stalled に入り、閾値より前と lastOutputAt の欠けた working は running", verifies: ["R-01"]}
+	"T-02": {title: "最後の出力から閾値以上の working と終了した端末が stalled に入り、閾値より前と lastOutputAt の欠けた working は running。開いた PR の CI の失敗は、エージェントの状態や succeeded の worker の有無によらず、PR の項目として stalled に入り、エージェントの項目には ci_failed が付かない", verifies: ["R-01"]}
 	"T-03": {title: "done とスリープ（state が null で awaiting-restore）が finished に入り、finished に collapsed と最後の一言が付く", verifies: ["R-01"]}
 	"T-04": {title: "state の欠けたエージェントと知らない state、URL の合わない未読の worker_done が unknown に入り、missing の code が付き、needs_action に入らない", verifies: ["F-02"]}
-	"T-05": {title: "PR の項目（succeeded の worker と open の PR）、結び付かない質問・門の項目、絞り込み、projects の数、並び、鮮度と、連絡が一度も読めていないときの sources.mail", verifies: ["R-01", "R-02", "F-01"]}
+	"T-05": {title: "PR の項目（succeeded の worker と open の PR、PR の Fact が読めないときの unknown と、PR がないときに項目を作らないこと）、結び付かない質問・門の項目、絞り込み、projects の数、並び（since が null の項目は最後、同じなら id の順）、鮮度（sources.state の取得元ごとの lastSuccessAt と error）と、連絡が一度も読めていないときの sources.mail", verifies: ["R-01", "R-02", "F-01"]}
 	"T-06": {title: "連絡の読み取りが、決めた項目だけを拾い（本文、question の本文、options、reportPath を拾わない）、統括あてでない件を捨て、worker_done の PR の URL だけを拾う", verifies: ["R-01"]}
 	"T-07": {title: "ReadOnlyOrcaCli が、`--peek` のない check と、`--ack`・`--all`・`--unread`・`--wait`・`--retry-request` の付いた check を呼ばずに拒む（既読にしない）", verifies: ["R-01"]}
-	"T-08": {title: "門の読み取りが pending だけを返し、名前の揺れを受け、知らない形を invalid-shape にする。状態の文書に lastAssistantMessage が出ない", verifies: ["R-01", "F-01"]}
-	"T-09": {title: "ポーリングが、見る人がいるときだけ、7 日以内・上限 50 の Run を読み、失敗した Run は前の値を残して数え、全部の失敗を error にする", verifies: ["R-01", "F-01"]}
+	"T-08": {title: "門の読み取りが pending だけを返し、名前の揺れを受け、知らない形を invalid-shape にする。runs の読み取りが updatedAt を拾い（なければ null）、状態の文書に lastAssistantMessage と updatedAt が出ない", verifies: ["R-01", "F-01"]}
+	"T-09": {title: "ポーリングが、見る人がいるときだけ、7 日以内（updatedAt が null の Run は後ろに）・上限 50 の Run を読み、失敗した Run は前の値を残して runsFailed に数え、全部の失敗を error にし、stale を D-03 の規則（未成功、error、間隔の 3 倍）で決める", verifies: ["R-01", "F-01"]}
 	"T-10": {title: "`GET /api/inbox` が文書を返し、`?project=` で絞り、別のオリジンを 403、GET 以外を 405、長すぎる project を 400、inbox がなければ 503 にし、CORS を付けない", verifies: ["R-01", "R-02"]}
 	"T-11": {title: "`ORCA_WEB_STALL_MINUTES` の既定 30 と、範囲外・整数でない値の ConfigError", verifies: ["R-01"]}
 	"T-12": {title: "Orca に届かないとき、`/api/inbox` が最後に読めた内容と stale と connection を返す", verifies: ["F-01"]}
