@@ -115,6 +115,7 @@ export async function collectTranscripts(reader: TranscriptReader, agents: reado
     const second = await reader.read(t, { limit });
     const again = second.ok ? normalizePage(second.page) : null;
     bump(b.secondRead, again && second.ok ? diffWindow(messages, again, { full: second.page.hasMore }).type : 'error');
+    if (!again) bump(b.errors, second.ok ? 'unknown_shape' : second.error);
 
     if (first.page.before) {
       const older = await reader.read(t, { limit, before: first.page.before });
@@ -124,7 +125,7 @@ export async function collectTranscripts(reader: TranscriptReader, agents: reado
         const ids = new Set(messages.map((m) => m.id));
         if (olderMessages.some((m) => ids.has(m.id))) b.olderOverlap++;
       } else {
-        bump(b.errors, older.ok ? 'unknown_shape' : `older:${older.error}`);
+        bump(b.errors, older.ok ? 'unknown_shape' : older.error);
       }
     }
   }

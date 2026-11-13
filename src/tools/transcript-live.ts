@@ -4,14 +4,14 @@
 // 本文、題名、パス、セッションの識別子は出さない。読む口は ReadOnlyOrcaCli と ReadOnlyRpc だけ。
 import { createStateReader } from '../orca/read-state.ts';
 import { createTranscriptReader } from '../orca/read-transcript.ts';
-import { wireOrca } from '../orca/wiring.ts';
+import { type OrcaWiring, wireOrca } from '../orca/wiring.ts';
 import { StatePoller } from '../state/poller.ts';
 import { collectTranscripts } from './live-transcript.ts';
 
 const DEFAULT_ORCA_BIN = '/Applications/Orca.app/Contents/Resources/bin/orca';
 
-async function main(): Promise<void> {
-  const orca = wireOrca({ executable: process.env.ORCA_BIN ?? DEFAULT_ORCA_BIN });
+/** 読む口を差し替えて、実機に触れずに出力全体を検証する。 */
+export async function probeTranscripts(orca: Pick<OrcaWiring, 'readCli' | 'readRpc' | 'capabilities'>) {
   const capabilities = await orca.capabilities.get();
   const base = {
     probedAt: capabilities.checkedAt,
@@ -23,23 +23,33 @@ async function main(): Promise<void> {
     },
   };
   if (capabilities.connection.state !== 'connected') {
-    process.stdout.write(`${JSON.stringify({ ...base, transcripts: null }, null, 2)}\n`);
-    return;
+    return { ...base, transcripts: null };
   }
   const poller = new StatePoller({
     reader: createStateReader(orca.readCli, orca.readRpc),
     capabilities: () => orca.capabilities.get(),
   });
   const state = await poller.snapshot();
-  const agents = state.agents.filter((a) => a.kind !== 'untabbed').map((a) => ({ id: a.id }));
-  const reader = createTranscriptReader({ rpc: orca.readRpc, capabilities: () => orca.capabilities.get() });
+  const agents = state.agents.map((a) => ({ id: a.id }));
+  const reader = createTranscriptReader({
+    rpc: orca.readRpc,
+    capabilities: () => orca.capabilities.get(),
+    isUntabbedAgent: (id) => poller.snapshotSync().agents.some((a) => a.id === id && a.kind === 'untabbed'),
+  });
   const transcripts = await collectTranscripts(reader, agents);
   const kinds: Record<string, number> = {};
   for (const a of state.agents) kinds[a.kind] = (kinds[a.kind] ?? 0) + 1;
-  process.stdout.write(`${JSON.stringify({ ...base, agentsByKind: kinds, transcripts }, null, 2)}\n`);
+  return { ...base, agentsByKind: kinds, transcripts };
 }
 
-main().catch((error: unknown) => {
-  process.stderr.write(`transcript-live failed: ${error instanceof Error ? error.name : 'error'}\n`);
-  process.exitCode = 1;
-});
+if (import.meta.main) {
+  const main = async (): Promise<void> => {
+    const orca = wireOrca({ executable: process.env.ORCA_BIN ?? DEFAULT_ORCA_BIN });
+    const summary = await probeTranscripts(orca);
+    process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+  };
+  main().catch((error: unknown) => {
+    process.stderr.write(`transcript-live failed: ${error instanceof Error ? error.name : 'error'}\n`);
+    process.exitCode = 1;
+  });
+}
