@@ -49,8 +49,8 @@ requirements: {
 		title: "利用者が、送る前に、宛先と本文を確かめられる（送る意図）"
 		text: """
 			`POST /api/send/intent`（物は `{ agent, text }`。agent は状態の API のエージェントの id）が、Orca の最新の読みで宛先を解いて固定し、確認に要る項目と、使い捨ての確認の票を返す。
-			確認の項目：リポジトリの名前、worktree のパスとブランチ、エージェントの種類、題名、状態、送る経路（端末か構造化 Chat か）、セッションの短い識別子（先頭の8文字）、本文。
-			票は、宛先と本文の sha256 に結び付き、期限は 60 秒で、1回だけ使える。送れない宛先（タブがない、スリープ中、セッションが結ばれていない、権限の確認待ちの端末、エージェントが動いていない端末、必須の識別子が取れない）には票を出さず、理由を返す。
+			確認の項目：リポジトリの名前、worktree のパスとブランチ、エージェントの種類、題名、状態、送る経路（端末か構造化 Chat か）、セッションの短い識別子（先頭の8文字）、本文。確認の項目の worktree は、解いた宛先の worktree と同じでなければならない（違えば票を出さない）。
+			票は、宛先と本文の sha256 と操作の ID に結び付き、期限は 60 秒で、1回だけ使える。操作の ID は意図の応答で画面に渡し、確定の応答を失っても、画面はその ID で照会できる。送れない宛先（タブがない、スリープ中、セッションが結ばれていない、権限の確認待ちの端末、エージェントが動いていない端末、前面のプロセスがシェルか読めない端末、必須の識別子が取れない）には票を出さず、理由を返す。
 			本文は、空や空白だけでない、UTF-8 で 16 KiB までの文字。タブと改行のほかの制御文字を含めない。
 			"""
 		acceptance: [
@@ -62,7 +62,7 @@ requirements: {
 	"R-02": {
 		title: "利用者が確定すると、確かめ直したうえで、その宛先にだけ1回だけ届く（確定）"
 		text: """
-			`POST /api/send/confirm`（物は `{ ticket, text }`）が、票を使い済みにしてから、Orca の最新の読みで次を確かめ直す：Orca の runtime の ID、宛先の同一性（端末はタブ、leaf、端末の handle、ptyId、incarnation、エージェントの種類、provider のセッションの識別子。構造化 Chat はタブ、セッションの識別子、エージェントの種類）、本文の sha256、送れる状態（端末は `terminal.agentStatus` でエージェントがいて権限の確認待ちでない）。
+			`POST /api/send/confirm`（物は `{ ticket, text }`）が、票を使い済みにしてから、Orca の最新の読みで次を確かめ直す：Orca の runtime の ID、宛先の同一性（端末はタブ、leaf、端末の handle、ptyId、incarnation、エージェントの種類、provider のセッションの識別子。構造化 Chat はタブ、セッションの識別子、エージェントの種類）、本文の sha256、送れる状態（端末は `terminal.agentStatus` でエージェントがいて権限の確認待ちでなく、`terminal.inspectProcess` で前面のプロセスがシェルでない）。
 			1つでも違えば、送らずに 409 で確かめに戻す。同じでなければ送る経路で1回だけ送り、結果を返す。同時に送るのは1つだけで、送っている間の確定は断る。
 			"""
 		acceptance: [
@@ -88,7 +88,7 @@ requirements: {
 		title: "送った指示の記録が、この Mac の中に残り、結果の5つの区別が分かる"
 		text: """
 			送る前（操作の ID、宛先、本文、本文の sha256、時刻、確かめた世代＝runtime の ID と端末の incarnation）と、送った後（結果と Orca の receipt の要点）を、利用者の置き場（既定 `~/Library/Application Support/orca-web/sends/`、ディレクトリ 0700、ファイル 0600）の記録に追記する。
-			結果は5つに分ける：accepted（受け付けた）、input_accepted（入力を受けた）、submitted（送信を確かめた）、unknown（結果不明）、refused（拒んだ）。送る前の記録を書けなければ送らない。確定の口で拒んだ要求（票の誤り、宛先の変化、送れない状態、送信の停止）も、本文を除いて記録する。
+			結果は5つに分ける：accepted（受け付けた）、input_accepted（入力を受けた）、submitted（送信を確かめた）、unknown（結果不明）、refused（拒んだ）。送る前の記録を書けなければ送らない。守りを通った確定の要求を確定の口で拒んだもの（票の誤り、宛先の変化、送れない状態、送信の停止）も、本文を除いて記録する。
 			Orca の authToken は記録しない。サーバーのログには本文を出さない。
 			"""
 		acceptance: [
@@ -102,10 +102,12 @@ requirements: {
 		text: """
 			`GET /api/send/{操作の ID}` が、記録からその送信（宛先、時刻、本文、結果、確かめの経過）を返す。`?check=1` を付けると、結果が unknown の送信だけ、Orca に読むだけの照会をする（端末は `orchestration.requestShow`、構造化 Chat は `agentSession.sendRecorded`）。
 			照会の結果を記録に追記し、分かったことを返す。照会でも分からなければ unknown のまま、「Orca の画面で確かめてから、必要なら改めて送る」と示す。この口は送る RPC を決して送らない。
+			その ID の記録がない（`not_found`）ことは、送っていないことを意味する（送る前の記録を書いてから送るため）。
 			"""
 		acceptance: [
 			"結果不明の送信を照会すると、読む RPC だけが送られ、Orca の記録に応じて結果が変わるか unknown のままになる",
 			"送る前の記録だけがあり後の記録がない送信（送っている間にサーバーが止まった）が unknown として返る",
+			"意図で得た操作の ID の確定が届かなかったとき、照会が not_found（送っていない）を返す",
 		]
 	}
 	"R-06": {
@@ -165,7 +167,8 @@ failures: {
 	"F-02": {
 		title: "権限の確認待ちや、エージェントが動いていない端末には送らない。シェルへの代わりの送信もしない"
 		text: """
-			意図と確定の両方で `terminal.agentStatus` を読み、`isRunningAgent` が真でないか `status` が `permission` なら 409 `not_sendable` で送らない。Orca が `refusedReason`（`no-agent`、`permission`）や `agent_prompt_blocked` で拒んだら refused として記録し、送り直さない。
+			意図と確定の両方で `terminal.agentStatus` を読み、`isRunningAgent` が真でないか `status` が `permission` なら 409 `not_sendable` で送らない。さらに `terminal.inspectProcess`（`expectedIncarnationId` つき）で前面のプロセスを読み、シェル（Orca の `isShellProcess` と同じ規則）か、読めなければ送らない（`terminal.agentStatus` は題名の状態だけでエージェントありと返すことがあり、Orca が保護つきで書くかの判定とは別物のため）。
+			Orca が `refusedReason`（`no-agent`、`permission`）で拒んだら refused として記録する。送った後の Orca の誤り（`agent_prompt_blocked`、`terminal_handle_stale` など。本文を書いた後にも起きうる）は unknown として記録する。どちらも送り直さない。
 			送った後の receipt に、エージェントの経路で書いた証（`send.prompt` の provider が claude、codex、antigravity）がなければ、unknown（要確認）として記録し、画面にその旨を示す。
 			"""
 		impact:   "権限の承認や拒否、シェルのコマンドとして受け取られ、意図しない操作が進む"
@@ -188,7 +191,7 @@ failures: {
 	}
 	"F-05": {
 		title: "別のオリジン、許していない Host、トークンのない要求、古い確かめ（期限切れ、使い済み）からの送信を拒み、記録する"
-		text:  "送信の口（意図と確定）は、iss-00007 の書き込みの守り（Host の完全一致、同じオリジンの JSON、短期のトークン）の後に置き、CORS を付けない。確定の口で拒んだ要求は、本文を除いて記録する。結果の確かめの口と送れるかの口は同じオリジンの読みだけを受ける。"
+		text:  "送信の口（意図と確定）は、iss-00007 の書き込みの守り（Host の完全一致、同じオリジンの JSON、短期のトークン）の後に置き、CORS を付けない。守りを通った確定の要求を確定の口で拒んだときは、本文を除いて送信の記録に書く。守りで拒んだ要求は、別のサイトが記録を限りなく増やせないよう送信の記録には書かず、道ごとの件数をサーバーのログに1分に1回まで出す。結果の確かめの口と送れるかの口は同じオリジンの読みだけを受ける。"
 		impact:   "悪意のある画面や古い画面から、利用者の意図しない指示が送られる"
 		recovery: "画面を開き直して確かめ直す"
 	}
@@ -209,13 +212,14 @@ constraints: [
 ]
 
 risks: [
-	"端末の経路の残る隙：orca-web の確かめ直し（R-02）と Orca の書き込みの間（ミリ秒）にエージェントが終わると、Orca はエージェントを認めず、守りなしで本文と Enter を端末に書く（v1.4.258 の `useSettledAgentPrompt` が偽の枝）。送った後の receipt で検出して unknown（要確認）と示すが、書いたことは取り消せない",
+	"端末の経路の残る隙：Orca は、その時に前面のプロセスをエージェントと認めないと（v1.4.258 の `isTerminalRunningSettledPromptAgent` が偽、`useSettledAgentPrompt` が偽の枝）、守りなしで本文と Enter を生のまま端末に書く。この判定は RPC で外に出ていない。orca-web は前面のプロセスがシェルでないことまでは確かめる（F-02）ので、残るのは (1) 確かめ直しと Orca の書き込みの間（ミリ秒）の競合と、(2) 前面がシェルでないが Orca がエージェントと認めないプロセス（例：名前が版の番号に見える Claude を Orca が確かめ損ねた）への生の書き込み。どちらも送った後の receipt で検出して unknown（要確認）と示すが、書いたことは取り消せない",
 	"構造化 Chat の宛先の同一性は sessionId だけで確かめる（Orca 1.4.258 は送信で `expectedRuntimeFence` を見ない）",
-	"`agentSession.sendRecorded` の偽と、`orchestration.requestShow` の absent は、届いていない証拠ではない",
+	"`agentSession.sendRecorded` の偽と、`orchestration.requestShow` の absent は、届いていない証拠ではない。`agentSession.sendRecorded` の真は、受けた記録があることだけを示し、届いたかは示さない",
 	"`terminal.send`、`agentSession.send`、`orchestration.requestShow`、`agentSession.sendRecorded` は Orca の非公開の口。版が変わったら、録画を取り直し、実機の確かめをやり直す",
 	"送信の記録は消さずに増える（1人で使う前提。消し方は README に書く）",
 	"構造化 Chat の結果の形（`value.submission.dispatchState`、`value.queued.state`）は Orca のソースの型から決めた。構造化 Chat の実機の確かめができるまでは録画（手書き）だけで確かめる",
-	"`orchestration.requestShow` が、orca-web の Unix ソケットの呼び出しと同じ呼び手の鍵（ローカルの mutation の呼び手）で receipt を引けることは、実機の確かめ（S-10）で確かめる",
+	"`orchestration.requestShow` が、orca-web の Unix ソケットの呼び出しと同じ呼び手の鍵（ローカルの mutation の呼び手）で receipt を引けることは、実機の確かめ（S-10、応答を捨てる場面）で確かめる",
+	"権限の確認待ちの端末を拒むことは、検証用の宛先で安全に作れないので、録画と再生だけで確かめる",
 ]
 
 decisions: [
@@ -223,8 +227,10 @@ decisions: [
 	"2026-11-13 統括の判断（Q2）：`sendEnabled` は settings.json の鍵、既定は偽、HTTP から変えない、意図と確定のたびに読み直す",
 	"2026-11-13 統括の判断（Q3）：構造化 Chat の送信に `delivery` を付けない（Orca の既定。作業中の turn に合流する）。本人の決定「作業中のエージェントにも送る」（2026-11-06）と合う",
 	"2026-11-13 統括の判断（Q4）：実機の送り先は worktree send-test の Claude（term_33f82ee2…）と Codex（term_0787c5d8…）の2つだけ。構造化 Chat の検証用のセッションは本人に頼み、用意できたら知らせる。それまでは録画と再生",
-	"2026-11-13 タスク担当：操作の ID は確定のときに作り、形は `<13桁のミリ秒>-<32桁の16進>`（構造化 Chat の clientOperationId の形。端末の orchestrationRequestId は任意の文字列を受けるので同じ形を使う）",
+	"2026-11-13 タスク担当：操作の ID は意図のときに作って票に結び付け、意図の応答で返す（仕様のレビュー round 1 の P1。確定の応答を失っても照会できるように）。形は `<13桁のミリ秒>-<32桁の16進>`（構造化 Chat の clientOperationId の形。端末の orchestrationRequestId は任意の文字列を受けるので同じ形を使う。Orca は 24 時間より古い clientOperationId を拒むが、票の期限は 60 秒）",
+	"2026-11-13 タスク担当：送る前の確かめに `terminal.inspectProcess` の前面のプロセスがシェルでないことを足す（仕様のレビュー round 1 の P1。`terminal.agentStatus` は題名だけでエージェントありと返す枝がある）。残る隙を risks に書き直し、統括に知らせる",
 	"2026-11-13 タスク担当：送った後の結果は、記録がある限り HTTP 200 で返し、5つの区別を `outcome` で示す（refused と unknown も 200）。送る前に止めたものだけを 4xx・5xx にする",
 	"2026-11-13 タスク担当：構造化 Chat は、確認待ちのときも Orca が待たせて答えないので、orca-web は状態で拒まない。端末は `terminal.agentStatus` の permission で拒む",
-	"2026-11-13 タスク担当：Orca の誤り `agent_prompt_blocked` は refused とし、「本文が入力欄に残っているかもしれない」と示す（Enter の前に止まると、貼り付けが残りうる）",
+	"2026-11-13 タスク担当：端末で送った後の Orca の誤りは unknown とする（`agent_prompt_blocked` と `terminal_handle_stale` は本文を書いた後にも起きうる。仕様のレビュー round 1 の P1）。`agent_prompt_blocked` には「本文が入力欄に残っているかもしれない」を添える。`send.accepted` が偽の応答と、`invalid_argument`・`method_not_found` だけが refused",
+	"2026-11-13 タスク担当：構造化 Chat で、Orca がまだ送りうるもの（待機のカードの waiting・returned、カードの再送待ちの rejected、pending）は accepted とし、refused にしない（仕様のレビュー round 1 の P1。refused と示すと、利用者が同じ本文を改めて送り二重になる）",
 ]
