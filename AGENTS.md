@@ -19,15 +19,16 @@ orca-web は、この Mac の Orca（stablyai/orca のデスクトップアプ�
 - `src/state/`：状態の API の中身。`normalize.ts`（正規化した文書 `orca-web.state/v1` の組み立て。型は `model.ts`）、`poller.ts`（共有のポーリング。Orca を読むのはここだけ）、`fields.ts`（表示できる項目の一覧）、`settings.ts`（項目の選択の保存）。
 - `src/transcript/`：会話の API の中身。`normalize.ts`（正規化した文書 `orca-web.transcript/v1`。思考は落とす）、`diff.ts`（窓の差分：追記と置き換え）、`hub.ts`（エージェントごとの共有の見張り。Unix ソケットは購読の口を受けないので末尾を読み直す）。
 - `src/inbox/`：受け箱の中身。`classify.ts`（`buildInbox`。状態の文書と連絡の写しと時刻から、段 needs_action・stalled・running・unknown・finished に分ける純粋な関数）、`model.ts`（文書 `orca-web.inbox/v1` の型）。連絡の写しはポーリング（`poller.ts`）が、受け箱を見る人がいる間だけ読む。最後の一言（`lastAssistantMessage`）は受け箱の文書にだけ出し、状態の API には出さない。
+- `src/runs/`：木と一覧の中身。`tree.ts`（`buildRunTree`、`buildRunList`。状態の文書だけから、統括を根に worker を task の親子で組み、プロジェクトの札、親が分からない節の `orphan`、一覧の絞り込みと並びを決める純粋な関数）、`model.ts`（文書 `orca-web.run-tree/v1`、`orca-web.runs/v1` の型）。今の統括の端末（`activeCoordinatorHandle`）は状態の正規化（`normalize.ts`）が決める。
 - `src/server/`：HTTP の入口。
-  - `app.ts`：道。`GET /api/health`（`pid` と待ち受けの状態）、`GET /api/state`、`GET /api/fields`、`PUT /api/settings/fields`、`POST /api/token`、`POST /api/open`、`GET /api/transcript`、`GET /api/transcript/events`（SSE。同じオリジンだけ）、`GET /api/inbox`（受け箱。同じオリジンだけ、`?project=`）、`/embed/*`、静的な画面。
+  - `app.ts`：道。`GET /api/health`（`pid` と待ち受けの状態）、`GET /api/state`、`GET /api/fields`、`PUT /api/settings/fields`、`POST /api/token`、`POST /api/open`、`GET /api/transcript`、`GET /api/transcript/events`（SSE。同じオリジンだけ）、`GET /api/inbox`（受け箱。同じオリジンだけ、`?project=`）、`GET /api/runs`（Run の一覧。同じオリジンだけ、`?project=`）、`GET /api/runs/<id>/tree`（木。同じオリジンだけ）、`/runs`・`/runs/<id>`・`/projects/<id>` の画面、`/embed/*`、静的な画面。
   - `guard.ts`：書き込みの守り（Host の完全一致、同じオリジンの JSON、短期のトークン `TokenStore`）。すべての道で Host を確かめ、書き込みに CORS を付けない。
   - `config.ts`：環境変数（`PORT`、`ORCA_BIN`、`ORCA_WEB_TAILSCALE_IP`、`ORCA_WEB_READ_ORIGINS`、`ORCA_WEB_SETTINGS_FILE`、`ORCA_WEB_STALL_MINUTES`）を読み、誤りは `ConfigError`。
   - `listen.ts`：待ち受け。127.0.0.1 と Tailscale の IP の2つだけで、いつもアドレスを付けて listen する（0.0.0.0 や `::` にしない）。Tailscale の IP で待ち受けられなければ 127.0.0.1 だけで続けて試し直す。
   - `main.ts`：起動（設定の誤りは終了コード2、127.0.0.1 で待ち受けられなければ 1、SIGTERM と SIGINT で 0）。
 - `src/service/launchd.ts`：LaunchAgent（ラベル `io.github.chemitaro.orca-web`）の定義の組み立てと操作（`ServiceManager`）。入口は `src/tools/service.ts`。
 - `src/tools/`：実機の確かめ（`probe-live.ts`、`open-live.ts`、`transcript-live.ts`）、録画、常駐の命令（`service.ts`）の道具。
-- `web/`：受け箱の画面（`/`。`index.html`、`inbox.js`、組み立ては純粋な関数の `inbox-view.js`、DOM は `inbox-dom.js`）と、状態の画面（`/settings`。`settings.html`）（素の ES Modules。ビルドしない）。表の組み立ては純粋な関数の `view.js`、書き込みのトークンの扱いは `write.js`。ボタンの部品は `web/embed/`（1行のスクリプト `open-button.js` と、iframe の `open-button.html`・`open-button-frame.js`・`open-button.css`）。エージェントの詳細とチャット（読むだけ）は `web/embed/agent.*`（組み立ては純粋な関数の `agent-view.js`、DOM は textContent だけで描く `agent-dom.js`）。
+- `web/`：受け箱の画面（`/`。`index.html`、`inbox.js`、組み立ては純粋な関数の `inbox-view.js`、DOM は `inbox-dom.js`）と、状態の画面（`/settings`。`settings.html`）と、木・一覧・プロジェクトの画面（`/runs/<id>` は `run.html`・`run.js`、`/runs` は `runs.html`・`runs.js`、`/projects/<id>` は `project.html`・`project.js`。組み立ては純粋な関数の `runs-view.js`、DOM は textContent だけで描く `runs-dom.js`）（素の ES Modules。ビルドしない）。表の組み立ては純粋な関数の `view.js`、書き込みのトークンの扱いは `write.js`。ボタンの部品は `web/embed/`（1行のスクリプト `open-button.js` と、iframe の `open-button.html`・`open-button-frame.js`・`open-button.css`）。エージェントの詳細とチャット（読むだけ）は `web/embed/agent.*`（組み立ては純粋な関数の `agent-view.js`、DOM は textContent だけで描く `agent-dom.js`）。
 - `test/`：`node:test` のテストと、録画の fixture（`test/fixtures/`、状態の API の手書きの録画は `test/state/fixture.ts`、会話の仮の Orca は `test/transcript/fixture.ts`）。
 - 依存は devDependencies（`typescript`、`@types/node`、`@biomejs/biome`）だけです。実行時の依存を足さないでください。
 
