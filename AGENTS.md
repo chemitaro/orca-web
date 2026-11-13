@@ -14,21 +14,23 @@ orca-web は、この Mac の Orca（stablyai/orca のデスクトップアプ�
   - `open-target.ts`、`open-gates.ts`、`open.ts`：「Orca で開く」。タブの選び方（純な関数）、門（`OpenOrcaCli`、`OpenRpc`。読む操作と、`terminal switch`・`session.tabs.activate`・`worktree.activate` の `navigation: "host"` だけを通す）、開く処理（`OpenService`）。タブやファイルを作る操作を送る経路を足さないでください。
   - `read-mail.ts`：受け箱のための、統括あての連絡（`orchestration check --peek --terminal run:<id>`）と待っている判断の門（`gate-list --run`）の読み取り。決めた項目だけを拾い（本文、質問の本文、options、reportPath は拾わない）、worker_done は本文の PR の URL だけを拾う。`ReadOnlyOrcaCli` は `--peek` のない check と `--ack`・`--all`・`--unread`・`--wait`・`--retry-request` を拒む。統括の連絡を既読にする読み方を足さないでください。
   - `read-transcript.ts`：会話の記録の読み取り（`createTranscriptReader`）。エージェントの id から、Orca がタブに持つセッションの識別子と記録のパスを解き、`nativeChat.readSession`（端末）か `agentSession.history`（構造化 Chat）で読む。タブのない（状態の API で `untabbed` の）エージェントは `no_session`。記録のパスは応答に出さない。
+  - `send-gates.ts`、`send.ts`：送信。門（`SendRpc`。読む RPC に `terminal.agentStatus`・`terminal.inspectProcess`・`orchestration.requestShow`・`agentSession.sendRecorded` を足し、書き込みは決めた形の `terminal.send`（`agentPrompt`、要求の封筒の `orchestrationRequestId`）と `agentSession.send`（text の block だけ）だけを通す）と、送る経路のアダプター（送る前の読み、1回だけの送信、結果の5つの分け方、構造化 Chat の指紋、読むだけの照会）。送る経路を足したり、再送の道を足したりしないでください。
   - `wiring.ts`：実物の Orca につなぐ組み立て（サーバーと実機の確かめの道具が共有する）。
   - `replay/`：録画と再生（`ReplayCliRunner`、`ReplayRpcTransport`、仮名化と検査の `sanitize.ts`）。
-- `src/state/`：状態の API の中身。`normalize.ts`（正規化した文書 `orca-web.state/v1` の組み立て。型は `model.ts`）、`poller.ts`（共有のポーリング。Orca を読むのはここだけ）、`fields.ts`（表示できる項目の一覧）、`settings.ts`（項目の選択の保存）。
+- `src/state/`：状態の API の中身。`normalize.ts`（正規化した文書 `orca-web.state/v1` の組み立て。型は `model.ts`）、`poller.ts`（共有のポーリング。Orca を読むのはここだけ）、`fields.ts`（表示できる項目の一覧）、`settings.ts`（項目の選択の保存と、`sendEnabled` の読み。`sendEnabled` を HTTP から変える口を作らないでください）。
+- `src/send/`：送信の中身。`target.ts`（宛先の解決と比べ方、確認の項目。純な関数）、`ticket.ts`（本文の確かめ、操作の ID、使い捨ての票 `TicketStore`）、`journal.ts`（送信の記録 `orca-web.send-record/v1`。送る前の記録を書けなければ送らない）、`service.ts`（`SendService`：意図、確定、送れるか、照会。票の取り出しと処理中の印は同じ同期の処理で行う）、`model.ts`（型）。
 - `src/transcript/`：会話の API の中身。`normalize.ts`（正規化した文書 `orca-web.transcript/v1`。思考は落とす）、`diff.ts`（窓の差分：追記と置き換え）、`hub.ts`（エージェントごとの共有の見張り。Unix ソケットは購読の口を受けないので末尾を読み直す）。
 - `src/inbox/`：受け箱の中身。`classify.ts`（`buildInbox`。状態の文書と連絡の写しと時刻から、段 needs_action・stalled・running・unknown・finished に分ける純粋な関数）、`model.ts`（文書 `orca-web.inbox/v1` の型）。連絡の写しはポーリング（`poller.ts`）が、受け箱を見る人がいる間だけ読む。最後の一言（`lastAssistantMessage`）は受け箱の文書にだけ出し、状態の API には出さない。
 - `src/runs/`：木と一覧の中身。`tree.ts`（`buildRunTree`、`buildRunList`。状態の文書だけから、統括を根に worker を task の親子で組み、プロジェクトの札、親が分からない節の `orphan`、一覧の絞り込みと並びを決める純粋な関数）、`model.ts`（文書 `orca-web.run-tree/v1`、`orca-web.runs/v1` の型）。今の統括の端末（`activeCoordinatorHandle`）は状態の正規化（`normalize.ts`）が決める。
 - `src/server/`：HTTP の入口。
-  - `app.ts`：道。`GET /api/health`（`pid` と待ち受けの状態）、`GET /api/state`、`GET /api/fields`、`PUT /api/settings/fields`、`POST /api/token`、`POST /api/open`、`GET /api/transcript`、`GET /api/transcript/events`（SSE。同じオリジンだけ）、`GET /api/inbox`（受け箱。同じオリジンだけ、`?project=`）、`GET /api/runs`（Run の一覧。同じオリジンだけ、`?project=`）、`GET /api/runs/<id>/tree`（木。同じオリジンだけ）、`/runs`・`/runs/<id>`・`/projects/<id>` の画面、`/embed/*`、静的な画面。
+  - `app.ts`：道。`GET /api/health`（`pid` と待ち受けの状態）、`GET /api/state`、`GET /api/fields`、`PUT /api/settings/fields`、`POST /api/token`、`POST /api/open`、`GET /api/transcript`、`GET /api/transcript/events`（SSE。同じオリジンだけ）、`GET /api/inbox`（受け箱。同じオリジンだけ、`?project=`）、`GET /api/runs`（Run の一覧。同じオリジンだけ、`?project=`）、`GET /api/runs/<id>/tree`（木。同じオリジンだけ）、`POST /api/send/intent`・`POST /api/send/confirm`（送信。書き込みの守りとトークン）、`GET /api/send/status`・`GET /api/send/<操作の ID>`（送れるかと送信の照会。同じオリジンだけ）、`/runs`・`/runs/<id>`・`/projects/<id>` の画面、`/embed/*`、静的な画面。
   - `guard.ts`：書き込みの守り（Host の完全一致、同じオリジンの JSON、短期のトークン `TokenStore`）。すべての道で Host を確かめ、書き込みに CORS を付けない。
-  - `config.ts`：環境変数（`PORT`、`ORCA_BIN`、`ORCA_WEB_TAILSCALE_IP`、`ORCA_WEB_READ_ORIGINS`、`ORCA_WEB_SETTINGS_FILE`、`ORCA_WEB_STALL_MINUTES`）を読み、誤りは `ConfigError`。
+  - `config.ts`：環境変数（`PORT`、`ORCA_BIN`、`ORCA_WEB_TAILSCALE_IP`、`ORCA_WEB_READ_ORIGINS`、`ORCA_WEB_SETTINGS_FILE`、`ORCA_WEB_STALL_MINUTES`、`ORCA_WEB_SENDS_DIR`）を読み、誤りは `ConfigError`。
   - `listen.ts`：待ち受け。127.0.0.1 と Tailscale の IP の2つだけで、いつもアドレスを付けて listen する（0.0.0.0 や `::` にしない）。Tailscale の IP で待ち受けられなければ 127.0.0.1 だけで続けて試し直す。
   - `main.ts`：起動（設定の誤りは終了コード2、127.0.0.1 で待ち受けられなければ 1、SIGTERM と SIGINT で 0）。
 - `src/service/launchd.ts`：LaunchAgent（ラベル `io.github.chemitaro.orca-web`）の定義の組み立てと操作（`ServiceManager`）。入口は `src/tools/service.ts`。
-- `src/tools/`：実機の確かめ（`probe-live.ts`、`open-live.ts`、`transcript-live.ts`）、録画、常駐の命令（`service.ts`）の道具。
-- `web/`：受け箱の画面（`/`。`index.html`、`inbox.js`、組み立ては純粋な関数の `inbox-view.js`、DOM は `inbox-dom.js`）と、状態の画面（`/settings`。`settings.html`）と、木・一覧・プロジェクトの画面（`/runs/<id>` は `run.html`・`run.js`、`/runs` は `runs.html`・`runs.js`、`/projects/<id>` は `project.html`・`project.js`。組み立ては純粋な関数の `runs-view.js`、DOM は textContent だけで描く `runs-dom.js`）（素の ES Modules。ビルドしない）。表の組み立ては純粋な関数の `view.js`、書き込みのトークンの扱いは `write.js`。ボタンの部品は `web/embed/`（1行のスクリプト `open-button.js` と、iframe の `open-button.html`・`open-button-frame.js`・`open-button.css`）。エージェントの詳細とチャット（読むだけ）は `web/embed/agent.*`（組み立ては純粋な関数の `agent-view.js`、DOM は textContent だけで描く `agent-dom.js`）。
+- `src/tools/`：実機の確かめ（`probe-live.ts`、`open-live.ts`、`transcript-live.ts`、`send-live.ts`）、録画、常駐の命令（`service.ts`）の道具。
+- `web/`：受け箱の画面（`/`。`index.html`、`inbox.js`、組み立ては純粋な関数の `inbox-view.js`、DOM は `inbox-dom.js`）と、状態の画面（`/settings`。`settings.html`）と、木・一覧・プロジェクトの画面（`/runs/<id>` は `run.html`・`run.js`、`/runs` は `runs.html`・`runs.js`、`/projects/<id>` は `project.html`・`project.js`。組み立ては純粋な関数の `runs-view.js`、DOM は textContent だけで描く `runs-dom.js`）（素の ES Modules。ビルドしない）。表の組み立ては純粋な関数の `view.js`、書き込みのトークンの扱いは `write.js`。ボタンの部品は `web/embed/`（1行のスクリプト `open-button.js` と、iframe の `open-button.html`・`open-button-frame.js`・`open-button.css`）。エージェントの詳細とチャットは `web/embed/agent.*`（組み立ては純粋な関数の `agent-view.js`、DOM は textContent だけで描く `agent-dom.js`）。送る欄と確認の画面は `web/embed/send-view.js`（状態の移り変わりの純粋な関数。自動で送り直さない）と `send-dom.js`（textContent だけ）。
 - `test/`：`node:test` のテストと、録画の fixture（`test/fixtures/`、状態の API の手書きの録画は `test/state/fixture.ts`、会話の仮の Orca は `test/transcript/fixture.ts`）。
 - 依存は devDependencies（`typescript`、`@types/node`、`@biomejs/biome`）だけです。実行時の依存を足さないでください。
 
@@ -43,6 +45,7 @@ npm run build       # tsc で dist/ に出す
 npm run format      # biome で整形する
 npm run probe:live  # この Mac の Orca で読むだけの確かめ（集計だけを出す）
 npm run open:live   # この Mac の Orca で開く口を確かめる（前面を切り替える。このリポジトリの worktree だけ）
+npm run send:live -- --worktree <パス> --handle <handle>  # 実物の Orca に送る確かめ。統括か利用者が用意した検証用の宛先だけに使う
 npm run transcript:live  # この Mac の Orca で会話を読むだけで確かめる（件数と結論だけ。会話の中身は出さない）
 npm start           # http://127.0.0.1:8791/ で状態の API、画面、開く口を出す
 node src/tools/service.ts install --dry-run   # LaunchAgent の定義と命令を見るだけ（ビルドせず、何も書かない）
@@ -56,7 +59,7 @@ node src/tools/service.ts install --dry-run   # LaunchAgent の定義と命令�
 
 - Git：コミットは `git-commit` スキル（`git add -- <パス>` の後に `git-autocommit`）。日本語の Conventional Commits。`git config user.name`／`user.email` が `chemitaro`／`84865385+chemitaro@users.noreply.github.com` であることを確かめる。`--no-verify`、強制 push、履歴の書き換え、マージ、`main` への直接の push、タグの作成をしない。PR は `Refs #<番号>`（自動で閉じる語は使わない）。
 - リポジトリは公開。秘密、トークン、`.env`、利用者の私的なプロンプトの文、絶対パスの個人の情報を、コミット、録画、ログに入れない。
-- 利用者の環境（`~/.claude/settings.json`、`~/.codex/config.toml`、`~/.agents/`、`~/.local/state/spec-dock/`、launchd の登録と `~/Library/LaunchAgents`、Orca の設定）とほかのリポジトリを変えない。Orca には、許された操作のほかは読む要求だけを送る。開く口の実機の確かめ（`open:live`）は、このリポジトリの worktree だけを対象にする。
+- 利用者の環境（`~/.claude/settings.json`、`~/.codex/config.toml`、`~/.agents/`、`~/.local/state/spec-dock/`、launchd の登録と `~/Library/LaunchAgents`、Orca の設定）とほかのリポジトリを変えない。Orca には、許された操作のほかは読む要求だけを送る。開く口の実機の確かめ（`open:live`）は、このリポジトリの worktree だけを対象にする。送信の実機の確かめ（`send:live`）は、統括か利用者が用意した検証用の宛先だけに送り、業務中のエージェントには送らない。
 - Orca を止めて確かめない（ほかのエージェントが止まる）。Orca に届かないときは、`ORCA_BIN` を存在しないパスにした一時の起動で確かめる。
 - Orca の authToken とペアリングのコードを、記録、URL、画面、ログ、録画に出さない。
 - 判断に迷ったら、統括（Orca の `ask`）か利用者に聞く。PR のマージは利用者が行う。

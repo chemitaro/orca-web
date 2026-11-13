@@ -8,8 +8,7 @@ SpecDock のダッシュボードに部品として埋め込む。
 - プロジェクトの画面（`/projects/<repo の id>`）：そのプロジェクトの受け箱と、そこに節が1つでもある Run。統括が別のプロジェクトにいる Run に「<プロジェクト> の統括から」の札を付ける。
 - 状態の API と画面（`/settings`）：repo・worktree・エージェント・オーケストレーションの状態（種類、状態、時刻、親子、PR と CI、取れるときのモデルと推論）。表示する項目を選べる。
 - 「Orca で開く」：この Mac の Orca で、指定の worktree の既存のタブを前面に出す。別の画面に1行で置けるボタンの部品がある。
-- エージェントの詳細とチャット（読むだけ）：`/embed/agent?id=…` で、エージェントの詳細と会話のログを読む。受け箱の項目と、状態の画面のエージェントの行から開ける。
-- 後の予定：確かめたうえで指示を送る（epic-00004 の iss-00013）。
+- エージェントの詳細とチャット：`/embed/agent?id=…` で、エージェントの詳細と会話のログを読み、宛先と本文を確かめてから指示を送る（送信は設定で有効にしたときだけ）。受け箱の項目と、状態の画面のエージェントの行から開ける。
 
 ## 必要なもの
 
@@ -67,7 +66,8 @@ npm run service:uninstall              # 外して定義を消す（ログと項
 | `ORCA_WEB_TAILSCALE_IP` | なし | Tailscale の IPv4。あれば 127.0.0.1 と並べて待ち受け、その Host を許す。0.0.0.0、ループバック、IPv6 は拒む |
 | `ORCA_WEB_READ_ORIGINS` | `http://127.0.0.1:47800`（と `http://<Tailscale の IP>:47800`） | SpecDock のオリジン（カンマ区切りの正確なオリジン）。読み取りの CORS と、画面とボタンの `frame-ancestors` に使う |
 | `ORCA_BIN` | `/Applications/Orca.app/Contents/Resources/bin/orca` | Orca の CLI の絶対パス |
-| `ORCA_WEB_SETTINGS_FILE` | `~/Library/Application Support/orca-web/settings.json` | 項目の選択の保存先 |
+| `ORCA_WEB_SETTINGS_FILE` | `~/Library/Application Support/orca-web/settings.json` | 項目の選択と、送信の有効・無効（`sendEnabled`）の置き場 |
+| `ORCA_WEB_SENDS_DIR` | `~/Library/Application Support/orca-web/sends/` | 送信の記録の置き場（ディレクトリ 0700、`sends.jsonl` は 0600） |
 | `ORCA_WEB_STALL_MINUTES` | 30 | 受け箱で、最後の出力からこの分数を過ぎた作業中のエージェントを「止まっている」にする（1〜1440 の整数） |
 
 ## 待ち受けと守り
@@ -79,7 +79,8 @@ npm run service:uninstall              # 外して定義を消す（ログと項
 - 書き込み（`POST /api/open`、`PUT /api/settings/fields`）は、同じオリジンの JSON と、`POST /api/token` が出す短期のトークン（`X-Orca-Web-Token`）を要する。書き込みに CORS は付けない。
 - 会話の API（`GET /api/transcript`、`GET /api/transcript/events`）と受け箱の API（`GET /api/inbox`）、木と一覧の API（`GET /api/runs?project=`、`GET /api/runs/<id>/tree`）は同じオリジンだけに読ませ、CORS を付けない（別のオリジンは 403）。
 - 受け箱は、オーケストレーションの連絡を `orca orchestration check --peek --terminal run:<id>` だけで読み、判断の門を `gate-list` で読む。統括の連絡を既読にしない（読む口は `--peek` のない check と `--ack`・`--all` などを送らずに拒む）。連絡は受け箱を見る人がいる間だけ読む。
-- Orca の authToken と書き込みのトークンを、ログ、URL、画面に出さない。会話の記録のパスを応答に出さない。
+- 送信の口（`POST /api/send/intent`、`POST /api/send/confirm`）は、書き込みと同じ守り（同じオリジンの JSON と短期のトークン）を要し、CORS を付けない。送れるかの口（`GET /api/send/status`）と送信の照会（`GET /api/send/<操作の ID>`）は同じオリジンの読みだけ（`Sec-Fetch-Site` が cross-site・same-site なら 403）。守りで拒んだ送信の要求は送信の記録に書かず、件数だけをログに出す。
+- Orca の authToken と書き込みのトークンを、ログ、URL、画面に出さない。会話の記録のパスを応答に出さない。サーバーのログに送った本文を出さない。
 
 ## SpecDock のダッシュボードに置く
 
@@ -111,7 +112,7 @@ SpecDock の画面に1行のスクリプトを置く。スクリプトが自分�
 - 親の画面の幅が 390px 以下の間は、ボタンを出さず、読み込まない（スマホでは出ない）。
 - 押すと、この Mac の Orca で既存のタブを前面に出す。新しいタブやファイルは作らない（スリープ中のエージェントの復元と、タブのない worktree を選んだときに Orca が作る最初の端末は、Orca の通常の動きとして起こりうる）。
 
-### エージェントの詳細とチャット（読むだけ）
+### エージェントの詳細とチャット
 
 SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジンなので、会話の API を同じオリジンで読む。
 
@@ -122,13 +123,29 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 
 - `id`：状態の API のエージェントの `id`（端末のタブは paneKey、構造化 Chat は `chat:<タブの id>`）。`theme`（`light`、`dark`）も渡せる。
 - 上に詳細（題名、worktree、種類、状態、モデルと推論とその意味、親と子、PR と CI、Orca で開く）、下に会話。幅 390px 以下では詳細を畳んで始め、Orca で開くを出さない。
-- 会話は、指示と返答の吹き出し、折り畳んだツール、Orca の知らせの行。思考は出さない。画像や未知の部分は「表示できない」と示す。読めないときは、空の会話ではなく理由を示す。送信の欄はない。
+- 会話は、指示と返答の吹き出し、折り畳んだツール、Orca の知らせの行。思考は出さない。画像や未知の部分は「表示できない」と示す。読めないときは、空の会話ではなく理由を示す。
+- 会話の下に送る欄がある（次の節）。送信が止まっている、送る経路が確かめられない、宛先が送れない状態のときは、欄を止めて理由を示す。
 - 置ける画面は `ORCA_WEB_READ_ORIGINS` のオリジンだけ（`frame-ancestors`）。
 
 会話の API：
 
 - `GET /api/transcript?agent=<id>&limit=<1〜200>&before=<前の応答の before>`：会話の末尾（`schema: "orca-web.transcript/v1"`）。`before` で古いページを読む。セッションが変わっていれば 409 `session_changed`。読めないときは `agent_not_found`・`no_session`・`transcript_not_found`（404）、`unsupported`（501）、`unreachable`・`busy`（503）、`read_failed`・`unknown_shape`（502）。
 - `GET /api/transcript/events?agent=<id>`：Server-Sent Events。`snapshot`（文書）、`appended`（足された件と、同じ id で中身が変わった件）、`replacement`（全体の置き換え。前のページも捨てる）、`unavailable`（読めない理由）。Orca の Unix ソケットは購読の口を受けないので、サーバーが 1.5 秒ごとに末尾を読み直して差を作る。同じエージェントを見る画面は読みを共有する。
+
+### 確かめて送る
+
+送信は既定で止まっている。設定のファイル（`ORCA_WEB_SETTINGS_FILE`）に `"sendEnabled": true` を手で書いたときだけ送れる。HTTP からは変えられない。
+
+```json
+{ "version": 1, "fields": [ ... ], "sendEnabled": true }
+```
+
+- 止める：`sendEnabled` を `false` にするか消す。再起動は要らない（意図と確定と送れるかの口のたびに読み直す）。止めた後、画面の送る欄が止まって理由が出ることを確かめる（項目の選択の保存がちょうど同じ瞬間に重なると、手の書き換えが上書きされうるため）。
+- 流れ：書く →「確かめる」（`POST /api/send/intent`）で、Orca を読み直して宛先を固定し、確認の画面（リポジトリ、worktree とブランチ、種類、題名、状態、経路、セッションの短い識別子、本文、期限 60 秒）を出す →「送る」（`POST /api/send/confirm`）で、宛先、Orca の世代、本文、送れる状態を確かめ直し、同じなら1回だけ送る。変わっていれば送らずに 409 で書く欄に戻る（本文は残る）。
+- 送る経路：端末の Claude Code と Codex は、Orca CLI の `terminal send --text --enter` と同じ耐久の経路（要求の ID つき）。送る直前に、エージェントがいて権限の確認待ちでないこと、前面のプロセスがシェルでないこと、タブ・端末・セッションが確かめのときと同じことを確かめる。構造化 Chat は `agentSession.send`（Orca の既定。作業中なら今の turn に合流する）。権限の承認、割り込み、シェルへの代わりの送信はしない。
+- 結果は5つ：受け付けた（accepted）、入力を受けた（input_accepted）、送信を確かめた（submitted）、結果不明（unknown）、拒んだ（refused）。端末で Orca がエージェントを確かめずに書いたかもしれないとき、確かめたのと別のエージェントの receipt が返ったときは「要確認」として結果不明にする。
+- 結果不明は自動で送り直さない。画面の「確かめる」（`GET /api/send/<操作の ID>?check=1`）が、端末は `orchestration.requestShow`、構造化 Chat は `agentSession.sendRecorded` で、読むだけの照会をする。記録のない ID は、確定が処理中なら `in_progress`、そうでなければ票を取り消してから `not_sent`（送っていない。後から確定が届いても送らない）。
+- 記録：送るたびに、送る前（操作の ID、宛先、本文、時刻、世代）と送った後（結果）を `ORCA_WEB_SENDS_DIR` の `sends.jsonl` に1行ずつ追記する。送る前の記録を書けなければ送らない。記録は自動では消えない。要らなくなったら、サーバーを止めてからファイルを消す。
 
 ### スマホ（tailnet）
 
@@ -143,6 +160,7 @@ npm run build       # dist/ に出す（常駐はこれを動かす）
 npm run probe:live  # この Mac の Orca で読むだけの確かめ（集計だけ）
 npm run open:live   # この Mac の Orca で開く口を確かめる（このリポジトリの worktree だけ）
 npm run transcript:live  # この Mac の Orca で会話を読むだけで確かめる（件数と結論だけ）
+npm run send:live -- --worktree <検証用の worktree のパス> --handle <端末の handle>  # 実物の Orca に送る確かめ（検証用の宛先だけ。業務中のエージェントに使わない）
 ```
 
 設計と調査の記録は SpecDock の Scope（`spec-dock/initiatives/`）にある。
