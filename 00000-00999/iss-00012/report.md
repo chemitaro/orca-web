@@ -77,6 +77,10 @@ ID: "iss-00012"
 - P2/P3（直していない）：plan の印の画面の表示名（P3）、`agentSession.history` の返ったページの sessionId を照らしていない（P2）、hasMore が真で位置が欠けるとき最後のページとして扱う（P2）。
 - 記録だけのコミットはない（report.md は Git の外）。
 
+### PR と CI
+
+- PR #20 https://github.com/chemitaro/orca-web/pull/20（head `5950ebb`、`Refs #12`、`Refs #4`）。CI（GitHub Actions）pass、マージの準備は READY（`github-pr-checks` の observer、2026-11-13）。マージは本人が行う。
+
 ## Residual Risks / Follow-ups
 
 - `nativeChat.readSession` と `agentSession.history` は非公開の口。Orca の版が変わったら `npm run transcript:live` で確かめ直す。
