@@ -1,11 +1,16 @@
-// エージェントの詳細とチャットの画面（読むだけ）。詳細は /api/state を5秒ごとに読み、会話は /api/transcript/events（SSE）で受ける。
-// 文字はすべて textContent で入れる（会話の本文、ツールの出力、題名は信頼しないデータ）。送信の欄は置かない（iss-00013）。
+// エージェントの詳細とチャットの画面。詳細は /api/state を5秒ごとに読み、会話は /api/transcript/events（SSE）で受ける。
+// 会話の下に送る欄（D-10）を置く。流れと状態は send-view.js、描くのは send-dom.js。送れないときは欄を止めて理由を示す。
+// 文字はすべて textContent で入れる（会話の本文、ツールの出力、題名、送る本文は信頼しないデータ）。
 
 import { createWriter } from '../write.js';
 import { renderChatRow, renderDetail } from './agent-dom.js';
 import { buildChat, buildDetail, errorLabel, initialChat, olderResult, reduceChat } from './agent-view.js';
+import { renderSendPanel } from './send-dom.js';
+import { buildSendView, createSendFlow } from './send-view.js';
 
 const STATE_POLL_MS = 5_000;
+/** 送れるかを読み直す間隔。読むのは書く欄か止まった間で、画面が見えているときだけ。 */
+const SEND_STATUS_POLL_MS = 15_000;
 const OPEN_ERRORS = {
   busy: 'ほかの開く処理が動いています',
   worktree_not_found: 'Orca にこの worktree がありません',
@@ -33,6 +38,10 @@ const els = {
   older: /** @type {HTMLButtonElement} */ (document.getElementById('older')),
   log: document.getElementById('log'),
   scroller: document.getElementById('chat'),
+  chatHead: document.getElementById('chat-head'),
+  sendText: /** @type {HTMLTextAreaElement} */ (document.getElementById('send-text')),
+  sendPanel: document.getElementById('send-panel'),
+  send: document.getElementById('send'),
 };
 
 const writer = createWriter();
@@ -168,10 +177,49 @@ els.open.addEventListener('click', async () => {
   }
 });
 
+const sendFlow = createSendFlow({ agentId, writer, onChange: () => renderSend() });
+
+function renderSend() {
+  const state = sendFlow.getState();
+  const view = buildSendView(state);
+  els.chatHead.textContent = view.chatHead;
+  els.sendText.hidden = !view.editor.visible;
+  els.sendText.disabled = view.editor.disabled;
+  if (els.sendText.value !== state.text) els.sendText.value = state.text;
+  els.sendPanel.replaceChildren(renderSendPanel(document, view));
+}
+
+els.sendText.addEventListener('input', () => sendFlow.input(els.sendText.value));
+// ボタンは描き直すたびに作り直すので、まとめて受ける。押しの重なりは send-view.js の reduceSend が捨てる。
+els.sendPanel.addEventListener('click', (event) => {
+  const button = /** @type {HTMLElement | null} */ (event.target)?.closest?.('button[data-action]');
+  if (!button || /** @type {HTMLButtonElement} */ (button).disabled) return;
+  const name = button.dataset.action;
+  if (name === 'submit') void sendFlow.submit();
+  else if (name === 'confirm') void sendFlow.confirm();
+  else if (name === 'cancel') sendFlow.cancel();
+  else if (name === 'query') void sendFlow.query();
+  else if (name === 'back' && sendFlow.back()) void sendFlow.refreshStatus();
+});
+
+async function pollSend() {
+  try {
+    if (document.visibilityState === 'visible') await sendFlow.refreshStatus();
+  } finally {
+    setTimeout(pollSend, SEND_STATUS_POLL_MS);
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') void sendFlow.refreshStatus();
+});
+
+renderSend();
 if (!agentId) {
   els.title.textContent = 'エージェントの指定がありません';
   els.open.hidden = true;
+  els.send.hidden = true;
 } else {
   void pollState();
   connect();
+  void pollSend();
 }

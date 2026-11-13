@@ -490,7 +490,14 @@ test('/embed/agent は inline を許さない CSP と、読み取りのオリジ
     assert.match(csp, /connect-src 'self'(;|$)/);
     assert.match(csp, /frame-ancestors http:\/\/127\.0\.0\.1:47800(;|$)/);
     assert.ok(!csp.includes('unsafe-inline'));
-    for (const path of ['/embed/agent-frame.js', '/embed/agent-view.js', '/embed/agent-dom.js', '/embed/agent.css']) {
+    for (const path of [
+      '/embed/agent-frame.js',
+      '/embed/agent-view.js',
+      '/embed/agent-dom.js',
+      '/embed/send-view.js',
+      '/embed/send-dom.js',
+      '/embed/agent.css',
+    ]) {
       assert.equal((await h.get(path)).status, 200, path);
     }
   });

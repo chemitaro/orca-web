@@ -227,6 +227,96 @@ pre {
   overflow-y: auto;
 }
 
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* 送る欄（D-10）。本文と宛先の項目は textContent で入る。幅 390px でも横にはみ出さない。 */
+#send {
+  flex: none;
+  min-width: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+}
+
+#send-text {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 3.5em;
+  max-height: 30vh;
+  resize: vertical;
+  margin: 0;
+  padding: 4px 8px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+#send-text[hidden] {
+  display: none;
+}
+
+.send-panel {
+  min-width: 0;
+}
+
+.send-message,
+.send-expires,
+.send-detail {
+  margin: 4px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.send-message[data-kind="error"] {
+  color: var(--error);
+}
+
+.send-heading,
+.send-outcome {
+  margin: 4px 0;
+  font-weight: 600;
+}
+
+.send-outcome[data-outcome="unknown"],
+.send-outcome[data-outcome="refused"],
+.send-warnings {
+  color: var(--error);
+}
+
+.send-description {
+  margin: 4px 0;
+}
+
+.send-warnings {
+  margin: 4px 0;
+  padding-left: 1.2em;
+}
+
+.send-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 30vh;
+  overflow-y: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--user-bg);
+}
+
+.send-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
 /* 幅 390px 以下（iPhone）では「Orca で開く」を出さない。スクリプトの matchMedia と同じ条件。 */
 @media (max-width: 390px) {
   #open,

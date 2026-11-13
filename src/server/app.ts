@@ -140,6 +140,8 @@ const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?:
   '/embed/agent-frame.js': { file: 'embed/agent-frame.js', type: 'text/javascript; charset=utf-8' },
   '/embed/agent-view.js': { file: 'embed/agent-view.js', type: 'text/javascript; charset=utf-8' },
   '/embed/agent-dom.js': { file: 'embed/agent-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/send-view.js': { file: 'embed/send-view.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/send-dom.js': { file: 'embed/send-dom.js', type: 'text/javascript; charset=utf-8' },
   '/embed/agent.css': { file: 'embed/agent.css', type: 'text/css; charset=utf-8' },
 };
 
