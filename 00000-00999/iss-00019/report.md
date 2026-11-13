@@ -13,6 +13,8 @@ ID: "iss-00019"
 - 仕様レビュー：合格（round-2、2026-11-14）。レビュアー spec-reviewer（Opus 5.5 / high）。P0/P1 0、P2 0、P3 1（計画の goal の言い方が、改めた R-03 の実機の受入より強い。直さずに記録）。round-1 は P0/P1 0 で合格だったが、P2 1・P3 1 を直して再レビュー。
   - 合格した文書の sha256：requirement.cue `c1927526c72932c6bcf51ae02755e79be44ef5b0a428b2a5b44cdf0bd2b1a161`、design.cue `ced0324c0ee766a972a3b7f77aeea9bb5bed21a78f3148906020f64c70ac56f8`、plan.cue `8c7b2acb0a5a7c457d8d6bc8bfbe239b10164b3a41a1341c5d68ea69bdb6e91d`
   - 結果：`.workbench/spec-review/iss-00019/round-2.json`（対応の記録は `review-response.md`）。照合のコミット `4efd9cbd956316e356ba703f4f8713f56f561f49`
+- 最終品質ゲート：合格（fqg-iss-00019-1、attempt 1、2026-11-14）。合格のコミット `16bce01ace99e2952c7318032638804fa0492d0b`、範囲 `4efd9cb..16bce01`。quality-gate-reviewer（Opus 5.5 / medium）は P0〜P3 すべて 0、coverage 完全。テスト `npm run lint`・`npm test`（515 pass）・`npm run build` すべて exit 0。closure：`.workbench/final-quality-gate/fqg-iss-00019-1/closure.md`。記録だけのコミットはなし。
+- PR：https://github.com/chemitaro/orca-web/pull/25（head `16bce01`）。CI：observable_ci PASS、merge_readiness READY（2026-11-14）。
 
 詳細: [Report Guide](../../../docs/authoring/report.md)
 
