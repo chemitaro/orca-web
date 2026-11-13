@@ -299,9 +299,12 @@ p {
   gap: 12px;
 }
 
+/* 枠の太さを外に足し、中の画面（ビューポート）をちょうど 390px × 844px にする。
+   狭い窓では、枠を含めた外の幅が親の幅に収まるまで中を縮める。 */
 .phone-frame {
+  box-sizing: content-box;
   width: 390px;
-  max-width: 100%;
+  max-width: calc(100% - 20px);
   height: 844px;
   border: 10px solid var(--line);
   border-radius: 32px;
