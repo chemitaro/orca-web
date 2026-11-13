@@ -78,3 +78,14 @@ test('buildView は担当と Task の行を絞らない（終わったものも�
   assert.equal(tasks.rows.length, expectedState.tasks.length);
   assert.ok(tasks.rows.some((r: { cells: { text: string }[] }) => r.cells[0]?.text === '2026-11-06T09:10:00.000Z'));
 });
+
+test('buildView はエージェントの行に、詳細とチャットの画面へのリンクを付け、ほかの表には付けない', () => {
+  const view = buildView(expectedState, FIELDS, ['worktree.branch', 'agent.state'], { formatTime: iso });
+  const [worktrees, agents] = view.tables;
+  assert.ok(worktrees && agents);
+  const row = agents.rows.find((r: { key: string }) => r.key === 'uuid-10:uuid-11');
+  assert.equal(row.link, '/embed/agent?id=uuid-10%3Auuid-11');
+  const chat = agents.rows.find((r: { key: string }) => r.key === 'chat:uuid-80');
+  assert.equal(chat.link, '/embed/agent?id=chat%3Auuid-80');
+  assert.ok(worktrees.rows.every((r: { link: unknown }) => r.link === null));
+});

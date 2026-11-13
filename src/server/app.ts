@@ -2,13 +2,17 @@
 // 「Orca で開く」（/api/token、/api/open、/embed/*）、静的な画面（web/）を配る。
 // すべての要求で Host を selfHosts と完全一致で確かめる（DNS の付け替えへの守り）。読み取りの CORS は許したオリジンにだけ返す。
 // 書き込み（項目の選択の保存と開く口）は、同じオリジンの JSON と、/api/token が出した短期のトークンを要する。書き込みに CORS は付けない。
+// 会話の API（/api/transcript、/api/transcript/events）は同じオリジンだけに読ませ、CORS を付けない（画面は orca-web のオリジンの iframe の中から読む）。
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import type { OpenErrorCode, OpenOutcome, OpenRequest } from '../orca/open.ts';
+import type { TranscriptReader } from '../orca/read-transcript.ts';
 import { checkSelection, FIELDS } from '../state/fields.ts';
 import type { StateDocument } from '../state/model.ts';
 import type { SettingsStore } from '../state/settings.ts';
+import type { TranscriptEvent, TranscriptHub } from '../transcript/hub.ts';
+import { buildDocument, decodeBefore, normalizePage } from '../transcript/normalize.ts';
 import { checkHost, checkSameOriginWrite, checkToken, type GuardResult, TokenStore } from './guard.ts';
 import type { ListenerStatus } from './listen.ts';
 
@@ -33,6 +37,8 @@ export interface AppOptions {
    * service:install は、この pid を launchd のサービスの pid と照らす（同じポートの別のプロセスを成功と見なさない）。
    */
   health?: () => { pid: number; listeners: readonly ListenerStatus[] };
+  /** 会話の読み手と共有の見張り。main.ts が組み立てて渡す。 */
+  transcripts?: { reader: TranscriptReader; hub: TranscriptHub };
   /** 画面のファイルの置き場。既定はリポジトリの web/。 */
   webDir?: string;
 }
@@ -43,6 +49,25 @@ const MAX_OPEN_BODY_BYTES = 4 * 1024;
 const MAX_WORKTREE_CHARS = 4096;
 const MAX_AGENT_CHARS = 512;
 const READ_ROUTES = new Set(['/api/state', '/api/fields']);
+const TRANSCRIPT_ROUTES = new Set(['/api/transcript', '/api/transcript/events']);
+const DEFAULT_TRANSCRIPT_LIMIT = 40;
+const MAX_TRANSCRIPT_LIMIT = 200;
+const SSE_KEEPALIVE_MS = 15_000;
+
+/** 会話の API の誤りの種類ごとの HTTP の状態。 */
+export const TRANSCRIPT_ERROR_STATUS: Record<string, number> = {
+  invalid_request: 400,
+  agent_not_found: 404,
+  no_session: 404,
+  transcript_not_found: 404,
+  session_changed: 409,
+  unsupported: 501,
+  read_failed: 502,
+  unknown_shape: 502,
+  unreachable: 503,
+  busy: 503,
+  transcript_unavailable: 503,
+};
 
 /** 開く処理の誤りの種類ごとの HTTP の状態。 */
 export const OPEN_ERROR_STATUS: Record<OpenErrorCode, number> = {
@@ -69,6 +94,11 @@ const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?:
   '/embed/open-button.js': { file: 'embed/open-button.js', type: 'text/javascript; charset=utf-8' },
   '/embed/open-button-frame.js': { file: 'embed/open-button-frame.js', type: 'text/javascript; charset=utf-8' },
   '/embed/open-button.css': { file: 'embed/open-button.css', type: 'text/css; charset=utf-8' },
+  '/embed/agent': { file: 'embed/agent.html', type: 'text/html; charset=utf-8', page: 'embed' },
+  '/embed/agent-frame.js': { file: 'embed/agent-frame.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/agent-view.js': { file: 'embed/agent-view.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/agent-dom.js': { file: 'embed/agent-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/agent.css': { file: 'embed/agent.css', type: 'text/css; charset=utf-8' },
 };
 
 type Headers = Record<string, string>;
@@ -237,7 +267,73 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
     sendJson(res, outcome.ok ? 200 : (OPEN_ERROR_STATUS[outcome.error] ?? 502), outcome);
   }
 
-  async function handle(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
+  /** `?agent=` の値。なければ null。 */
+  const agentParam = (url: URL): string | null => {
+    const agent = url.searchParams.get('agent');
+    return agent !== null && isBoundedText(agent, MAX_AGENT_CHARS) ? agent : null;
+  };
+
+  async function handleTranscript(res: ServerResponse, url: URL): Promise<void> {
+    const t = options.transcripts;
+    const fail = (error: string): void => sendError(res, TRANSCRIPT_ERROR_STATUS[error] ?? 502, error);
+    if (!t) return fail('transcript_unavailable');
+    const agent = agentParam(url);
+    const limitText = url.searchParams.get('limit');
+    const limit = limitText === null ? DEFAULT_TRANSCRIPT_LIMIT : Number(limitText);
+    const beforeText = url.searchParams.get('before');
+    const before = beforeText === null ? null : decodeBefore(beforeText);
+    if (
+      agent === null ||
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > MAX_TRANSCRIPT_LIMIT ||
+      (beforeText !== null && before === null)
+    ) {
+      return fail('invalid_request');
+    }
+    const resolved = await t.reader.resolve(agent);
+    if (!resolved.ok) return fail(resolved.error);
+    const target = resolved.target;
+    // 前のページは、要求の位置のセッションの鍵が今のセッションと同じときだけ読む（別の会話を混ぜない）。
+    if (before && before.key !== target.key) return fail('session_changed');
+    const read = await t.reader.read(target, before ? { limit, before: before.position } : { limit });
+    if (!read.ok) return fail(read.error);
+    const messages = normalizePage(read.page);
+    if (!messages) return fail('unknown_shape');
+    sendJson(res, 200, buildDocument(target, read.page, messages, new Date()));
+  }
+
+  function handleTranscriptEvents(req: IncomingMessage, res: ServerResponse, url: URL): void {
+    const t = options.transcripts;
+    const agent = agentParam(url);
+    if (!t || agent === null) {
+      sendError(res, t ? 400 : 503, t ? 'invalid_request' : 'transcript_unavailable');
+      return;
+    }
+    res.writeHead(200, baseHeaders({ 'content-type': 'text/event-stream; charset=utf-8', connection: 'keep-alive' }));
+    res.write('retry: 5000\n\n');
+    const write = (event: TranscriptEvent): void => {
+      const { type, ...data } = event;
+      res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    const subscription = t.hub.subscribe(agent, write);
+    if (!subscription.ok) {
+      write({ type: 'unavailable', error: subscription.error });
+      res.end();
+      return;
+    }
+    const keepalive = setInterval(() => res.write(': keepalive\n\n'), SSE_KEEPALIVE_MS);
+    keepalive.unref();
+    const stop = (): void => {
+      clearInterval(keepalive);
+      subscription.unsubscribe();
+    };
+    req.on('close', stop);
+    res.on('close', stop);
+  }
+
+  async function handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+    const pathname = url.pathname;
     const method = req.method ?? 'GET';
     const host = checkHost(req, selfHosts(req));
     if (!host.ok) {
@@ -248,6 +344,21 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
       if (pathname === '/api/health') {
         if (method !== 'GET') sendError(res, 405, 'method_not_allowed');
         else sendJson(res, 200, options.health ? { ok: true, ...options.health() } : { ok: true });
+        return;
+      }
+      if (TRANSCRIPT_ROUTES.has(pathname)) {
+        // 同じオリジンだけ（Origin がないか、自分のオリジン）。CORS を付けない。
+        const origin = req.headers.origin;
+        if (origin !== undefined && origin !== `http://${req.headers.host}`) {
+          sendError(res, 403, 'forbidden_origin');
+          return;
+        }
+        if (method !== 'GET') {
+          sendError(res, 405, 'method_not_allowed');
+          return;
+        }
+        if (pathname === '/api/transcript') await handleTranscript(res, url);
+        else handleTranscriptEvents(req, res, url);
         return;
       }
       if (READ_ROUTES.has(pathname)) {
@@ -339,7 +450,7 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
       sendError(res, 400, 'bad_request');
       return;
     }
-    handle(req, res, url.pathname).catch(() => {
+    handle(req, res, url).catch(() => {
       if (!res.headersSent) sendError(res, 500, 'internal_error');
       else res.destroy();
     });
