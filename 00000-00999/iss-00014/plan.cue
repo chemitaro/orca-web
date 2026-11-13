@@ -25,7 +25,7 @@ steps: {
 	}
 	"S-03": {
 		title:    "実機の確かめ（D-04、D-05）と、見つかった不足の直し（D-06）"
-		text:     "タスク担当が行う。`npm run trial -- --tailscale-ip <IP>` を裏で起動し、Chrome で Mac の幅の `/`、`/phone.html`、`/forbidden.html` を確かめ、写しを `.workbench/trial-evidence/` に置く。開くボタンは worktree `iss-00014`（このリポジトリ）でだけ押す。送信は D-05 のとおり試しの送り先の2つだけ。不足が見つかったら、テストで確かめられる直しは impl、画面の直しは ui のセッションに、新しい worker として依頼する（そのときは state と report に記録する）。確かめ：T-06、T-07、T-08。完了：report.md の Verification に結論と件数がある"
+		text:     "タスク担当が行う。`npm run trial -- --tailscale-ip <IP>` を裏で起動し、Chrome で Mac の幅の `/`、`/phone.html`、`/forbidden.html` を、127.0.0.1 の URL と Tailscale の IP の URL の両方で確かめ（forbidden は 127.0.0.1 の 47901 だけ）、写しを `.workbench/trial-evidence/` に置く。開くボタンは worktree `iss-00014`（このリポジトリ）でだけ押す。送信は D-05 のとおり試しの送り先の2つだけ。不足が見つかったら、テストで確かめられる直しは impl、画面の直しは ui のセッションに、新しい worker として依頼する（そのときは state と report に記録する）。確かめ：T-06、T-07、T-08。完了：report.md の Verification に結論と件数がある"
 		realizes: ["R-01", "R-02", "R-03", "R-04", "F-01", "F-02", "F-03"]
 		after:    ["S-02"]
 		status:   "todo"
@@ -33,8 +33,8 @@ steps: {
 	}
 	"S-04": {
 		title:    "README.md、AGENTS.md、report.md を書く（D-07）"
-		text:     "タスク担当が行う（文書の手順）。確かめ：T-09。完了：README.md と AGENTS.md が出来上がったものと合い、report.md に開く URL、見てほしい点、止め方がある。`npm run lint` が通る"
-		realizes: ["R-04"]
+		text:     "タスク担当が行う（文書の手順）。確かめ：T-09。完了：README.md と AGENTS.md が出来上がったものと合い、report.md に開く URL、見てほしい点、止め方と、空の `## 本人の確かめ` の欄（R-05）がある。`npm run lint` が通る"
+		realizes: ["R-04", "R-05"]
 		after:    ["S-03"]
 		status:   "todo"
 		session:  "doc"
@@ -43,14 +43,14 @@ steps: {
 
 tests: {
 	"T-01": {title: "`buildTrialPlan`：既定で orca-web は 8792、`ORCA_WEB_READ_ORIGINS` は `http://127.0.0.1:47900` だけ。Tailscale の IP を渡すと `http://<IP>:47900` が足され、`ORCA_WEB_TAILSCALE_IP` が付く。47800 と 47901 のオリジンは入らない。設定と送信の記録は state-dir の下。呼んだ側の `ORCA_WEB_SETTINGS_FILE`・`ORCA_WEB_SENDS_DIR`・`ORCA_WEB_READ_ORIGINS` は引き継がず、`ORCA_BIN` は引き継ぐ。ポートが 8791・47800・重なり、state-dir が常駐の既定の置き場の下なら誤り。不正な IP は誤り", verifies: ["F-02", "R-04"]}
-	"T-02": {title: "起動の道具：設定のファイルがなければ `sendEnabled: false` で作り、あれば変えない。state-dir は 0700。子の orca-web が health に答えないと子を止めて 1。ポートが使われていれば起動した分を止めて 1。SIGTERM で子に SIGTERM を送り、pid のファイルを消して 0（子のプロセスは仮の node のスクリプトで差し替える）", verifies: ["F-02", "R-04"]}
-	"T-03": {title: "試しの静的なサーバー：表のファイルだけを返し、ほかは 404（`..` を含む道も）、GET・HEAD 以外は 405、許さない Host は 421。HTML の CSP の script-src・connect-src・frame-src に待ち受けのアドレスごとの orca-web の基の URL があり、ほかのオリジンがない。`/config.json` が orcaPort と highlight を返す。`Cache-Control: no-store`", verifies: ["R-04", "F-01"]}
+	"T-02": {title: "起動の道具：設定のファイルがなければ `fields`（DEFAULT_SELECTED）と `sendEnabled: false` で作り、その中身を `SettingsStore` が誤りなく読み、あれば変えない。state-dir は 0700。子の orca-web が health に答えないと子を止めて 1。ポートが使われていれば起動した分を止めて 1。SIGTERM で子に SIGTERM を送り、pid のファイルを消して 0（子のプロセスは仮の node のスクリプトで差し替える）", verifies: ["F-02", "R-04"]}
+	"T-03": {title: "試しの静的なサーバー：表のファイルだけを返し、ほかは 404（`..` を含む道も）、GET・HEAD 以外は 405、許さない Host（`localhost:<port>` を含む）は 421。HTML の CSP の script-src・connect-src・frame-src に待ち受けのアドレスごとの orca-web の基の URL があり、ほかのオリジンがない。`/config.json` が orcaPort と highlight を返す。`Cache-Control: no-store`", verifies: ["R-04", "F-01"]}
 	"T-04": {title: "許しの確かめ：`buildTrialPlan` の環境から組んだ orca-web で、47900 の要約の GET・OPTIONS は通り ACAO が付き、47901 と 47800 は 403。`/embed/agent` と `/embed/open-button` の `frame-ancestors` が試しのオリジンだけ。47901 の Origin の `POST /api/token`・`POST /api/send/intent` は 403 で、送信の口と Orca を呼ばない。orca-web は `/trial/index.html` を配らない（404）", verifies: ["F-01"]}
 	"T-05": {title: "`buildTrialView`：`send-test` の節が先頭、ほかは要約の順。節の名前はパスの末尾、数は counts、丸は mark・種類・detail を持ち、知らない mark は unknown。worktree の id がなければパスを開くボタンに使う。stale と connection が `connected` でないときは帯の文を返す。題名や本文の項目を返さない", verifies: ["R-01", "R-02", "R-03"]}
-	"T-06": {title: "実機（Mac の幅）：試しの画面の節とエージェントの数が同じ時の要約の API と合う。丸を選ぶと iframe に詳細と会話が出る。開くボタンが出て、worktree `iss-00014` で押すと Orca で前面に出る", verifies: ["R-01", "R-02", "R-03"]}
-	"T-07": {title: "実機（幅 390px の枠）：節が1列で横にはみ出さず、開くボタンの iframe がなく、丸を選ぶと節の下に iframe が開き、詳細が畳まれ、iframe の中に Orca で開くが出ない。試しの送り先の Claude と Codex に iframe から1回ずつ送り（Mac の幅と枠のどちらかで）、結果と試しの `sends.jsonl` の行の数の増えが記録される", verifies: ["R-01", "R-02", "R-03", "F-03"]}
+	"T-06": {title: "実機（Mac の幅。`http://127.0.0.1:47900/` と `http://<Tailscale の IP>:47900/` の両方）：試しの画面の節とエージェントの数が同じ時の要約の API と合う。丸を選ぶと iframe に詳細と会話が出る。開くボタンが出て、worktree `iss-00014` で押すと Orca で前面に出る", verifies: ["R-01", "R-02", "R-03", "R-04"]}
+	"T-07": {title: "実機（幅 390px の枠。127.0.0.1 と Tailscale の IP の両方の `/phone.html`）：節が1列で横にはみ出さず、開くボタンの iframe がなく、丸を選ぶと節の下に iframe が開き、詳細が畳まれ、iframe の中に Orca で開くが出ない。試しの送り先の Claude と Codex に iframe から1回ずつ送り（Mac の幅と枠のどちらかで）、結果と試しの `sends.jsonl` の行の数の増えが記録される", verifies: ["R-01", "R-02", "R-03", "R-04", "F-03"]}
 	"T-08": {title: "実機（許さないオリジン）：`http://127.0.0.1:47901/forbidden.html` で、要約の読み・トークン・送る意図が拒まれ、詳細とチャットの iframe とボタンが描かれない。常駐の 8791 の `/api/health` の pid が確かめの前と後で同じ", verifies: ["F-01", "F-02"]}
-	"T-09": {title: "文書：README.md の試しの節の命令とポートが道具と合い、AGENTS.md に `web/trial/` と `src/tools/trial*.ts` がある。report.md に開く URL、見てほしい点、止め方があり、実際の Tailscale の IP がない", verifies: ["R-04"]}
+	"T-09": {title: "文書：README.md の試しの節の命令とポートが道具と合い、AGENTS.md に `web/trial/` と `src/tools/trial*.ts` がある。report.md に開く URL、見てほしい点、止め方と、`## 本人の確かめ` の欄（日付、環境、点ごとの結果、直すこと、組み込みに進んでよいか）があり、実際の Tailscale の IP がない", verifies: ["R-04", "R-05"]}
 }
 
 verification: """

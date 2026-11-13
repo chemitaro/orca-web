@@ -34,7 +34,7 @@ design: {
 		title: "試しの静的なサーバー（`src/tools/trial-host.ts`）"
 		text: """
 			`createTrialHostHandler({ root, orcaPort, allowedHosts, highlight })`：決めたファイルの表（`/` と `/index.html`、`/phone.html`、`/forbidden.html`、`/trial.js`、`/trial-view.js`、`/forbidden.js`、`/trial.css`）だけを `web/trial/` から返し、
-			`/config.json` で `{ orcaPort, highlight }` を返す。orca-web 自身は `/trial/*` を配らない（`STATIC_FILES` に足さない。テストで 404 を確かめる）。ほかの道は 404、GET と HEAD 以外は 405。すべての要求で Host を許す Host（`127.0.0.1:<port>`、`localhost:<port>`、指定したときは `<Tailscale の IP>:<port>`）と完全一致で確かめ、違えば 421（DNS rebinding よけ）。
+			`/config.json` で `{ orcaPort, highlight }` を返す。orca-web 自身は `/trial/*` を配らない（`STATIC_FILES` に足さない。テストで 404 を確かめる）。ほかの道は 404、GET と HEAD 以外は 405。すべての要求で Host を許す Host（`127.0.0.1:<port>` と、指定したときは `<Tailscale の IP>:<port>`）と完全一致で確かめ、違えば 421（DNS rebinding よけ）。`localhost` は許さない（試しの orca-web は `http://localhost:47900` のオリジンを許さず、CSP の基の URL にも入らないので、localhost で開くと部品が動かずに許しの不備と見分けにくい。421 で早く分かるようにする）。
 			HTML には CSP を付ける：`default-src 'none'; script-src 'self' <orca-web の基の URL たち>; style-src 'self'; connect-src 'self' <基の URL たち>; frame-src 'self' <基の URL たち>; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`。
 			基の URL たちは、待ち受けるアドレスごとの `http://<アドレス>:<orcaPort>`。`Cache-Control: no-store`。
 			待ち受けは `src/server/listen.ts` の `startListeners` をそのまま使う（127.0.0.1 と、指定したときは Tailscale の IP。0.0.0.0 にしない）。
@@ -50,7 +50,7 @@ design: {
 			  `ORCA_WEB_TAILSCALE_IP`（あれば）、`ORCA_WEB_SETTINGS_FILE=<state-dir>/settings.json`、`ORCA_WEB_SENDS_DIR=<state-dir>/sends`。`ORCA_BIN` と `ORCA_WEB_STALL_MINUTES` は呼んだ側の環境を引き継ぎ、ほかの `ORCA_WEB_*` は引き継がない。
 			- ポートが 8791 か 47800 のとき、ポートが重なるとき、`--state-dir` が常駐の既定の置き場（`~/Library/Application Support/orca-web` の下）のときは、誤り（終了コード 2）にする。
 			`--dry-run` は組んだ設定（環境変数の名前と値。IP は伏せない。画面にだけ出し、ファイルに書かない）と URL を出して終わる。
-			起動：state-dir を作り（0700）、設定のファイルがなければ `{ "version": 1, "sendEnabled": false }` を書く（あれば触らない。送信を有効にするのは人が手で書く）。
+			起動：state-dir を作り（0700）、設定のファイルがなければ `{ "version": 1, "fields": <src/state/fields.ts の DEFAULT_SELECTED>, "sendEnabled": false }` を書く（`SettingsStore.load` が受ける形。あれば触らない。送信を有効にするのは人が手で書く）。
 			試しの orca-web を子のプロセス（`process.execPath src/server/main.ts`、組んだ環境）で起動し、`/api/health` が答えるまで待つ（上限 15 秒。答えなければ子を止めて終了コード 1）。
 			次に許すオリジンの静的なサーバー（page-port）と、許さないオリジンの静的なサーバー（forbidden-port）を起動する。どれかのポートが使われていれば、起動した分を止めて終了コード 1。
 			開く URL（127.0.0.1 と、あれば Tailscale の IP の、`/`、`/phone.html`、forbidden の `/forbidden.html`）を標準出力に出し、`<state-dir>/trial.pid` に自分の pid を書く。
@@ -74,7 +74,7 @@ design: {
 		title: "試しの送信の確かめ"
 		text: """
 			試し専用の `settings.json` に `"sendEnabled": true` を手で書き、試しの画面で worktree `send-test` の節の丸（Claude、Codex）を選び、iframe の送る欄から短い決めた文（例：『orca-web の試しの送信です。返事は要りません』）を確かめて送る。
-			送ってよいのは F-03 の2つの handle だけ。iframe を開いたら、送る前に、確認の画面の worktree が `send-test` であることを見る。結果と、試し専用の `sends.jsonl` の行の数（送る前と後）だけを記録する。
+			送ってよいのは F-03 の2つの handle だけ。確認の画面には handle が出ないので、送る直前に、読むだけの `orca terminal list --worktree path:<send-test のパス> --json` と状態の API で、選んだエージェント（paneKey）の端末の handle が F-03 の2つのどちらかで、種類（Claude、Codex）が合うことを確かめ、確認の画面の worktree が `send-test`、種類が同じであることを見る。合わない（handle が変わった、別のエージェントがいる）ときは送らずに統括に問う。結果と、試し専用の `sends.jsonl` の行の数（送る前と後）だけを記録する。
 			確かめた後も、本人の確かめのために `sendEnabled` は真のまま残す（本人の確かめが終わったら偽にする、と report.md に書く）。
 			"""
 		satisfies: ["R-02", "F-02", "F-03"]
@@ -92,8 +92,9 @@ design: {
 		text: """
 			README.md の「SpecDock のダッシュボードに置く」の節に「試しの画面で確かめる」を足す（`npm run trial` の使い方、ポート、止め方、送信を有効にする手順）。AGENTS.md の形の説明に `web/trial/` と `src/tools/trial*.ts` を足す。
 			report.md に、本人が開く URL（`http://127.0.0.1:47900/`、`http://<Tailscale の IP>:47900/`、`/phone.html`、`http://127.0.0.1:47901/forbidden.html`）、見てほしい点の一覧、止め方（`kill -TERM $(cat .workbench/trial/trial.pid)` と、送信を偽に戻すこと）を書く。
+			`## 本人の確かめ` の欄（R-05）を空で用意し、統括への報告で『本人の答えを受けたら統括かタスク担当がこの欄に書き、欄が埋まるまで Issue を閉じない』と伝える。
 			"""
-		satisfies: ["R-04"]
+		satisfies: ["R-04", "R-05"]
 	}
 }
 
