@@ -128,6 +128,7 @@ const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?:
   '/project.js': { file: 'project.js', type: 'text/javascript; charset=utf-8' },
   '/runs-view.js': { file: 'runs-view.js', type: 'text/javascript; charset=utf-8' },
   '/runs-dom.js': { file: 'runs-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/poll-loop.js': { file: 'poll-loop.js', type: 'text/javascript; charset=utf-8' },
   '/settings': { file: 'settings.html', type: 'text/html; charset=utf-8', page: 'index' },
   '/main.js': { file: 'main.js', type: 'text/javascript; charset=utf-8' },
   '/view.js': { file: 'view.js', type: 'text/javascript; charset=utf-8' },
