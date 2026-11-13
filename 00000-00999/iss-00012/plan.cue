@@ -38,18 +38,18 @@ steps: {
 		session:  "impl"
 	}
 	"S-05": {
-		title:    "詳細とチャットの画面（D-06）を仕様と照らして直す"
-		text:     "対象：`web/embed/agent.*`。確かめ：T-11、T-12、T-13、T-14。完了：`node --test test/web/agent-view.test.ts test/web/agent-dom.test.ts` が通り、textContent だけで描く、https だけをリンクにする、置き換えで前のページを捨てる、鍵の違う古いページを足さない、送信の欄がない、にテストがある。区切りのレビュー：なし"
-		realizes: ["R-03", "F-01", "F-02", "F-03"]
+		title:    "実機の確かめの道具（D-08）を仕様と照らして直す"
+		text:     "対象：`src/tools/live-transcript.ts`、`src/tools/transcript-live.ts`、`package.json` の `transcript:live`。確かめ：T-17。完了：`node --test test/tools/*.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、道具の出力に本文、題名、パス、セッションの識別子が出ないことをテストで確かめている。Codex の実装担当の最後の手順なので、止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）。2026-11-13 の本人の補足で、画面の手順を別のセッションに分けるため、もとの S-05（画面）と S-06（開き方と道具）の中身を入れ替えた"
+		realizes: ["R-06"]
 		after:    ["S-04"]
 		session:  "impl"
 	}
 	"S-06": {
-		title:    "状態の画面からの開き方（D-07）と実機の確かめの道具（D-08）を仕様と照らして直す"
-		text:     "対象：`web/view.js`、`web/main.js`、`src/tools/live-transcript.ts`、`src/tools/transcript-live.ts`、`package.json` の `transcript:live`。確かめ：T-15、T-17。完了：`npm run lint`、`npm test`、`npm run build` が通り、道具の出力に本文、題名、パス、セッションの識別子が出ないことをテストで確かめている。実装担当の最後の手順なので、止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
-		realizes: ["R-04", "R-06"]
+		title:    "詳細とチャットの画面（D-06）と、状態の画面からの開き方（D-07）を仕様と照らして直す"
+		text:     "対象：`web/embed/agent.*`、`web/view.js`、`web/main.js`。確かめ：T-11、T-12、T-13、T-14、T-15。完了：`node --test test/web/*.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、textContent だけで描く、https だけをリンクにする、置き換えで前のページを捨てる、鍵の違う古いページを足さない、送信の欄がない、エージェントの行のリンク、にテストがある。画面の実装担当（Claude Opus 5.5）の手順。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
+		realizes: ["R-03", "R-04", "F-01", "F-02", "F-03"]
 		after:    ["S-05"]
-		session:  "impl"
+		session:  "ui"
 	}
 	"S-07": {
 		title:    "実機の確かめ（読むだけ）と 390px の表示を確かめ、report.md、README.md、AGENTS.md を書く"
@@ -84,7 +84,7 @@ verification: """
 	各手順で、その手順のテストを録画の再生で通す。最後に `npm run lint`、`npm test`、`npm run build` を通す。`npm run transcript:live` を実機で実行し、件数と結論だけを report.md に書く。
 	関門（coding-task の `## 関門` に当たる。CUE に専用の項目がないので、ここに書く）：
 	- merge：owner（strict。マージは本人）
-	- 区切りのレビュー CP-1：最後の手順 S-04、範囲 `373d026..<S-04 の後の HEAD>`（前の作業者の分を含む）、レビュアー Claude `code-reviewer`（Opus 5.5 / medium）。理由：公開の契約（`orca-web.transcript/v1`、SSE の出来事）と、同じオリジンの読みの境界が S-04 で決まり、画面（S-05）がそれに依る
+	- 区切りのレビュー CP-1：最後の手順 S-04、範囲 `373d026..<S-04 の後の HEAD>`（前の作業者の分を含む）、レビュアー Claude `code-reviewer`（Opus 5.5 / medium）。理由：公開の契約（`orca-web.transcript/v1`、SSE の出来事）と、同じオリジンの読みの境界が S-04 で決まり、画面（S-06）と道具（S-05）がそれに依る
 	- 最終品質ゲート：範囲 `373d026..HEAD` の全体（`src/`、`web/`、`test/`、`package.json`、`README.md`、`AGENTS.md`）。観点は functional-correctness、requirements-closure、test-adequacy に、security-baseline（XSS、同じオリジン、秘密を出さない）を足す。second_opinion：chatgpt（strict。取れなければ GPT-6 Astra）
 	- test_commands：`npm run lint`、`npm test`、`npm run build`（結合のテストは `npm test` の中の `test/server/*.test.ts`）
 	- record_paths：なし（記録の report.md は Git の外で、SpecDock が保存する。合格の後に Git の記録だけのコミットは作らない）
@@ -95,7 +95,8 @@ exit:     "区切りのレビュー CP-1 が `373d026..<S-04 の後の HEAD>` �
 execution: {
 	sessions: {
 		spec: {task: "仕様化（タスク担当。統括が選んだ値の記録）", model: "opus", effort: "medium", rationale: "統括の依頼書（2026-11-13）：Opus 5.5 / medium（方針の「タスク担当 × standard」から統括が選んだ）。保証レベルは strict だが、値は統括の指定に従う"}
-		impl: {task: "実装（S-01〜S-06。Codex の実装担当、Orca の worker）", model: "gpt-6.1-sol", effort: "medium", rationale: "本人の指示（2026-11-13、統括の依頼書）：コードを書く手順はすべて Codex の GPT-6.1 Sol / medium（方針の「実装担当 × standard」。画面も本人の指示で Sol）。provider: codex"}
+		impl: {task: "実装（S-01〜S-05。API・サーバー側と道具。Codex の実装担当、Orca の worker）", model: "gpt-6.1-sol", effort: "medium", rationale: "本人の指示（2026-11-13、統括の依頼書）：テストで確かめられる実装は Codex の GPT-6.1 Sol / medium（方針の「実装担当 × standard」）。provider: codex"}
+		ui: {task: "画面の実装（S-06。Claude の実装担当、Orca の worker）", model: "claude-opus-5-5", effort: "medium", rationale: "本人の補足（2026-11-13、統括の status の知らせ）：画面の作成は Opus 5.5 / medium（方針の「実装担当（フロントエンド）× standard」）。provider: claude"}
 		doc: {task: "実機の確かめと文書（S-07。タスク担当が自分で行う）", model: "opus", effort: "medium", rationale: "方針の §2 注記：文書を書く手順はタスク担当が書く。実機の確かめは読むだけで、コードを変えない"}
 	}
 	reviews: {
