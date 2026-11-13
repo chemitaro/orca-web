@@ -214,6 +214,8 @@ risks: [
 	"`agentSession.sendRecorded` の偽と、`orchestration.requestShow` の absent は、届いていない証拠ではない",
 	"`terminal.send`、`agentSession.send`、`orchestration.requestShow`、`agentSession.sendRecorded` は Orca の非公開の口。版が変わったら、録画を取り直し、実機の確かめをやり直す",
 	"送信の記録は消さずに増える（1人で使う前提。消し方は README に書く）",
+	"構造化 Chat の結果の形（`value.submission.dispatchState`、`value.queued.state`）は Orca のソースの型から決めた。構造化 Chat の実機の確かめができるまでは録画（手書き）だけで確かめる",
+	"`orchestration.requestShow` が、orca-web の Unix ソケットの呼び出しと同じ呼び手の鍵（ローカルの mutation の呼び手）で receipt を引けることは、実機の確かめ（S-10）で確かめる",
 ]
 
 decisions: [
