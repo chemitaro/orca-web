@@ -69,6 +69,15 @@ export interface NormalizeInput {
   sources: NormalizeSources;
 }
 
+/** 端末の分割タブを、状態と受け箱で同じ識別子に結ぶ。 */
+export function terminalTabIdentity(tab: Pick<OrcaTab, 'parentTabId' | 'leafId' | 'id'>): {
+  paneKey: string | null;
+  id: string | null;
+} {
+  const paneKey = tab.parentTabId && tab.leafId ? `${tab.parentTabId}:${tab.leafId}` : null;
+  return { paneKey, id: paneKey ?? tab.id };
+}
+
 /** 鮮度の判定：最後の成功から、間隔のこの倍を過ぎたら古い。 */
 export const STALE_FACTOR = 3;
 const TITLE_MAX = 200;
@@ -310,11 +319,10 @@ export function normalizeState(input: NormalizeInput): StateDocument {
   };
 
   const terminalTab = (worktreeId: string, tab: OrcaTab): AgentState | null => {
-    const paneKey = tab.parentTabId && tab.leafId ? `${tab.parentTabId}:${tab.leafId}` : null;
+    const { paneKey, id } = terminalTabIdentity(tab);
     const ps = paneKey ? psByPane.get(paneKey)?.agent : undefined;
     const as = tab.agentStatus;
     if (!as && !tab.launchAgent && !ps) return null;
-    const id = paneKey ?? tab.id;
     if (!id) return null;
     if (paneKey) usedPanes.add(paneKey);
     const o = as?.orchestration ?? null;

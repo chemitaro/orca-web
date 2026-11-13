@@ -1,9 +1,13 @@
 // 共有のポーリング。Orca を読むのはここだけで、要求（/api/state）はキャッシュから正規化して返す。
 // 取得元を3つの組に分け、組ごとに間隔と次の時刻を持つ。見る人がいなければ間隔を遅くする。
 // 失敗しても、取得元ごとに最後に成功した値を残す。
+import type { InboxGate, InboxInputs, InboxMessage, MailSnapshot } from '../inbox/model.ts';
 import type { CapabilityReport } from '../orca/capabilities.ts';
+import type { MailReader } from '../orca/read-mail.ts';
 import type {
   OrcaLaunch,
+  OrcaRun,
+  OrcaTabSnapshot,
   OrcaTask,
   OrcaWorker,
   SourceError,
@@ -13,7 +17,15 @@ import type {
 } from '../orca/read-state.ts';
 import { SOURCE_NAMES } from '../orca/read-state.ts';
 import type { Connection, StateDocument } from './model.ts';
-import { type NormalizeSources, needsLaunch, normalizeState, type SourceSnapshot } from './normalize.ts';
+import {
+  isoFromText,
+  type NormalizeSources,
+  needsLaunch,
+  normalizeState,
+  type SourceSnapshot,
+  STALE_FACTOR,
+  terminalTabIdentity,
+} from './normalize.ts';
 
 export type PollGroup = 'fast' | 'orchestration' | 'slow';
 export type Intervals = Record<PollGroup, number>;
@@ -43,6 +55,7 @@ const GROUP_OF: Record<SourceName, PollGroup> = {
 
 export interface StatePollerOptions {
   reader: StateReader;
+  mailReader?: MailReader;
   /** 機能の確かめ（CapabilityCache.get など）。1回の読みの間に1回だけ呼ぶ。 */
   capabilities: () => Promise<CapabilityReport>;
   now?: () => number;
@@ -90,6 +103,19 @@ async function guard<T>(read: () => Promise<SourceRead<T>>): Promise<SourceRead<
 
 export class StatePoller {
   readonly #reader: StateReader;
+  readonly #mailReader: MailReader | undefined;
+  #lastInboxViewerAt: number | null = null;
+  readonly #runMail = new Map<string, { messages: InboxMessage[]; gates: InboxGate[] }>();
+  #mail: MailSnapshot = {
+    messages: [],
+    gates: [],
+    fetchedAt: null,
+    lastSuccessAt: null,
+    stale: true,
+    error: null,
+    runsRead: 0,
+    runsFailed: 0,
+  };
   readonly #capabilities: () => Promise<CapabilityReport>;
   readonly #now: () => number;
   readonly #active: Intervals;
@@ -111,6 +137,7 @@ export class StatePoller {
 
   constructor(options: StatePollerOptions) {
     this.#reader = options.reader;
+    this.#mailReader = options.mailReader;
     this.#capabilities = options.capabilities;
     this.#now = options.now ?? Date.now;
     this.#active = options.activeIntervals ?? ACTIVE_INTERVALS;
@@ -165,6 +192,41 @@ export class StatePoller {
     return this.snapshotSync();
   }
 
+  noteInboxViewer(): void {
+    const wasViewing = this.#inboxViewing();
+    this.#lastInboxViewerAt = this.#now();
+    this.noteViewer();
+    if (!wasViewing) this.#next.orchestration = Math.min(this.#next.orchestration, this.#now());
+  }
+
+  async inboxSnapshot(): Promise<InboxInputs> {
+    await this.snapshot();
+    if (this.#inboxViewing() && this.#now() >= this.#next.orchestration) {
+      await this.#refresh('orchestration', this.#capabilityOnce());
+    }
+    const lastWords = new Map<string, string>();
+    const tabs = (this.#sources.tabs.data as OrcaTabSnapshot[] | null) ?? [];
+    for (const snapshot of tabs)
+      for (const tab of snapshot.tabs) {
+        if (tab.type !== 'terminal') continue;
+        const { id } = terminalTabIdentity(tab);
+        const message = tab.agentStatus?.lastAssistantMessage;
+        if (id && message) lastWords.set(id, message);
+      }
+    const last = this.#mail.lastSuccessAt === null ? null : Date.parse(this.#mail.lastSuccessAt);
+    return {
+      state: this.snapshotSync(),
+      mail: {
+        ...this.#mail,
+        stale:
+          last === null ||
+          this.#mail.error !== null ||
+          this.#now() - last > this.#interval('orchestration') * STALE_FACTOR,
+      },
+      lastWords,
+    };
+  }
+
   /** 待たずに、今のキャッシュから正規化する。 */
   snapshotSync(): StateDocument {
     const snap = <T>(name: SourceName): SourceSnapshot<T> => {
@@ -186,6 +248,10 @@ export class StatePoller {
       orca: this.#orca,
       sources: sources as unknown as NormalizeSources,
     });
+  }
+
+  #inboxViewing(): boolean {
+    return this.#lastInboxViewerAt !== null && this.#now() - this.#lastInboxViewerAt <= this.#viewerWindowMs;
   }
 
   #viewing(): boolean {
@@ -212,6 +278,7 @@ export class StatePoller {
     const run = (async () => {
       try {
         await this.#read(g, started, capabilities);
+        if (g === 'orchestration' && this.#inboxViewing()) await this.#readMail(started);
       } finally {
         this.#completed.add(g);
         this.#next[g] = started + this.#interval(g);
@@ -302,6 +369,76 @@ export class StatePoller {
     this.#record('runs', at, runs);
     this.#record('workers', at, workers);
     await Promise.all([this.#readTasks(at), this.#readLaunches(at)]);
+  }
+
+  async #readMail(at: number): Promise<void> {
+    if (this.#sources.runs.data === null) {
+      this.#mail = {
+        ...this.#mail,
+        fetchedAt: new Date(at).toISOString(),
+        error: { kind: 'runs-unavailable' },
+        runsRead: 0,
+        runsFailed: 0,
+      };
+      return;
+    }
+    const runs = (this.#sources.runs.data as OrcaRun[])
+      .filter(
+        (r) =>
+          r.updatedAt === null ||
+          (Number.isFinite(Date.parse(isoFromText(r.updatedAt) ?? '')) &&
+            at - Date.parse(isoFromText(r.updatedAt) ?? '') <= 7 * 86_400_000),
+      )
+      .sort((a, b) => {
+        if (a.updatedAt === null) return b.updatedAt === null ? a.id.localeCompare(b.id) : 1;
+        if (b.updatedAt === null) return -1;
+        return (
+          Date.parse(isoFromText(b.updatedAt) ?? '') - Date.parse(isoFromText(a.updatedAt) ?? '') ||
+          a.id.localeCompare(b.id)
+        );
+      })
+      .slice(0, 50);
+    const sourceError = this.#sources.runs.error;
+    if (!this.#mailReader || sourceError?.kind === 'unreachable' || sourceError?.kind === 'unavailable') {
+      this.#mail = {
+        ...this.#mail,
+        fetchedAt: new Date(at).toISOString(),
+        error: sourceError ?? { kind: 'unavailable', message: 'mail reader not configured' },
+        runsRead: 0,
+        runsFailed: runs.length,
+      };
+      return;
+    }
+    const reader = this.#mailReader;
+    const results = await mapLimit(runs, CONCURRENCY, async (run) => {
+      const m = await guard(() => reader.readRunMail(run.id));
+      const g = await guard(() => reader.readGates(run.id));
+      return { run, m, g };
+    });
+    let error: SourceError | null = null;
+    let runsRead = 0;
+    for (const { run, m, g } of results) {
+      if (m.ok && g.ok) {
+        this.#runMail.set(run.id, { messages: m.data, gates: g.data });
+        runsRead++;
+      } else {
+        error ??= !m.ok ? m.error : !g.ok ? g.error : null;
+      }
+    }
+    const selected = new Set(runs.map((r) => r.id));
+    for (const id of this.#runMail.keys()) if (!selected.has(id)) this.#runMail.delete(id);
+    const time = new Date(at).toISOString();
+    const success = runs.length === 0 || runsRead > 0;
+    this.#mail = {
+      messages: runs.flatMap((r) => this.#runMail.get(r.id)?.messages ?? []),
+      gates: runs.flatMap((r) => this.#runMail.get(r.id)?.gates ?? []),
+      fetchedAt: time,
+      lastSuccessAt: success ? time : this.#mail.lastSuccessAt,
+      error: success ? null : error,
+      stale: !success,
+      runsRead,
+      runsFailed: runs.length - runsRead,
+    };
   }
 
   async #readTasks(at: number): Promise<void> {

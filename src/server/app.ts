@@ -6,6 +6,8 @@
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import path from 'node:path';
+import { buildInbox } from '../inbox/classify.ts';
+import type { InboxInputs } from '../inbox/model.ts';
 import type { OpenErrorCode, OpenOutcome, OpenRequest } from '../orca/open.ts';
 import type { TranscriptErrorCode, TranscriptReader } from '../orca/read-transcript.ts';
 import { checkSelection, FIELDS } from '../state/fields.ts';
@@ -23,6 +25,8 @@ export interface StateSource {
 
 export interface AppOptions {
   poller?: StateSource;
+  inbox?: { snapshot(): Promise<InboxInputs>; noteViewer(): void };
+  stallMinutes?: number;
   settings?: SettingsStore;
   /** 開く処理。main.ts が OpenService を渡し、テストは偽の処理を渡す。 */
   open?: (request: OpenRequest) => Promise<OpenOutcome>;
@@ -354,7 +358,7 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
         else sendJson(res, 200, options.health ? { ok: true, ...options.health() } : { ok: true });
         return;
       }
-      if (TRANSCRIPT_ROUTES.has(pathname)) {
+      if (TRANSCRIPT_ROUTES.has(pathname) || pathname === '/api/inbox') {
         // 同じオリジンだけ（Origin がないか、自分のオリジン）。CORS を付けない。
         const origin = req.headers.origin;
         if (origin !== undefined && origin !== `http://${req.headers.host}`) {
@@ -365,7 +369,24 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
           sendError(res, 405, 'method_not_allowed');
           return;
         }
-        if (pathname === '/api/transcript') await handleTranscript(res, url);
+        if (pathname === '/api/inbox') {
+          const project = url.searchParams.get('project');
+          if (project !== null && project.length > 512) {
+            sendError(res, 400, 'invalid_request');
+            return;
+          }
+          if (!options.inbox) {
+            sendError(res, 503, 'inbox_unavailable');
+            return;
+          }
+          options.inbox.noteViewer();
+          const inputs = await options.inbox.snapshot();
+          sendJson(
+            res,
+            200,
+            buildInbox({ ...inputs, now: Date.now(), stallMs: (options.stallMinutes ?? 30) * 60_000, project }),
+          );
+        } else if (pathname === '/api/transcript') await handleTranscript(res, url);
         else handleTranscriptEvents(req, res, url);
         return;
       }

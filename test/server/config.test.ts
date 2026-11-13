@@ -35,3 +35,13 @@ test('0.0.0.0、ループバック、IPv4 でない値の Tailscale の IP と�
     assert.throws(() => loadConfig({ PORT: port }), ConfigError, port);
   }
 });
+
+test('停滞の閾値は既定30分、1〜1440の整数だけを受ける', () => {
+  assert.equal(loadConfig({}).stallMinutes, 30);
+  for (const value of ['1', '1440', '60']) {
+    assert.equal(loadConfig({ ORCA_WEB_STALL_MINUTES: value }).stallMinutes, Number(value));
+  }
+  for (const value of ['', '0', '-1', '1441', '1.1', 'NaN', 'Infinity', ' 30 ', '1e2', 'abc']) {
+    assert.throws(() => loadConfig({ ORCA_WEB_STALL_MINUTES: value }), ConfigError, value);
+  }
+});

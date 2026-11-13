@@ -13,6 +13,7 @@ export const DEFAULT_ORCA_BIN = '/Applications/Orca.app/Contents/Resources/bin/o
 
 export interface AppConfig {
   port: number;
+  stallMinutes: number;
   /**
    * SpecDock の正確なオリジン。読み取りの CORS を許し、画面とボタンの部品の frame-ancestors にも使う。
    * 空なら、どちらも許さない。
@@ -65,6 +66,11 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>> = p
   if (!/^\d+$/.test(portText) || !Number.isInteger(port) || port > 65535) {
     throw new ConfigError(`PORT: "${portText}" is not a port`);
   }
+  const stallText = env.ORCA_WEB_STALL_MINUTES ?? '30';
+  const stallMinutes = Number(stallText);
+  if (!/^\d+$/.test(stallText) || !Number.isInteger(stallMinutes) || stallMinutes < 1 || stallMinutes > 1440) {
+    throw new ConfigError('ORCA_WEB_STALL_MINUTES: must be an integer from 1 to 1440');
+  }
   const tailscaleIp = parseTailscaleIp(env.ORCA_WEB_TAILSCALE_IP);
   const readOrigins =
     env.ORCA_WEB_READ_ORIGINS === undefined
@@ -72,6 +78,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>> = p
       : parseOrigins(env.ORCA_WEB_READ_ORIGINS);
   return {
     port,
+    stallMinutes,
     readOrigins: [...new Set(readOrigins)],
     settingsFile: env.ORCA_WEB_SETTINGS_FILE || DEFAULT_SETTINGS_FILE,
     orcaBin: env.ORCA_BIN || DEFAULT_ORCA_BIN,
