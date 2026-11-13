@@ -3,7 +3,7 @@
 
 import { createWriter } from '../write.js';
 import { renderChatRow, renderDetail } from './agent-dom.js';
-import { buildChat, buildDetail, errorLabel, initialChat, prependOlder, reduceChat } from './agent-view.js';
+import { buildChat, buildDetail, errorLabel, initialChat, olderResult, reduceChat } from './agent-view.js';
 
 const STATE_POLL_MS = 5_000;
 const OPEN_ERRORS = {
@@ -100,17 +100,14 @@ els.older.addEventListener('click', async () => {
       `/api/transcript?agent=${encodeURIComponent(agentId)}&before=${encodeURIComponent(chat.before)}`,
       { cache: 'no-store' },
     );
-    const body = await res.json();
-    if (res.ok && body.ok === true) {
+    const result = olderResult(chat, { status: res.status, body: await res.json() }, generation);
+    if (result.chat !== chat) {
       const top = els.scroller.scrollHeight - els.scroller.scrollTop;
-      chat = prependOlder(chat, body, generation);
+      chat = result.chat;
       renderChat({ stickToEnd: false });
       els.scroller.scrollTop = els.scroller.scrollHeight - top;
-    } else if (body.error === 'session_changed') {
-      els.chatStatus.textContent = 'セッションが変わりました。描き直しを待っています';
-    } else {
-      els.chatStatus.textContent = `前のページを読めない：${errorLabel(body.error)}`;
     }
+    if (result.notice) els.chatStatus.textContent = result.notice;
   } catch {
     els.chatStatus.textContent = '前のページを読めない：orca-web につながりません';
   } finally {
@@ -120,6 +117,8 @@ els.older.addEventListener('click', async () => {
 
 function renderDetailArea(state) {
   detail = buildDetail(state, agentId);
+  // 開く先（worktree）が分からなければ押せなくする。
+  els.open.disabled = !detail?.open;
   els.detail.replaceChildren();
   if (!detail) {
     els.title.textContent = 'エージェントが見つかりません';
@@ -145,8 +144,8 @@ async function pollState() {
 // 「Orca で開く」は幅 390px 以下では出さない（iPhone の幅）。
 const narrow = window.matchMedia('(max-width: 390px)');
 const applyNarrow = () => {
-  els.open.hidden = narrow.matches;
-  els.openStatus.hidden = narrow.matches;
+  els.open.hidden = narrow.matches || !agentId;
+  els.openStatus.hidden = narrow.matches || !agentId;
 };
 applyNarrow();
 narrow.addEventListener('change', applyNarrow);
@@ -173,7 +172,6 @@ if (!agentId) {
   els.title.textContent = 'エージェントの指定がありません';
   els.open.hidden = true;
 } else {
-  els.open.disabled = false;
   void pollState();
   connect();
 }

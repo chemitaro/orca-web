@@ -134,6 +134,10 @@ dd.missing {
   color: var(--muted);
 }
 
+dd .why {
+  font-size: 12px;
+}
+
 a {
   color: inherit;
 }
@@ -221,4 +225,12 @@ pre {
     monospace;
   max-height: 320px;
   overflow-y: auto;
+}
+
+/* 幅 390px 以下（iPhone）では「Orca で開く」を出さない。スクリプトの matchMedia と同じ条件。 */
+@media (max-width: 390px) {
+  #open,
+  #open-status {
+    display: none;
+  }
 }

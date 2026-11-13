@@ -114,4 +114,9 @@ test('詳細の値と題名は文字のまま描き、リンクは与えた href
   assert.equal(links[0]?.rel, 'noopener noreferrer');
   const missing = nodes.find((n) => n.className === 'missing');
   assert.ok(missing);
+  assert.match(
+    missing.textContent,
+    /Orca が値を報告しない/,
+    '欠けた理由はツールチップだけでなく文字でも示す（iPhone で見える）',
+  );
 });

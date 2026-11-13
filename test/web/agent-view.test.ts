@@ -6,6 +6,7 @@ import {
   buildDetail,
   errorLabel,
   initialChat,
+  olderResult,
   prependOlder,
   reduceChat,
   safeHref,
@@ -181,4 +182,34 @@ test('reduceChat は unavailable で件を捨てて理由を持ち、読めな�
 test('reduceChat は、読めない理由（busy など）を、続く接続の切れで上書きしない', () => {
   const busy = reduceChat(initialChat(), { type: 'unavailable', error: 'busy' });
   assert.equal(reduceChat(busy, { type: 'disconnected' }).error, 'busy');
+});
+
+test('buildChat は思考を出さない（reasoning の件と、知らない部品の中身を描かない）', () => {
+  const rows = buildChat([
+    msg('r1', 'reasoning', [{ type: 'text', text: 'secret-thought' }]),
+    msg('m1', 'assistant', [
+      { type: 'thinking', text: 'secret-thought' },
+      { type: 'text', text: '答え' },
+    ]),
+  ]);
+  assert.ok(!JSON.stringify(rows).includes('secret-thought'));
+  assert.deepEqual(
+    rows.map((r: { kind: string }) => r.kind),
+    ['unsupported', 'bubble'],
+  );
+});
+
+test('olderResult は、前のページの応答を足すか、409 で置き換えを待つか、理由を示す', () => {
+  const s = reduceChat(initialChat(), { type: 'snapshot', document: doc('k1', ['m3']) });
+  const ok = olderResult(s, { status: 200, body: doc('k1', ['m1']) }, s.generation);
+  assert.deepEqual(ids(ok.chat), ['m1', 'm3']);
+  assert.equal(ok.notice, null);
+  const stale = olderResult(s, { status: 200, body: doc('k2', ['m1']) }, s.generation);
+  assert.equal(stale.chat, s, '鍵の違う古いページは足さない');
+  const changed = olderResult(s, { status: 409, body: { ok: false, error: 'session_changed' } }, s.generation);
+  assert.equal(changed.chat, s);
+  assert.match(changed.notice ?? '', /待っています/);
+  const failed = olderResult(s, { status: 502, body: { ok: false, error: 'read_failed' } }, s.generation);
+  assert.equal(failed.chat, s);
+  assert.match(failed.notice ?? '', /前のページを読めない/);
 });

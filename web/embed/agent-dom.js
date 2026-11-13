@@ -30,8 +30,13 @@ export function renderDetail(doc, detail) {
       dd.textContent = row.text;
     }
     if (row.note) {
-      dd.title = MISSING_LABELS[row.note] ?? row.note;
-      if (row.text === '—') dd.className = 'missing';
+      const reason = MISSING_LABELS[row.note] ?? row.note;
+      dd.title = reason;
+      if (row.text === '—') {
+        // 取れない理由は、ツールチップのない iPhone でも読めるように文字でも示す。
+        dd.className = 'missing';
+        dd.append(make(doc, 'span', `（取れない：${reason}）`, 'why'));
+      }
     }
     for (const link of row.links ?? []) {
       const a = make(doc, 'a', link.text);

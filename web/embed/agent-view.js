@@ -131,6 +131,8 @@ export function buildChat(messages) {
   const rows = [];
   const toolsByCall = new Map();
   for (const m of messages) {
+    // 思考は出さない（正規化で落とすが、画面でも描かない）。
+    if (m.role === 'reasoning') continue;
     let texts = [];
     let truncated = false;
     /** 続いた本文の最初の部品の位置。行の key にする（後のツールの行と重ならない）。 */
@@ -262,4 +264,18 @@ export function prependOlder(state, document, requestedGeneration) {
   const known = new Set(state.messages.map((m) => m.id));
   const older = document.messages.filter((m) => !known.has(m.id));
   return { ...state, messages: [...older, ...state.messages], before: document.before, hasMore: document.hasMore };
+}
+
+/**
+ * 「前を読む」の応答（{ status, body }）を受けて、会話の画面の状態と、知らせの文を返す（純粋な関数）。
+ * 足すのは prependOlder の条件を満たすときだけ。409（session_changed）は置き換えを待つ。
+ */
+export function olderResult(state, response, requestedGeneration) {
+  const { status, body } = response;
+  if (status === 200 && body?.ok === true)
+    return { chat: prependOlder(state, body, requestedGeneration), notice: null };
+  if (status === 409 || body?.error === 'session_changed') {
+    return { chat: state, notice: 'セッションが変わりました。描き直しを待っています' };
+  }
+  return { chat: state, notice: `前のページを読めない：${errorLabel(body?.error ?? String(status))}` };
 }
