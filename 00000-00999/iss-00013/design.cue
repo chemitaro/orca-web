@@ -43,7 +43,7 @@ design: {
 	"D-03": {
 		title: "本文の確かめと確認の票（`src/send/ticket.ts`）"
 		text: """
-			- `checkText(text)`：文字列で、`trim()` が空でなく、UTF-8 で 16384 バイトまで、`\\t` と `\\n` のほかの C0 の制御文字（`\\r` を含む）と DEL を含まない。違えば理由つきで `invalid_text`。画面は送る前に CRLF と CR を LF にする。
+			- `checkText(text)`：文字列で、`trim()` が空でなく、UTF-8 で 16384 バイトまで、`\\t` と `\\n` のほかの C0 の制御文字（`\\r` を含む）、DEL、C1 の制御文字（U+0080〜U+009F）を含まない。違えば理由つきで `invalid_text`。画面は送る前に CRLF と CR を LF にする。
 			- `digestText(text)`：本文の UTF-8 の sha256 の16進。
 			- `newOperationId(now, random)`：`<13桁のミリ秒>-<32桁の16進>`。
 			- `TicketStore`：`issue({ target, digest, operationId })` が 32 バイトの乱数の base64url の票と期限（発行から 60 秒）を返す。生きている票は 32 個までで、超えたら古いものから捨てる。`take(ticket)` は、あれば**同期の処理の中で消してから**中身を返し（2回目は `unknown`）、期限切れなら `expired` を返す。`cancelByOperation(operationId)` は、その操作の ID の票を（期限の内外を問わず）同期の処理の中で消し、消したかを返す。時計は差し替えられる。票の値を記録、ログ、inspect に出さない。

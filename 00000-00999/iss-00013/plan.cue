@@ -98,7 +98,7 @@ tests: {
 	"T-03": {title: "送る門が、決めた形の terminal.send と agentSession.send と読む RPC（terminal.inspectProcess を含む）だけを通し、interrupt・requireAgentStatus・操作の ID なし・delivery・画像の block・一覧にない RPC を送らずに拒み、READ_METHODS は変わらない", verifies: ["R-03", "F-02"]}
 	"T-04": {title: "resolveTarget が、端末と構造化 Chat の宛先を解き、asleep、no_session、identity_unavailable、untabbed、agent_not_found、unknown_shape を返し、buildPreview が宛先と違う worktree の状態では確認の項目を作らない", verifies: ["R-01", "F-01", "F-04"]}
 	"T-05": {title: "compareTargets が、runtime、worktree、タブ、handle、ptyId、incarnation、種類、セッションのそれぞれの変化を種類つきで返し、同じなら変化なし", verifies: ["R-02", "F-01"]}
-	"T-06": {title: "本文の確かめ（空、空白だけ、16 KiB 超、CR と制御文字）と、票の期限・1回だけ・上限・同期の消費", verifies: ["R-01", "R-02", "F-05"]}
+	"T-06": {title: "本文の確かめ（空、空白だけ、16 KiB 超、CR と C0・DEL・C1 の制御文字）と、票の期限・1回だけ・上限・同期の消費", verifies: ["R-01", "R-02", "F-05"]}
 	"T-07": {title: "結果の分け方が、D-04 の表の各行の outcome と detail を返し（まだ送られうる Chat のカードを refused にせず、端末で送った後の Orca の誤りを unknown にする）、Orca の誤りの文を入れない。readForeground がシェルと非シェルと読めない前面を分ける", verifies: ["R-02", "R-04", "F-02", "F-03"]}
 	"T-08": {title: "構造化 Chat の指紋が、Orca v1.4.258 の算法の固定の値と一致する", verifies: ["R-03"]}
 	"T-09": {title: "送る関数が時間切れでも1回だけ送り、照会（requestShow、sendRecorded と history）が送る RPC を呼ばず、sendRecorded の真だけでは届いたことにしない", verifies: ["R-05", "F-03"]}
