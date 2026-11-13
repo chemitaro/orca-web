@@ -65,3 +65,13 @@ test('OpenRpc は読む RPC と navigation: host の activate だけを送り、
     ['session.tabs.list', 'session.tabs.activate', 'worktree.activate'],
   );
 });
+
+test('開く門は不要な連絡のコマンドを引数によらず送らない', async () => {
+  const runner = new RecordingRunner();
+  const cli = new OpenOrcaCli(new OrcaCli(runner));
+  for (const args of [[], ['--peek'], ['--ack'], ['--peek', '--all']]) {
+    await assert.rejects(cli.json(['orchestration', 'check', ...args]), /not allowed/);
+  }
+  await assert.rejects(cli.json(['orchestration', 'gate-list', '--run', 'r1']), /not allowed/);
+  assert.deepEqual(runner.calls, []);
+});

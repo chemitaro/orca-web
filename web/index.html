@@ -4,23 +4,22 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <title>orca-web</title>
+    <title>orca-web の受け箱</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
-  <body>
+  <body class="inbox">
     <header>
-      <h1>Orca の状態</h1>
-      <div id="status" role="status" aria-live="polite"><p>読み込み中…</p></div>
+      <div class="bar">
+        <h1>受け箱</h1>
+        <label class="project">
+          <span>プロジェクト</span>
+          <select id="project"></select>
+        </label>
+        <a class="settings" href="/settings">一覧と設定</a>
+      </div>
+      <div id="freshness" role="status" aria-live="polite"><p>読み込み中…</p></div>
     </header>
-    <main id="tables"></main>
-    <details id="fields">
-      <summary>表示する項目</summary>
-      <div id="field-list"></div>
-      <p>
-        <button id="save-fields" type="button">保存する</button>
-        <span id="save-status" role="status"></span>
-      </p>
-    </details>
-    <script type="module" src="./main.js"></script>
+    <main id="stages"></main>
+    <script type="module" src="./inbox.js"></script>
   </body>
 </html>

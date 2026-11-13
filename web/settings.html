@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>orca-web の設定</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <nav><a href="/">← 受け箱</a></nav>
+      <h1>Orca の状態</h1>
+      <div id="status" role="status" aria-live="polite"><p>読み込み中…</p></div>
+    </header>
+    <main id="tables"></main>
+    <details id="fields">
+      <summary>表示する項目</summary>
+      <div id="field-list"></div>
+      <p>
+        <button id="save-fields" type="button">保存する</button>
+        <span id="save-status" role="status"></span>
+      </p>
+    </details>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

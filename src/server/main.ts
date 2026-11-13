@@ -1,6 +1,7 @@
 // 起動。設定（環境変数）を読み、Orca の読み取り、機能の確かめ、共有のポーリング、設定のファイル、開く口、会話の読み手と見張りを組み立てて待ち受ける。
 // 待ち受けは 127.0.0.1 と、設定した Tailscale の IP だけ（listen.ts。0.0.0.0 に代えない）。
 // 終了コード：設定の誤りは 2、127.0.0.1 で待ち受けられないときは 1（launchd が起動し直す）、SIGTERM と SIGINT では 0。
+import { createMailReader } from '../orca/read-mail.ts';
 import { createStateReader } from '../orca/read-state.ts';
 import { createTranscriptReader } from '../orca/read-transcript.ts';
 import { wireOrca } from '../orca/wiring.ts';
@@ -26,6 +27,7 @@ try {
 const orca = wireOrca({ executable: config.orcaBin });
 const poller = new StatePoller({
   reader: createStateReader(orca.readCli, orca.readRpc),
+  mailReader: createMailReader(orca.readCli),
   capabilities: () => orca.capabilities.get(),
 });
 const transcriptReader = createTranscriptReader({
@@ -41,6 +43,8 @@ let listeners: ListenerSet | null = null;
 // 待ち受けのアドレスごとのサーバーが、1つの処理（とトークン）を共有する。
 const handler = createAppHandler({
   poller,
+  inbox: { snapshot: () => poller.inboxSnapshot(), noteViewer: () => poller.noteInboxViewer() },
+  stallMinutes: config.stallMinutes,
   settings,
   open: (request) => orca.open.open(request),
   transcripts: { reader: transcriptReader, hub: transcriptHub },

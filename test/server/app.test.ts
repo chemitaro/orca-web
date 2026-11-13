@@ -468,3 +468,34 @@ test('GET /api/health は、渡された pid と待ち受けの状態（listener
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test('/ は受け箱の画面、/settings は一覧の表と項目の選択の画面を、inline を許さない CSP で配る', async () => {
+  await withApp(async (h) => {
+    const inbox = await h.send({ path: '/' });
+    assert.equal(inbox.status, 200);
+    assert.match(inbox.text, /src="\.\/inbox\.js"/);
+    assert.ok(!inbox.text.includes('main.js'));
+    assert.match(inbox.text, /href="\/settings"/);
+    const settings = await h.send({ path: '/settings' });
+    assert.equal(settings.status, 200);
+    assert.equal(settings.headers['content-type'], 'text/html; charset=utf-8');
+    assert.match(settings.text, /src="\.\/main\.js"/);
+    assert.match(settings.text, /id="field-list"/);
+    assert.ok(!settings.text.includes('inbox.js'));
+    for (const page of [inbox, settings]) {
+      const csp = String(page.headers['content-security-policy']);
+      assert.match(csp, /default-src 'self'/);
+      assert.ok(!csp.includes('unsafe-inline'));
+      assert.equal(page.headers['referrer-policy'], 'same-origin');
+      assert.ok(!/<script>[^<]/.test(page.text), 'no inline script');
+      assert.ok(!/\sstyle=/.test(page.text), 'no inline style');
+    }
+    for (const path of ['/inbox.js', '/inbox-view.js', '/inbox-dom.js']) {
+      const res = await h.send({ path });
+      assert.equal(res.status, 200, path);
+      assert.equal(res.headers['content-type'], 'text/javascript; charset=utf-8');
+    }
+    assert.equal((await h.send({ path: '/settings.html' })).status, 404);
+    assert.equal((await h.send({ method: 'POST', path: '/settings' })).status, 405);
+  });
+});

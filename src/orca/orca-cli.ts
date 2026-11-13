@@ -116,6 +116,8 @@ export const READ_COMMANDS: readonly (readonly string[])[] = [
   ['worktree', 'ps'],
   ['terminal', 'list'],
   ['orchestration', 'run-list'],
+  ['orchestration', 'check'],
+  ['orchestration', 'gate-list'],
   ['orchestration', 'task-list'],
   ['orchestration', 'worker-list'],
   ['orchestration', 'worker-show'],
@@ -130,6 +132,12 @@ function isReadCommand(args: readonly string[]): boolean {
 
 function refuse(args: readonly string[]): Error | null {
   if (!isReadCommand(args)) return new Error(`orca ${args.slice(0, 2).join(' ')} is not a read-only command`);
+  if (args[0] === 'orchestration' && args[1] === 'check') {
+    const forbidden = ['--ack', '--all', '--unread', '--wait', '--retry-request'];
+    if (!args.includes('--peek') || args.some((a) => forbidden.some((f) => a === f || a.startsWith(`${f}=`)))) {
+      return new Error('only non-consuming check --peek is allowed; other check modes are not allowed');
+    }
+  }
   if (args.some((a) => FORBIDDEN_FLAGS.some((f) => a === f || a.startsWith(`${f}=`)))) {
     return new Error('connection-changing flags are not allowed');
   }

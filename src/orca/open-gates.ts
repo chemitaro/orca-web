@@ -4,7 +4,10 @@ import { type CliOutcome, type OrcaCli, READ_COMMANDS } from './orca-cli.ts';
 import { READ_METHODS, type RpcCallOptions, type RpcOutcome, type RpcTransport } from './rpc.ts';
 
 /** 開く口が呼べる CLI のコマンド（読むコマンドと `terminal switch`）。 */
-export const OPEN_COMMANDS: readonly (readonly string[])[] = [...READ_COMMANDS, ['terminal', 'switch']];
+export const OPEN_COMMANDS: readonly (readonly string[])[] = [
+  ...READ_COMMANDS.filter((cmd) => cmd[0] !== 'orchestration' || !['check', 'gate-list'].includes(cmd[1] ?? '')),
+  ['terminal', 'switch'],
+];
 
 /** 開く口が送れる書き込みの RPC。どちらも `navigation: "host"` のときだけ送る。 */
 export const OPEN_WRITE_METHODS: readonly string[] = ['session.tabs.activate', 'worktree.activate'];

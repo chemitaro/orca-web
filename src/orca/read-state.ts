@@ -1,5 +1,6 @@
 // 状態の API のための、Orca の読み取り。取得元ごとに読み、応答を、その場で決めた項目だけの記録に減らす（許可の一覧で拾う）。
-// プロンプト、ツールの入力、最後の応答、Task の spec と result、transcript のパス、端末の preview は拾わない。
+// プロンプト、ツールの入力、Task の spec と result、transcript のパス、端末の preview は拾わない。
+// 最後の一言は受け箱専用に500文字まで拾い、状態の文書には出さない。
 // 読む口は ReadOnlyOrcaCli と ReadOnlyRpc だけ。ページは最後まで読む。
 import type { CliOutcome, ReadOnlyOrcaCli } from './orca-cli.ts';
 import { clip } from './orca-cli.ts';
@@ -109,6 +110,8 @@ export interface OrcaTabOrchestration {
 }
 
 export interface OrcaAgentStatus {
+  /** 受け箱だけで使い、状態の文書には出さない。 */
+  lastAssistantMessage: string | null;
   agentType: string | null;
   state: string | null;
   stateStartedAt: number | null;
@@ -143,6 +146,7 @@ export interface OrcaTabSnapshot {
 }
 
 export interface OrcaRun {
+  updatedAt: string | null;
   id: string;
   objective: string | null;
 }
@@ -311,6 +315,7 @@ function pickAgentStatus(v: unknown): OrcaAgentStatus | null {
   if (!a) return null;
   const o = rec(a.orchestration);
   return {
+    lastAssistantMessage: str(a.lastAssistantMessage)?.slice(0, 500) ?? null,
     agentType: str(a.agentType),
     state: str(a.state),
     stateStartedAt: num(a.stateStartedAt),
@@ -463,7 +468,7 @@ export function createStateReader(cli: ReadOnlyOrcaCli, rpc: RpcTransport): Stat
         'runs',
         (r) => {
           const id = str(r.id);
-          return id ? { id, objective: str(r.objective) } : null;
+          return id ? { id, objective: str(r.objective), updatedAt: str(r.updated_at) } : null;
         },
         (result) => str(result.nextCursor),
       ),
