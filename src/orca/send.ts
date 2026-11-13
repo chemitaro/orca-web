@@ -241,7 +241,11 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
         return { ok: false, error: 'unknown_shape' };
       return { ok: true, fence: page.fence as number };
     },
-    async readForeground(handle: string, incarnationId: string): Promise<SendRead<{ isShell: boolean }>> {
+    async readForeground(
+      handle: string,
+      incarnationId: string,
+      agentType: string,
+    ): Promise<SendRead<{ isShell: boolean; matchesAgent: boolean }>> {
       const result = await rpc.call('terminal.inspectProcess', {
         terminal: handle,
         expectedIncarnationId: incarnationId,
@@ -254,15 +258,17 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
         .replace(/^["']|["']$/g, '')
         .toLowerCase();
       const basename = normalized.split(/[\\/]/).pop() ?? normalized;
+      const processName = basename.replace(/\.(?:exe|cmd|bat|ps1)$/i, '');
       const shellNames =
         '|bash|zsh|sh|fish|cmd|cmd.exe|powershell|powershell.exe|pwsh|pwsh.exe|nu|ksh|mksh|dash|ash|tcsh|csh|elvish|xonsh'.split(
           '|',
         );
       return {
         ok: true,
-        isShell: [normalized, basename, basename.replace(/\.(?:exe|cmd|bat|ps1)$/i, '')].some((name) =>
-          shellNames.includes(name),
-        ),
+        isShell: [normalized, basename, processName].some((name) => shellNames.includes(name)),
+        matchesAgent:
+          (agentType === 'claude' && processName === 'claude') ||
+          (agentType === 'codex' && (processName === 'codex' || processName.startsWith('codex-'))),
       };
     },
     async readTerminalStatus(handle: string): Promise<SendRead<{ isRunningAgent: boolean; status: string | null }>> {

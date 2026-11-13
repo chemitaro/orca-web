@@ -150,6 +150,36 @@ test('失敗した古い照会より復旧後の新しい照会を優先し二�
   assert.equal(record.checks.length, 2);
 });
 
+test('refused は書けなくても偽を返して拒否の理由をメモリーに保つ', async (t) => {
+  const dir = await directory(t);
+  const journal = new SendJournal(dir, {
+    open: async () => {
+      throw new Error('disk failed');
+    },
+  });
+  assert.equal(
+    await journal.appendRefused({
+      operationId: 'op',
+      reason: 'not_sendable',
+      notSendableReason: 'foreground_mismatch',
+      agentId: 'agent',
+    }),
+    false,
+  );
+  const record = await journal.read('op');
+  assert.ok(record);
+  assert.equal(record.outcome, 'refused');
+  assert.equal(record.before, null);
+  assert.equal(record.after, null);
+  assert.deepEqual(record.detail, { code: 'not_sendable' });
+  assert.ok(record.refused);
+  assert.equal(record.refused.notSendableReason, 'foreground_mismatch');
+  assert.equal(record.refused.agentId, 'agent');
+  assert.equal(Object.hasOwn(record.refused, 'text'), false);
+  assert.equal(Object.hasOwn(record.refused, 'ticket'), false);
+  assert.equal(await new SendJournal(dir).read('op'), null);
+});
+
 test('拒否は本文を含めず記録し壊れた行は飛ばす', async (t) => {
   const dir = await directory(t);
   const journal = new SendJournal(dir);

@@ -87,7 +87,7 @@ export interface JournalIo {
 }
 export class SendJournal {
   readonly #dir: string;
-  readonly #memory: ResultRecord[] = [];
+  readonly #memory: (ResultRecord | RefusedRecord)[] = [];
   readonly #io: JournalIo;
   constructor(dir: string, io: JournalIo = { open }) {
     this.#dir = dir;
@@ -98,20 +98,19 @@ export class SendJournal {
   }
   async appendRefused(input: RefusedInput): Promise<boolean> {
     const { operationId, reason, change, notSendableReason, agentId } = input;
+    const row: RefusedRecord = {
+      schema: SCHEMA,
+      kind: 'refused',
+      at: new Date().toISOString(),
+      operationId,
+      reason,
+      ...(change === undefined ? {} : { change }),
+      ...(notSendableReason === undefined ? {} : { notSendableReason }),
+      ...(agentId === undefined ? {} : { agentId }),
+    };
+    this.#memory.push(row);
     try {
-      await this.#append(
-        {
-          schema: SCHEMA,
-          kind: 'refused',
-          at: new Date().toISOString(),
-          operationId,
-          reason,
-          ...(change === undefined ? {} : { change }),
-          ...(notSendableReason === undefined ? {} : { notSendableReason }),
-          ...(agentId === undefined ? {} : { agentId }),
-        },
-        false,
-      );
+      await this.#append(row, false);
       return true;
     } catch {
       return false;

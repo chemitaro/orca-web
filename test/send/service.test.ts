@@ -14,7 +14,7 @@ import { agent, fact, repo, state, worktree } from '../runs/fixture.ts';
 import { CHAT_AGENT, chatTab, inventory, RUNTIME, TERMINAL_AGENT, terminalTab } from './fixture.ts';
 
 const ok = (result: unknown, runtimeId: string | null = RUNTIME): RpcOutcome => ({ ok: true, result, runtimeId });
-async function fixture(t: import('node:test').TestContext) {
+async function fixture(t: import('node:test').TestContext, agentType: 'claude' | 'codex' = 'codex') {
   const dir = await mkdtemp(path.join(tmpdir(), 'orca-web-send-service-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const feature = () => ({ available: true, missing: [], satisfied: [], deferred: [] });
@@ -38,25 +38,33 @@ async function fixture(t: import('node:test').TestContext) {
     repos: [repo('repo-test')],
     worktrees: [worktree({ id: 'wt-test', repoId: 'repo-test' })],
     agents: [
-      agent(TERMINAL_AGENT, { worktreeId: 'wt-test', terminalHandle: 'term_test', agentType: fact('codex') }),
+      agent(TERMINAL_AGENT, { worktreeId: 'wt-test', terminalHandle: 'term_test', agentType: fact(agentType) }),
       agent(CHAT_AGENT, { kind: 'chat-tab', worktreeId: 'wt-test', agentType: fact('claude') }),
     ],
   });
   const responses = new Map<string, RpcOutcome>([
-    ['session.tabs.listAll', ok(inventory())],
+    [
+      'session.tabs.listAll',
+      ok(
+        inventory([
+          { ...terminalTab(), agentStatus: { agentType, providerSession: { id: 'session-terminal-test' } } },
+          chatTab(),
+        ]),
+      ),
+    ],
     ['terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } })],
-    ['terminal.inspectProcess', ok({ process: { foregroundProcess: 'codex' } })],
+    ['terminal.inspectProcess', ok({ process: { foregroundProcess: agentType } })],
     ['agentSession.history', ok({ ok: true, page: { sessionId: 'session-chat-test', fence: 4 } })],
     [
       'terminal.send',
-      ok({ send: { accepted: true, prompt: { provider: 'codex', stages: ['input_accepted', 'turn_started'] } } }),
+      ok({ send: { accepted: true, prompt: { provider: agentType, stages: ['input_accepted', 'turn_started'] } } }),
     ],
     ['agentSession.send', ok({ ok: true, value: { submission: { dispatchState: 'accepted' } } })],
     [
       'orchestration.requestShow',
       ok({
         state: 'completed',
-        receipt: { send: { accepted: true, prompt: { provider: 'codex', stages: ['turn_started'] } } },
+        receipt: { send: { accepted: true, prompt: { provider: agentType, stages: ['turn_started'] } } },
       }),
     ],
   ]);
@@ -104,6 +112,85 @@ async function fixture(t: import('node:test').TestContext) {
     sends: () => calls.filter((c) => ['terminal.send', 'agentSession.send'].includes(c.method)),
   };
 }
+
+test('意図と確定は稼働中の状態が残っても宛先と違う前面には送らない', async (t) => {
+  for (const agentType of ['claude', 'codex'] as const) {
+    for (const foreground of [
+      'python3',
+      'node',
+      '2.1.0',
+      'claude.2.1.0',
+      agentType === 'claude' ? 'codex' : 'claude',
+      '/bin/zsh',
+    ]) {
+      await t.test(`${agentType}: ${foreground}`, async (t) => {
+        const f = await fixture(t, agentType);
+        const intent = await f.service.intent({ agent: TERMINAL_AGENT, text: 'hello' });
+        assert.ok(intent.ok);
+        f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: foreground } }));
+        const reason = foreground === '/bin/zsh' ? 'shell_foreground' : 'foreground_mismatch';
+        const expected = { ok: false, error: 'not_sendable', reason };
+        assert.deepEqual(await f.service.intent({ agent: TERMINAL_AGENT, text: 'hello' }), expected);
+        assert.deepEqual(await f.service.confirm({ ticket: intent.ticket, text: 'hello' }), expected);
+        assert.equal((await f.journal.read(intent.operationId))?.refused?.notSendableReason, reason);
+        assert.equal((await f.service.status(TERMINAL_AGENT)).available, false);
+        assert.equal(f.sends().length, 0);
+      });
+    }
+  }
+});
+
+test('拒否の保存に失敗しても照会は refused を返し Orca に送信も照会もしない', async (t) => {
+  const f = await fixture(t);
+  const dir = await mkdtemp(path.join(tmpdir(), 'orca-web-refused-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const journal = new SendJournal(dir, {
+    open: async () => {
+      throw new Error('disk failed');
+    },
+  });
+  const service = new SendService({ ...f.deps, journal });
+  const intent = await service.intent({ agent: TERMINAL_AGENT, text: 'hello' });
+  assert.ok(intent.ok);
+  f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: 'python3' } }));
+  assert.deepEqual(await service.confirm({ ticket: intent.ticket, text: 'hello' }), {
+    ok: false,
+    error: 'not_sendable',
+    reason: 'foreground_mismatch',
+  });
+  const callsBeforeCheck = f.calls.length;
+  const checked = await service.check(intent.operationId, { query: true });
+  assert.ok(checked.ok && checked.state === 'recorded');
+  assert.equal(checked.record.outcome, 'refused');
+  assert.equal(checked.record.refused?.notSendableReason, 'foreground_mismatch');
+  assert.equal(f.calls.length, callsBeforeCheck);
+  assert.equal(f.sends().length, 0);
+});
+
+test('意図と確定は宛先そのものの前面を正規化して通し一度だけ送る', async (t) => {
+  for (const [agentType, foreground] of [
+    ['claude', 'claude'],
+    ['codex', 'codex'],
+    ['codex', 'codex-aarch64-apple-darwin'],
+    ['claude', '  "/usr/local/bin/CLAUDE"  '],
+    ['codex', "'C:\\Tools\\Codex.EXE'"],
+    ['claude', '/bin/claude.cmd'],
+    ['codex', 'codex.bat'],
+    ['claude', 'CLAUDE.ps1'],
+  ] as const) {
+    await t.test(`${agentType}: ${foreground}`, async (t) => {
+      const f = await fixture(t, agentType);
+      f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: foreground } }));
+      const intent = await f.service.intent({ agent: TERMINAL_AGENT, text: 'hello' });
+      assert.ok(intent.ok);
+      assert.equal(f.sends().length, 0);
+      const confirmed = await f.service.confirm({ ticket: intent.ticket, text: 'hello' });
+      assert.ok(confirmed.ok);
+      assert.equal(confirmed.outcome, 'submitted');
+      assert.equal(f.sends().length, 1);
+    });
+  }
+});
 
 test('intent は新しい宛先と本文を確認し操作の ID を票に結ぶ', async (t) => {
   const f = await fixture(t);
@@ -356,6 +443,7 @@ test('confirm は再検査で宛先の消失と各識別子の変化を target_c
         const a = f.snapshot.agents[0];
         assert.ok(a);
         a.agentType = fact('claude');
+        f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: 'claude' } }));
         f.responses.set(
           'session.tabs.listAll',
           ok(

@@ -203,7 +203,7 @@ test('端末の状態を読み、読めない理由に method 名を残す', asy
   assert.deepEqual(await adapter.readTerminalStatus('term_test'), { ok: false, error: 'unknown_shape' });
 });
 
-test('前面のシェルを Orca と同じ規則で判定し空の観測は拒む', async () => {
+test('前面を Orca と同じ規則でシェルと宛先のエージェントに分け空の観測は拒む', async () => {
   const { SendRpc } = await import('../../src/orca/send-gates.ts');
   let foreground: unknown;
   const rpc = new SendRpc({
@@ -237,12 +237,45 @@ test('前面のシェルを Orca と同じ規則で判定し空の観測は拒�
     'zsh.bat',
     'pwsh.ps1',
   ]) {
-    assert.deepEqual(await adapter.readForeground('term_test', 'inc-test'), { ok: true, isShell: true });
+    assert.deepEqual(await adapter.readForeground('term_test', 'inc-test', 'codex'), {
+      ok: true,
+      isShell: true,
+      matchesAgent: false,
+    });
   }
-  foreground = 'codex';
-  assert.deepEqual(await adapter.readForeground('term_test', 'inc-test'), { ok: true, isShell: false });
+  for (const [process, agentType, matchesAgent] of [
+    ['claude', 'claude', true],
+    ['codex', 'codex', true],
+    ['codex-aarch64-apple-darwin', 'codex', true],
+    ['  "/usr/local/bin/CLAUDE"  ', 'claude', true],
+    ["'C:\\Tools\\Codex.EXE'", 'codex', true],
+    ['/bin/claude.cmd', 'claude', true],
+    ['codex.bat', 'codex', true],
+    ['CLAUDE.ps1', 'claude', true],
+    ['python3', 'claude', false],
+    ['node', 'codex', false],
+    ['2.1.0', 'claude', false],
+    ['claude.2.1.0', 'claude', false],
+    ['claude.js', 'claude', false],
+    ['codex.js', 'codex', false],
+    ['codexish', 'codex', false],
+    ['codex', 'claude', false],
+    ['claude', 'codex', false],
+    ['antigravity', 'antigravity', false],
+    ['codex', 'other', false],
+  ] as const) {
+    foreground = process;
+    assert.deepEqual(
+      await adapter.readForeground('term_test', 'inc-test', agentType),
+      { ok: true, isShell: false, matchesAgent },
+      `${agentType}: ${process}`,
+    );
+  }
   for (foreground of [null, '', '  ', 3])
-    assert.deepEqual(await adapter.readForeground('term_test', 'inc-test'), { ok: false, error: 'foreground_unknown' });
+    assert.deepEqual(await adapter.readForeground('term_test', 'inc-test', 'codex'), {
+      ok: false,
+      error: 'foreground_unknown',
+    });
 });
 
 test('Chat の fence は同じ sessionId の正の整数だけを受ける', async () => {

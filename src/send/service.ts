@@ -93,12 +93,13 @@ export class SendService {
       if (!status.ok) return this.#readError(status, target);
       if (!status.isRunningAgent) return { ok: false, error: 'not_sendable', reason: 'no_agent' };
       if (status.status === 'permission') return { ok: false, error: 'not_sendable', reason: 'permission' };
-      const foreground = await this.#deps.adapter.readForeground(target.handle, target.incarnationId);
+      const foreground = await this.#deps.adapter.readForeground(target.handle, target.incarnationId, target.agentType);
       if (!foreground.ok)
         return foreground.error === 'foreground_unknown' || foreground.error === 'unknown_shape'
           ? { ok: false, error: 'not_sendable', reason: 'foreground_unknown' }
           : this.#readError(foreground, target);
       if (foreground.isShell) return { ok: false, error: 'not_sendable', reason: 'shell_foreground' };
+      if (!foreground.matchesAgent) return { ok: false, error: 'not_sendable', reason: 'foreground_mismatch' };
     }
     if (target.route === 'chat') {
       const history = await this.#deps.adapter.readChatFence(target.sessionId);
