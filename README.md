@@ -3,9 +3,10 @@
 Orca（stablyai/orca のデスクトップアプリ）の状態を読み、既存のタブを前面に出す、この Mac の小さな Web サービス。
 SpecDock のダッシュボードに部品として埋め込む。
 
-- 状態の API と画面：repo・worktree・エージェント・オーケストレーションの状態（種類、状態、時刻、親子、PR と CI、取れるときのモデルと推論）。表示する項目を選べる。
+- 要対応の受け箱（`/`）：全プロジェクトのエージェントと統括あての連絡を、要対応（許可待ち・入力待ち、統括あての未読の質問と判断の依頼、マージ待ちの PR）、止まっている（CI の失敗、長く出力のない作業中、終了した端末）、動いている、不明、終わった（畳む）の段に分ける。プロジェクトで絞り込め（`?project=<repo の id>`）、各項目から詳細とチャット、Orca で開く（Mac だけ）、PR へ進める。許可の承認や返事はしない（Orca で開いて答える）。
+- 状態の API と画面（`/settings`）：repo・worktree・エージェント・オーケストレーションの状態（種類、状態、時刻、親子、PR と CI、取れるときのモデルと推論）。表示する項目を選べる。
 - 「Orca で開く」：この Mac の Orca で、指定の worktree の既存のタブを前面に出す。別の画面に1行で置けるボタンの部品がある。
-- エージェントの詳細とチャット（読むだけ）：`/embed/agent?id=…` で、エージェントの詳細と会話のログを読む。状態の画面のエージェントの行から開ける。
+- エージェントの詳細とチャット（読むだけ）：`/embed/agent?id=…` で、エージェントの詳細と会話のログを読む。受け箱の項目と、状態の画面のエージェントの行から開ける。
 - 後の予定：確かめたうえで指示を送る（epic-00004 の iss-00013）。
 
 ## 必要なもの
@@ -18,7 +19,7 @@ SpecDock のダッシュボードに部品として埋め込む。
 
 ```sh
 npm ci
-npm start           # http://127.0.0.1:8791/（ターミナルを閉じると止まる）
+npm start           # http://127.0.0.1:8791/ が受け箱、/settings が状態の表（ターミナルを閉じると止まる）
 ```
 
 ## 常駐させる（launchd）
@@ -65,6 +66,7 @@ npm run service:uninstall              # 外して定義を消す（ログと項
 | `ORCA_WEB_READ_ORIGINS` | `http://127.0.0.1:47800`（と `http://<Tailscale の IP>:47800`） | SpecDock のオリジン（カンマ区切りの正確なオリジン）。読み取りの CORS と、画面とボタンの `frame-ancestors` に使う |
 | `ORCA_BIN` | `/Applications/Orca.app/Contents/Resources/bin/orca` | Orca の CLI の絶対パス |
 | `ORCA_WEB_SETTINGS_FILE` | `~/Library/Application Support/orca-web/settings.json` | 項目の選択の保存先 |
+| `ORCA_WEB_STALL_MINUTES` | 30 | 受け箱で、最後の出力からこの分数を過ぎた作業中のエージェントを「止まっている」にする（1〜1440 の整数） |
 
 ## 待ち受けと守り
 
@@ -73,7 +75,8 @@ npm run service:uninstall              # 外して定義を消す（ログと項
 - Tailscale の IP で待ち受けられない（ログインの直後で Tailscale がまだ動いていないなど）ときは、127.0.0.1 だけで動き、ログに1行を書き、30 秒ごとに試し直す。`GET /api/health` の `listeners` に、アドレスごとの状態（`listening`、`retrying` と誤りの種類）が出る。
 - すべての要求で Host を完全一致で確かめる（`127.0.0.1:<port>`、`localhost:<port>`、`<Tailscale の IP>:<port>`。違えば 421）。
 - 書き込み（`POST /api/open`、`PUT /api/settings/fields`）は、同じオリジンの JSON と、`POST /api/token` が出す短期のトークン（`X-Orca-Web-Token`）を要する。書き込みに CORS は付けない。
-- 会話の API（`GET /api/transcript`、`GET /api/transcript/events`）は同じオリジンだけに読ませ、CORS を付けない（別のオリジンは 403）。
+- 会話の API（`GET /api/transcript`、`GET /api/transcript/events`）と受け箱の API（`GET /api/inbox`）は同じオリジンだけに読ませ、CORS を付けない（別のオリジンは 403）。
+- 受け箱は、オーケストレーションの連絡を `orca orchestration check --peek --terminal run:<id>` だけで読み、判断の門を `gate-list` で読む。統括の連絡を既読にしない（読む口は `--peek` のない check と `--ack`・`--all` などを送らずに拒む）。連絡は受け箱を見る人がいる間だけ読む。
 - Orca の authToken と書き込みのトークンを、ログ、URL、画面に出さない。会話の記録のパスを応答に出さない。
 
 ## SpecDock のダッシュボードに置く
