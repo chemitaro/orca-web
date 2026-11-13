@@ -20,6 +20,7 @@ export type RpcOutcome<T = unknown> =
 
 export interface RpcCallOptions {
   timeoutMs?: number;
+  envelope?: { orchestrationRequestId?: string };
 }
 
 /** RPC の境界。実物は UnixSocketRpc、テストでは録画の再生に差し替える。 */
@@ -136,10 +137,16 @@ export class UnixSocketRpc implements RpcTransport {
   async call<T = unknown>(method: string, params: unknown, options: RpcCallOptions = {}): Promise<RpcOutcome<T>> {
     const located = await this.#locator.locate();
     if (!located.ok) return { ok: false, kind: 'unavailable', message: located.message };
-    return this.#exchange<T>(located.endpoint, method, params, options.timeoutMs ?? this.#timeoutMs);
+    return this.#exchange<T>(located.endpoint, method, params, options);
   }
 
-  #exchange<T>(endpoint: RuntimeEndpoint, method: string, params: unknown, timeoutMs: number): Promise<RpcOutcome<T>> {
+  #exchange<T>(
+    endpoint: RuntimeEndpoint,
+    method: string,
+    params: unknown,
+    options: RpcCallOptions,
+  ): Promise<RpcOutcome<T>> {
+    const timeoutMs = options.timeoutMs ?? this.#timeoutMs;
     const id = this.#idFactory();
     const decoder = new ResponseDecoder<T>(id, method, this.#maxFrameBytes);
     return new Promise((resolve) => {
@@ -162,7 +169,7 @@ export class UnixSocketRpc implements RpcTransport {
       socket.setEncoding('utf8');
       socket.on('connect', () => {
         connected = true;
-        socket.write(endpoint.requestLine(id, method, params));
+        socket.write(endpoint.requestLine(id, method, params, options.envelope));
       });
       socket.on('data', (chunk: string) => {
         const outcome = decoder.feed(chunk);

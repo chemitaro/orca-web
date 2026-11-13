@@ -33,7 +33,8 @@ export function report(
       ),
       openExistingTab: feature(false),
       readTranscript: feature(false),
-      sendGuarded: feature(false),
+      sendTerminal: feature(false),
+      sendChat: feature(false),
     },
   };
 }

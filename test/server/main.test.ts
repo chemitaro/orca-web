@@ -23,6 +23,7 @@ async function withMain(env: Record<string, string>, fn: (s: Started) => Promise
       PATH: process.env.PATH ?? '/usr/bin:/bin',
       ORCA_BIN: path.join(dir, 'no-orca'),
       ORCA_WEB_SETTINGS_FILE: path.join(dir, 'settings.json'),
+      ORCA_WEB_SENDS_DIR: path.join(dir, 'sends'),
       ...env,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -93,5 +94,28 @@ test('main は設定の誤り（0.0.0.0 の Tailscale の IP）で、待ち受�
     assert.equal(code, 2, output());
     assert.match(output(), /ORCA_WEB_TAILSCALE_IP/);
     assert.doesNotMatch(output(), /listening/);
+  });
+});
+
+test('main は SendService を HTTP に接続し、停止中の意図は403、照会は使える', async () => {
+  await withMain({ PORT: '0' }, async ({ output }) => {
+    await until(() => /listening on http:\/\/127\.0\.0\.1:\d+\//.test(output()));
+    const port = Number(/listening on http:\/\/127\.0\.0\.1:(\d+)\//.exec(output())?.[1]);
+    const origin = `http://127.0.0.1:${port}`;
+    const tokenReply = await fetch(`${origin}/api/token`, {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/json' },
+    });
+    const { token } = (await tokenReply.json()) as { token: string };
+    const intent = await fetch(`${origin}/api/send/intent`, {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/json', 'x-orca-web-token': token },
+      body: JSON.stringify({ agent: 'test-agent', text: 'test' }),
+    });
+    assert.equal(intent.status, 403);
+    assert.equal(((await intent.json()) as { error: string }).error, 'send_disabled');
+    const checked = await fetch(`${origin}/api/send/1234567890123-0123456789abcdef0123456789abcdef`);
+    assert.equal(checked.status, 200);
+    assert.equal(((await checked.json()) as { state: string }).state, 'not_sent');
   });
 });

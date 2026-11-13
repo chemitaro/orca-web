@@ -229,3 +229,43 @@ test('構造化 Chat の誤りも code だけにし、接続断や形の誤り�
     assert.deepEqual(await r.read(await target(r, CHAT_TAB), { limit: 40 }), { ok: false, error });
   }
 });
+
+test('別のセッションの journal のページは unknown_shape にする', async () => {
+  const rpc = fakeOrca();
+  rpc.handlers['agentSession.history'] = () =>
+    ok({
+      ok: true,
+      page: { sessionId: 'different-session', items: [], hasOlder: false, window: { oldest: null } },
+    });
+  const r = reader(rpc).reader;
+  assert.deepEqual(await r.read(await target(r, CHAT_TAB), { limit: 40 }), { ok: false, error: 'unknown_shape' });
+});
+
+test('続きがある nativeChat のページに有効な beforeOffset がなければ unknown_shape', async () => {
+  for (const beforeOffset of [undefined, null, -1, 0.5, '1']) {
+    const rpc = fakeOrca();
+    rpc.handlers['nativeChat.readSession'] = () => ok({ messages: [], hasMore: true, beforeOffset });
+    const r = reader(rpc).reader;
+    assert.deepEqual(await r.read(await target(r, PANE_CLAUDE), { limit: 40 }), { ok: false, error: 'unknown_shape' });
+  }
+});
+
+test('続きがある journal のページに有効な oldest cursor がなければ unknown_shape', async () => {
+  for (const oldest of [
+    undefined,
+    null,
+    {},
+    { epoch: '', sequence: 1 },
+    { epoch: 'e', sequence: -1 },
+    { epoch: 'e', sequence: '1' },
+  ]) {
+    const rpc = fakeOrca();
+    rpc.handlers['agentSession.history'] = () =>
+      ok({
+        ok: true,
+        page: { sessionId: SESSION_CHAT, items: [], hasOlder: true, window: { oldest } },
+      });
+    const r = reader(rpc).reader;
+    assert.deepEqual(await r.read(await target(r, CHAT_TAB), { limit: 40 }), { ok: false, error: 'unknown_shape' });
+  }
+});

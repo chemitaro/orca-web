@@ -11,6 +11,7 @@ import type { InboxInputs } from '../inbox/model.ts';
 import type { OpenErrorCode, OpenOutcome, OpenRequest } from '../orca/open.ts';
 import type { TranscriptErrorCode, TranscriptReader } from '../orca/read-transcript.ts';
 import { buildRunList, buildRunTree } from '../runs/tree.ts';
+import type { SendFailure, SendService } from '../send/service.ts';
 import { checkSelection, FIELDS } from '../state/fields.ts';
 import type { StateDocument } from '../state/model.ts';
 import type { SettingsStore } from '../state/settings.ts';
@@ -25,6 +26,9 @@ export interface StateSource {
 }
 
 export interface AppOptions {
+  send?: Pick<SendService, 'status' | 'intent' | 'confirm' | 'check'>;
+  /** 守りの拒否件数だけを出す。本文・票・操作IDは含めない。 */
+  sendGuard?: { now?: () => number; log?: (counts: Record<string, number>) => void };
   poller?: StateSource;
   runs?: StateSource;
   inbox?: { snapshot(): Promise<InboxInputs>; noteViewer(): void };
@@ -48,6 +52,20 @@ export interface AppOptions {
   /** 画面のファイルの置き場。既定はリポジトリの web/。 */
   webDir?: string;
 }
+
+const SEND_ERROR_STATUS: Record<SendFailure['error'], number> = {
+  invalid_text: 400,
+  send_disabled: 403,
+  agent_not_found: 404,
+  not_sendable: 409,
+  target_changed: 409,
+  ticket_invalid: 409,
+  busy: 409,
+  unsupported: 501,
+  unknown_shape: 502,
+  unreachable: 503,
+  record_failed: 503,
+};
 
 const DEFAULT_WEB_DIR = path.resolve(import.meta.dirname, '..', '..', 'web');
 const MAX_SETTINGS_BODY_BYTES = 64 * 1024;
@@ -122,6 +140,8 @@ const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?:
   '/embed/agent-frame.js': { file: 'embed/agent-frame.js', type: 'text/javascript; charset=utf-8' },
   '/embed/agent-view.js': { file: 'embed/agent-view.js', type: 'text/javascript; charset=utf-8' },
   '/embed/agent-dom.js': { file: 'embed/agent-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/send-view.js': { file: 'embed/send-view.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/send-dom.js': { file: 'embed/send-dom.js', type: 'text/javascript; charset=utf-8' },
   '/embed/agent.css': { file: 'embed/agent.css', type: 'text/css; charset=utf-8' },
 };
 
@@ -291,6 +311,80 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
     sendJson(res, outcome.ok ? 200 : (OPEN_ERROR_STATUS[outcome.error] ?? 502), outcome);
   }
 
+  let rejectedCounts: Record<string, number> = {};
+  let lastRejectionLog = -Infinity;
+
+  async function handleSend(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+    const service = options.send;
+    const pathname = url.pathname;
+    const writing = pathname === '/api/send/intent' || pathname === '/api/send/confirm';
+    const reject = (status: number, error: string): void => {
+      sendError(res, status, error);
+      if (![401, 403, 405, 413, 415].includes(status)) return;
+      const route = writing || pathname === '/api/send/status' ? pathname : '/api/send/:operationId';
+      const key = `${route}:${error}`;
+      rejectedCounts[key] = (rejectedCounts[key] ?? 0) + 1;
+      const now = (options.sendGuard?.now ?? Date.now)();
+      if (now - lastRejectionLog >= 60_000) {
+        (options.sendGuard?.log ?? ((counts) => console.log(JSON.stringify(counts))))({ ...rejectedCounts });
+        rejectedCounts = {};
+        lastRejectionLog = now;
+      }
+    };
+    if (writing) {
+      const same = checkSameOriginWrite(req, 'POST');
+      if (!same.ok) return reject(same.status, same.error);
+      const token = checkToken(req, tokens);
+      if (!token.ok) return reject(token.status, token.error);
+    }
+    if (!writing) {
+      if (req.method !== 'GET') return reject(405, 'method_not_allowed');
+      const site = req.headers['sec-fetch-site'];
+      if (
+        (req.headers.origin !== undefined && req.headers.origin !== `http://${req.headers.host}`) ||
+        (site !== undefined && site !== 'same-origin' && site !== 'none')
+      )
+        return reject(403, 'forbidden_origin');
+    }
+    if (!service) return sendError(res, 503, 'unreachable');
+    if (writing) {
+      const raw = await readBody(req, 128 * 1024);
+      if (raw === null) return reject(413, 'payload_too_large');
+      let body: unknown;
+      try {
+        body = JSON.parse(raw);
+      } catch {
+        return sendError(res, 400, 'invalid_request');
+      }
+      const key = pathname === '/api/send/intent' ? 'agent' : 'ticket';
+      if (
+        !isRecord(body) ||
+        Object.keys(body).some((k) => k !== key && k !== 'text') ||
+        !isBoundedText(body[key], key === 'agent' ? MAX_AGENT_CHARS : 128 * 1024) ||
+        typeof body.text !== 'string'
+      )
+        return sendError(res, 400, 'invalid_request');
+      const answer =
+        key === 'agent'
+          ? await service.intent({ agent: body[key] as string, text: body.text })
+          : await service.confirm({ ticket: body[key] as string, text: body.text });
+      if (!answer.ok) return sendJson(res, SEND_ERROR_STATUS[answer.error], answer);
+      const { ok: _ok, ...result } = answer;
+      return sendJson(res, 200, result);
+    }
+    if (pathname === '/api/send/status') {
+      const agent = agentParam(url);
+      if (!agent) return sendError(res, 400, 'invalid_request');
+      return sendJson(res, 200, await service.status(agent));
+    }
+    const operationId = pathname.slice('/api/send/'.length);
+    if (!/^\d{13}-[a-f0-9]{32}$/.test(operationId)) return sendError(res, 400, 'invalid_request');
+    const answer = await service.check(operationId, { query: url.searchParams.get('check') === '1' });
+    if (!answer.ok) return sendJson(res, SEND_ERROR_STATUS[answer.error], answer);
+    const { ok: _ok, ...result } = answer;
+    sendJson(res, 200, result);
+  }
+
   /** `?agent=` の値。なければ null。 */
   const agentParam = (url: URL): string | null => {
     const agent = url.searchParams.get('agent');
@@ -365,6 +459,7 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
       sendRejection(res, host);
       return;
     }
+    if (pathname.startsWith('/api/send/')) return handleSend(req, res, url);
     if (pathname.startsWith('/api/')) {
       if (pathname === '/api/health') {
         if (method !== 'GET') sendError(res, 405, 'method_not_allowed');

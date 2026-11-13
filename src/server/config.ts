@@ -1,6 +1,9 @@
 // 起動の設定を環境変数から読む。誤った値は起動の誤りにする（黙って既定に戻さない）。
 // 待ち受けは 127.0.0.1 と、設定した Tailscale の IP だけ（0.0.0.0 に代えない）。
+
 import { isIPv4 } from 'node:net';
+import { homedir } from 'node:os';
+import path from 'node:path';
 import { DEFAULT_SETTINGS_FILE } from '../state/settings.ts';
 
 export const DEFAULT_PORT = 8791;
@@ -20,6 +23,7 @@ export interface AppConfig {
    */
   readOrigins: string[];
   settingsFile: string;
+  sendsDir: string;
   orcaBin: string;
   /** 待ち受けのアドレス（127.0.0.1 と、あれば Tailscale の IP）。 */
   bindAddresses: string[];
@@ -80,6 +84,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>> = p
     port,
     stallMinutes,
     readOrigins: [...new Set(readOrigins)],
+    sendsDir: env.ORCA_WEB_SENDS_DIR || path.join(homedir(), 'Library', 'Application Support', 'orca-web', 'sends'),
     settingsFile: env.ORCA_WEB_SETTINGS_FILE || DEFAULT_SETTINGS_FILE,
     orcaBin: env.ORCA_BIN || DEFAULT_ORCA_BIN,
     bindAddresses: tailscaleIp ? [LOOPBACK, tailscaleIp] : [LOOPBACK],

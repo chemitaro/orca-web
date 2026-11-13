@@ -4,7 +4,7 @@ import type { ReadOnlyOrcaCli } from './orca-cli.ts';
 import type { RpcTransport } from './rpc.ts';
 import type { LocateOutcome } from './runtime.ts';
 
-export type FeatureName = 'readState' | 'readTabs' | 'openExistingTab' | 'readTranscript' | 'sendGuarded';
+export type FeatureName = 'readState' | 'readTabs' | 'openExistingTab' | 'readTranscript' | 'sendTerminal' | 'sendChat';
 
 export interface FeatureReport {
   available: boolean;
@@ -48,7 +48,6 @@ export const STATE_COMMANDS: readonly string[] = [
 
 const CAP_INVENTORY = 'session-tabs.authoritative-inventory.v1';
 const CAP_PROMPT_DELIVERY = 'terminal.prompt-delivery.v1';
-const GUARDED_SEND_VERIFIED = 'orca-web:guarded-send-verified';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -202,12 +201,23 @@ export async function probeCapabilities(deps: ProbeDeps): Promise<CapabilityRepo
   const readTranscript = base();
   if (reachable) readTranscript.need('rpc:nativeChat.readSession', transcriptRpc);
 
-  const sendGuarded = withCommands(base()).need(
-    `capability:${CAP_PROMPT_DELIVERY}`,
-    capabilities.has(CAP_PROMPT_DELIVERY),
-  );
-  needCommand(sendGuarded, 'terminal send');
-  sendGuarded.need('runtime-id:consistent', runtimeIdConsistent).need(GUARDED_SEND_VERIFIED, false);
+  const sendTerminal = base()
+    .need(`capability:${CAP_PROMPT_DELIVERY}`, capabilities.has(CAP_PROMPT_DELIVERY))
+    .need('runtime-id:consistent', runtimeIdConsistent)
+    .need('feature:readTabs', readTabsReport.available)
+    .defer(
+      'rpc:terminal.send',
+      'rpc:terminal.agentStatus',
+      'rpc:terminal.inspectProcess',
+      'rpc:orchestration.requestShow',
+    );
+  const sendChat = base()
+    .need('capability:agent-session.structured.v1', capabilities.has('agent-session.structured.v1'))
+    .need('capability:agent-session.send-recorded.v1', capabilities.has('agent-session.send-recorded.v1'))
+    .need('runtime-id:consistent', runtimeIdConsistent)
+    .need('feature:readTabs', readTabsReport.available)
+    .need('feature:readTranscript', readTranscript.report().available)
+    .defer('rpc:agentSession.send', 'rpc:agentSession.sendRecorded');
 
   return {
     checkedAt: now().toISOString(),
@@ -221,7 +231,8 @@ export async function probeCapabilities(deps: ProbeDeps): Promise<CapabilityRepo
       readTabs: readTabsReport,
       openExistingTab: openExistingTab.report(),
       readTranscript: readTranscript.report(),
-      sendGuarded: sendGuarded.report(),
+      sendTerminal: sendTerminal.report(),
+      sendChat: sendChat.report(),
     },
   };
 }

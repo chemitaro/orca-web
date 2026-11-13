@@ -20,8 +20,8 @@ export class RuntimeEndpoint {
   }
 
   /** 1つの要求の NDJSON の行（改行つき）。 */
-  requestLine(id: string, method: string, params: unknown): string {
-    return `${JSON.stringify({ id, authToken: this.#authToken, method, params })}\n`;
+  requestLine(id: string, method: string, params: unknown, envelope?: { orchestrationRequestId?: string }): string {
+    return `${JSON.stringify({ id, authToken: this.#authToken, method, params, orchestrationRequestId: envelope?.orchestrationRequestId })}\n`;
   }
 
   /** 文から authToken の値を伏せる。 */

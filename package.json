@@ -16,6 +16,7 @@
     "start": "node src/server/main.ts",
     "probe:live": "node src/tools/probe-live.ts",
     "open:live": "node src/tools/open-live.ts",
+    "send:live": "node src/tools/send-live.ts",
     "transcript:live": "node src/tools/transcript-live.ts",
     "service:install": "npm run build && node src/tools/service.ts install",
     "service:uninstall": "node src/tools/service.ts uninstall",
