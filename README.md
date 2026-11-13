@@ -167,6 +167,22 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 
 SpecDock のダッシュボードを Tailscale のアドレスで開くと、状態は `http://<Tailscale の IP>:8791/api/state` から読める。開くボタンは幅 390px 以下では出ない。
 
+### 試しの画面で確かめる
+
+SpecDock に組み込む前に、3つの部品（稼働の印の要約、開くボタン、詳細とチャットの iframe）を、SpecDock とは別のオリジンの試しの画面で確かめる。常駐の orca-web（8791）と本物の SpecDock（47800）は使わず、変えない。
+
+```sh
+npm run trial -- --tailscale-ip <Tailscale の IP>   # IP を省くと 127.0.0.1 だけ（環境変数 ORCA_WEB_TAILSCALE_IP でもよい）
+npm run trial -- --dry-run                           # 組んだ環境変数と URL を見るだけ
+```
+
+- 起動するもの：試し用の orca-web（8792）、試しの画面（47900。`web/trial/` を `src/tools/trial-host.ts` が配る）、許していないオリジンの画面（47901）。どれも 127.0.0.1 と、指定したときは Tailscale の IP だけで待ち受ける。ポートは `--orca-port`、`--page-port`、`--forbidden-port` で変えられる（8791 と 47800 は使えない）。
+- 試し用の orca-web が許すのは試しの画面のオリジン（`http://127.0.0.1:47900` と `http://<Tailscale の IP>:47900`）だけ。設定と送信の記録は `--state-dir`（既定 `.workbench/trial`）の `settings.json` と `sends/` に分ける。常駐の置き場は指定できない。
+- 開く URL：`http://127.0.0.1:47900/`（Mac の幅）、`/phone.html`（試しの画面を幅 390px の枠に入れたもの）、`http://127.0.0.1:47901/forbidden.html`（要約の読み、iframe、ボタン、トークン、送る意図が拒まれることを示す）。スマホからは `http://<Tailscale の IP>:47900/`。`localhost` の名前では開けない（421）。
+- 試しの画面：worktree ごとの節に、エージェントの丸と状態ごとの数を描く。worktree `send-test`（試しの送り先）を先頭に置く。丸を押すと、幅 720px より広いときは横の欄、狭いときは節の下に詳細とチャットの iframe が開く。節ごとに開くボタンを置く（幅 390px 以下では出ない）。
+- 送信：試しの `settings.json` は `sendEnabled: false` で作られる。試すときだけ、試しの `settings.json` に `"sendEnabled": true` を手で書く。試しでは試しの送り先（worktree `send-test`）にだけ送り、確かめ終わったら `false` に戻す。
+- 止める：`kill -TERM $(cat .workbench/trial/trial.pid)`（前面で動かしたときは Ctrl-C）。試し用の orca-web も一緒に止まる。要らなくなったら `.workbench/trial/` を消す。
+
 ## 開発
 
 ```sh
