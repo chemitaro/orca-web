@@ -40,10 +40,18 @@ steps: {
 		session:  "ui"
 	}
 	"S-05": {
-		title:    "実機の確かめ（読むだけ）と、README.md、AGENTS.md、report.md を書く（D-05）"
-		text:     "タスク担当が行う（文書の手順）。一時の port の `npm start` で `/api/runs/run_b7c4f4c08bbc/tree` と `/api/runs?project=<orca-web の repo の id>` を読み、節・札・orphan の数と、統括と札のプロジェクト名だけを report.md に書く。画面を 1280px と 390px で見る。`orca --version` を書く。確かめ：T-12。完了：report.md の Verification に実機の結論があり、README.md と AGENTS.md が出来上がったものと合う"
-		realizes: ["R-01", "R-02", "R-03"]
+		title:    "根の統括の決め方を、閉じた coordinator_handle のときに最近の依頼の端末へ直す（D-01、D-02 の S-04 の後の仕様の変更）"
+		text:     "対象：`src/state/normalize.ts`、`src/state/model.ts`、`src/runs/tree.ts`、`src/runs/model.ts`、`web/runs-view.js`（根の行の添え書き）、`test/state/`、`test/runs/`、`test/web/runs-view.test.ts`。確かめ：T-13。完了：`npm run lint`、`npm test`、`npm run build` が通る。区切りのレビュー：なし（最終品質ゲートで見る）。止まって HEAD を報告する"
+		realizes: ["R-01", "R-02", "F-01"]
 		after:    ["S-04"]
+		status:   "todo"
+		session:  "impl-fix"
+	}
+	"S-06": {
+		title:    "実機の確かめ（読むだけ）と、README.md、AGENTS.md、report.md を書く（D-05）"
+		text:     "タスク担当が行う（文書の手順）。一時の port の `npm start` で `/api/runs/run_b7c4f4c08bbc/tree` と `/api/runs?project=<orca-web の repo の id>` を読み、節・札・orphan の数と、統括と札のプロジェクト名だけを report.md に書く。画面を 1280px と 390px で見る。`orca --version` を書く。確かめ：T-12。根の統括が `latest-task` で決まり、spec-dock の repo になることも確かめる。完了：report.md の Verification に実機の結論があり、README.md と AGENTS.md が出来上がったものと合う"
+		realizes: ["R-01", "R-02", "R-03"]
+		after:    ["S-05"]
 		status:   "todo"
 		session:  "doc"
 	}
@@ -62,6 +70,7 @@ tests: {
 	"T-10": {title: "`<script>` を含む題名とプロジェクト名が DOM で要素にならない（textContent だけ）。リンクの href が `/runs/<encodeURIComponent(id)>` と `/embed/agent?id=…` だけ", verifies: ["R-03"]}
 	"T-11": {title: "プロジェクトの画面が受け箱を `?project=` で、Run の一覧を `?project=` で読む URL を組む（純粋な関数）。受け箱の画面の見出しに `/runs` と、選んだプロジェクトの `/projects/<id>` のリンクが出る", verifies: ["R-02"]}
 	"T-12": {title: "実機の確かめ：`run_b7c4f4c08bbc` が1本の木で出て、orca-web の節に札が付き、orca-web のプロジェクトの画面に spec-dock の統括からの札つきで出る。1280px と 390px で横にはみ出さない", verifies: ["R-01", "R-02", "R-03"]}
+	"T-13": {title: "`coordinatorHandle` が terminals にあれば run、なければ親のない task のうち terminals にある作り手の最も新しいもの（createdAt、同じなら id の順で最後）で latest-task、どちらもなければ coordinatorHandle と null。terminals が読めていなければ coordinatorHandle と null。根のエージェントと coordinatorWorktreeId が activeCoordinatorHandle から決まり、木の文書の run に coordinatorResolvedBy が写り、画面の根の行に添え書きが出る", verifies: ["R-01", "R-02", "F-01"]}
 }
 
 verification: """
@@ -82,11 +91,12 @@ execution: {
 		"impl-logic": {task: "状態の項目の追加と、木と一覧を組む規則（S-01〜S-02。Codex の実装担当、Orca の worker）", model: "gpt-6-astra", effort: "high", rationale: "本人の指示（2026-11-13、統括の依頼書）：Run・Task・worker から木を組む規則のような難しいロジックのステップは、理由を書いて GPT-6 Astra / high にしてよい。理由：親の選び方（created_by の一致、並びの最初）、輪と欠けた親の orphan、札の判定、一覧の絞り込みと並びが込み入り、純粋な関数で網羅のテストが要る。S-01 は S-02 の入力を作る小さな手順なので同じセッションにまとめる。provider: codex"}
 		impl: {task: "API と画面の道（S-03。Codex の実装担当、Orca の worker）", model: "gpt-6.1-sol", effort: "medium", rationale: "本人の指示（2026-11-13、統括の依頼書）：API・サーバー側のテストで確かめられるコードは GPT-6.1 Sol / medium。provider: codex"}
 		ui: {task: "画面（S-04。Claude の実装担当、Orca の worker）", model: "claude-opus-5-5", effort: "medium", rationale: "本人の指示（2026-11-13、統括の依頼書）：画面と一体の部分（HTML・CSS・画面の JavaScript）は Opus 5.5 / medium。provider: claude"}
-		doc: {task: "実機の確かめと文書（S-05。タスク担当が自分で行う）", model: "opus", effort: "medium", rationale: "方針の §2 注記：文書を書く手順はタスク担当が書く。実機の確かめは読むだけで、コードを変えない"}
+		"impl-fix": {task: "根の統括の決め方の修正（S-05。Codex の実装担当、Orca の worker）", model: "gpt-6-astra", effort: "high", rationale: "本人の指示（2026-11-13、統括の依頼書）：Run・Task・worker から木を組む規則のステップは理由を書いて GPT-6 Astra / high にしてよい。理由：S-01〜S-02 と同じ規則の変更（統括の端末の解決と木の根の結び付け）で、端末の有無と task の並びの組み合わせを網羅して確かめる。provider: codex"}
+		doc: {task: "実機の確かめと文書（S-06。タスク担当が自分で行う）", model: "opus", effort: "medium", rationale: "方針の §2 注記：文書を書く手順はタスク担当が書く。実機の確かめは読むだけで、コードを変えない"}
 	}
 	reviews: {
 		spec: {role: "仕様のレビュー（spec-reviewer）", model: "opus", effort: "high"}
 		code: {role: "区切りのレビュー CP-1（code-reviewer）", after: "S-03", model: "opus", effort: "medium"}
-		gate: {role: "最終品質ゲート（quality-gate-reviewer）", after: "S-05", model: "opus", effort: "medium"}
+		gate: {role: "最終品質ゲート（quality-gate-reviewer）", after: "S-06", model: "opus", effort: "medium"}
 	}
 }

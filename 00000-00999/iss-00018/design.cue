@@ -21,6 +21,10 @@ design: {
 			  `coordinatorWorktreeId: Fact<string>`（取得元 `terminals` の、そのハンドルの端末の `worktreeId`。なければ、状態の文書の agents のうち `terminalHandle` が等しいものの `worktreeId`。
 			  どちらにもなければ `missing: "not-linked"`、ハンドルが null なら `not-provided`、terminals が一度も読めていなければ `source-failed`）を足す。
 			- `TaskState` に `createdByTerminalHandle: string | null` を足す。
+			- （S-04 の後の仕様の変更）`RunState` に `activeCoordinatorHandle: string | null` と `coordinatorResolvedBy: "run" | "latest-task" | null` を足す。決め方：`coordinatorHandle` が取得元 `terminals` の端末にあれば、それと `"run"`。
+			  なければ、同じ Run の task のうち `parentId` が null で、`createdByTerminalHandle` が `terminals` の端末にあるものの中で `createdAt` の最も新しいもの（同じなら task の id の順で最後）の `createdByTerminalHandle` と `"latest-task"`。
+			  どちらもなければ `coordinatorHandle`（null 可）と null。`terminals` が一度も読めていなければ `coordinatorHandle` と null。
+			  `coordinatorWorktreeId` は、`coordinatorHandle` ではなく `activeCoordinatorHandle` の端末から、上と同じ規則で決める。
 			- `fields.ts` に `run.coordinator`（統括の端末の worktree）を足すかは任意（足すなら既存の項目の選択の契約を壊さない）。
 			状態の文書の版は `orca-web.state/v1` のまま（項目の追加だけ）。既存のテストの期待値（`test/state/expected.ts` など）は、足した項目だけを足して直す。
 			"""
@@ -40,7 +44,7 @@ design: {
 			値は文字列か null（画面が null を「—」にする）。
 
 			**エージェントの結び付け**：作業者は、状態の文書の agents のうち `worker.dispatchId` が等しいもの、なければ `terminalHandle` が worker の `terminalHandle` と等しいもの。
-			統括は `terminalHandle` が Run の `coordinatorHandle` と等しいもの。結び付かなければ agentId・agentType は null。worker に結び付かないエージェントは節にしない。
+			統括は `terminalHandle` が Run の `activeCoordinatorHandle` と等しいもの（S-04 の後の仕様の変更。以前は `coordinatorHandle`）。結び付かなければ agentId・agentType は null。worker に結び付かないエージェントは節にしない。
 
 			**項目**：
 			- `model`：作業者は worker の `model.value`（起動時の値）、なければ null。統括はエージェントの `model.value`、なければ null。
@@ -61,7 +65,7 @@ design: {
 			根の project が分からないときは札を付けない（推測しない）。
 
 			**木の文書**（`RunTreeDocument`）：`schema: "orca-web.run-tree/v1"`、`generatedAt`、`stale`、`connection`、`sources`（状態の文書の `runs`、`tasks`、`workers`、`workerLaunch`、`tabs`、`terminals` の取得元の `{ lastSuccessAt, stale, error }`）、
-			`run`（`{ id, title, coordinatorProject }`）、`root`（節）、`counts`（`{ nodes, workers, otherProject, orphan }`）。
+			`run`（`{ id, title, coordinatorProject, coordinatorResolvedBy }`。`coordinatorResolvedBy` は RunState の写し）、`root`（節）、`counts`（`{ nodes, workers, otherProject, orphan }`）。
 
 			**一覧の文書**（`RunListDocument`）：`schema: "orca-web.runs/v1"`、`generatedAt`、`stale`、`connection`、`sources`（上と同じ）、`project`（絞り込み。`{ id, name }` か null。name は repo の displayName、repo がなければ null）、
 			`projects`（全 Run の節に出てくるプロジェクトの `{ id, name, count }`。count はそのプロジェクトに節のある Run の数。名前の順）、
@@ -92,7 +96,7 @@ design: {
 			木の行は、すべての節にプロジェクトの名前の列を持ち（project が null なら「—」）、それとは別に、otherProject が真の節に札を付ける。
 			経過の文は受け箱（`inbox-view.js`）の関数を使う（二重に書かない。要れば export する）。鮮度の文は、木と一覧の文書の平らな `sources`（取得元ごとの `{ lastSuccessAt, stale, error }`）を読む関数を `runs-view.js` に新しく書く（受け箱の `freshnessLines` は受け箱の文書の形を読むので使わない。連絡の取得元は出さない）。`test/web/` から確かめる。
 			`runs-dom.js` は textContent だけで描く。リンクの href は自分で組んだ相対でない URL（`/runs/<encodeURIComponent(id)>`、`/embed/agent?id=…`）だけ。
-			- `/runs/<id>`：木を 10 秒ごとに読み直す。札は「<プロジェクト名>」を点線の枠で示す（色だけに頼らない。文字で出す）。390px では字下げを 1 段 12px 以下にする。
+			- `/runs/<id>`：木を 10 秒ごとに読み直す。`coordinatorResolvedBy` が `latest-task` なら、根の行に「最近の依頼から決めた統括」と小さく添える（null なら添えない。根の項目は「—」のまま）。札は「<プロジェクト名>」を点線の枠で示す（色だけに頼らない。文字で出す）。390px では字下げを 1 段 12px 以下にする。
 			- `/runs`：全 Run の一覧。プロジェクトの選択（`?project=`）を付ける。
 			- `/projects/<id>`：上に受け箱（`/api/inbox?project=<id>`。iss-00017 の `inbox-view.js` と `inbox-dom.js` を使う）、下にそのプロジェクトの Run の一覧（`/api/runs?project=<id>`）。
 			- 受け箱の画面（`/`）の見出しに `/runs` へのリンクと、プロジェクトを選んでいるときは `/projects/<id>` へのリンクを足す（選択に従うリンクは `inbox.js` が、選択を変えるたびに書き換える）。
