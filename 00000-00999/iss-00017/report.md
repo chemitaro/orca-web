@@ -14,6 +14,7 @@ ID: "iss-00017"
   - 合格した文書の sha256：requirement.cue `8fdb46c9fe1731803a799b12d364fe9553fab593cc15a06a278a2a4ca3965c42`、design.cue `93d44408611cd50c9c96d4c65fde81bd91dff9995f296381b44c4d7ff94ce8f9`、plan.cue `279452efffe264febef83d3c4960ed073ec4e0ecce3041ca1cb0a517e3ac4df6`
   - 結果：`.workbench/spec-review/iss-00017/round-3.json`（対応の記録は `review-response.md`）。照合のコミット `4fa942020a7113fafb979a9c8d290b5c35f44520`
 - 区切りのレビュー CP-1：合格（round-1、2026-11-13）。範囲 `4fa9420..7a3301ae475ca6ca8a4559c237b874737cedfb9b`、レビュアー code-reviewer ×2（standards と spec、Opus 5.5 / medium）。P0/P1 0、P2 1（両方の軸が同じ指摘：連絡と門の `created_at` を ISO に直さず since に流す。実機の連絡の `created_at` は ISO の `Z` 付きで観測しており、SQLite の形が来たときだけずれる。直さずに記録）。結果：`.workbench/code-review/iss-00017-cp1/`
+- 最終品質ゲート：合格（fqg-iss-00017-1、attempt 1、2026-11-13）。合格のコミット `e511aa5ab09658d1cd884ed798af9475602f3496`、範囲 `4fa9420..e511aa5`。quality-gate-reviewer（Opus 5.5 / medium）P0/P1 0、P2 1（CP-1 と同じ created_at の件）。テスト `npm run lint`・`npm test`（323 pass）・`npm run build` すべて exit 0。closure：`.workbench/final-quality-gate/fqg-iss-00017-1/closure.md`
 
 
 詳細: [Report Guide](../../../docs/authoring/report.md)
