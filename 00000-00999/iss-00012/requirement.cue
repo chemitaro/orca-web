@@ -44,7 +44,7 @@ requirements: {
 		text: """
 			`GET /api/transcript?agent=<状態の API のエージェントの id>` が、Orca が今そのエージェントに結んでいるセッションの会話の末尾を返す。
 			`limit` で件数を選べ、`before`（前の応答が返した不透明な位置。セッションの鍵を含む）で、より古いページを読める。
-			各件は、役割（user、assistant、tool）、時刻、部品（本文、ツールの呼び出し、ツールの結果、表示できない印）を持つ。
+			各件は、役割（user、assistant、tool、system）、時刻、部品（本文、ツールの呼び出し、ツールの結果、表示できない印）を持つ。system は Orca の短い知らせ（会話の中断、要約など）で、本文だけを知らせの行として出す。
 			思考（reasoning）は、印も付けずに出さない。「表示できない」の印は、未対応の部分（画像、未知のブロックなど）だけに付ける。
 			並びは Orca の画面と同じにする（端末のエージェントは Orca の画面と同じ引数で読み、返る順のまま。構造化 Chat は journal の位置の順）。
 			セッションの識別子と記録のパスは Orca が持つものを使い、ファイルの名前から作らない。記録のパスと Orca の誤りの文は応答に出さない。
@@ -106,8 +106,8 @@ failures: {
 	"F-01": {
 		title: "会話の記録が読めないとき、空の会話ではなく「読めない」と理由を示す"
 		text: """
-			エージェントが見つからない、Orca がそのエージェントにセッションを結んでいない（スリープ中、まだ指示を受けていない）、記録のファイルがまだない、
-			機能が使えない、Orca に届かない、読みが失敗した、知らない形の応答、のそれぞれを、区別できる誤りの code で返し、画面は「読めない」と理由を示す。
+			エージェントが見つからない（`agent_not_found`）、Orca がそのエージェントにセッションを結んでいない（`no_session`。スリープ中、まだ指示を受けていない）、記録のファイルがまだない（`transcript_not_found`）、
+			機能が使えない（`unsupported`）、Orca に届かない（`unreachable`）、読みが失敗した（`read_failed`）、知らない形の応答（`unknown_shape`）、のそれぞれを、区別できる誤りの code で返し、画面は「読めない」と理由を示す。
 			空の会話（0件）を示すのは、Orca が読めたうえで0件を返したときだけにする。
 			"""
 		impact:   "利用者が、読めないのを会話がないと取り違え、状態を誤って判断する"
@@ -148,6 +148,7 @@ decisions: [
 	"2026-11-13 Orca 1.4.256 の Unix ソケットは、streaming の method（`nativeChat.subscribe`、`agentSession.subscribe`）を `method_not_supported` で拒む（ソースの `runtime-rpc-request-admission.ts` が `dispatcher.dispatch` だけを呼び、`dispatcher.ts` が streaming の method を通さない）。購読はペアリングした WebSocket だけで、ペアリングは init-00002 の対象外。そこで、サーバーが末尾を短い間隔で読み直し、前の窓との差から追記と置き換えを作って SSE で配る。epic-00004 D-01 の「購読の口が使えないときは末尾を読み直す」に当たる",
 	"2026-11-13 `nativeChat.readSession` に、Orca の画面と同じ `capabilities: { transcriptSourceOrder: 1 }` を渡し、返る順のまま並べる（Orca のデスクトップの読み取りも sourceOrder を使う）",
 	"2026-11-13 会話の API は同じオリジンだけ（画面は orca-web のオリジンの iframe の中から読む）。状態の API と違い、SpecDock のオリジンに読み取りの CORS を許さない",
+	"2026-11-13 Orca の system の件（会話の中断、要約などの知らせ）は、本文を知らせの行として出す。本文でない部分は「表示できない」の印にする",
 	"2026-11-13 構造化 Chat の turn、agent-start、agent-handoff の件は会話の本文ではないので出さない。diff、approval、question、status、plan、知らない kind は「表示できない」の印にする",
 	"2026-11-13 実機の確かめでは `nativeChat.subscribe` を送らない（読む RPC の一覧を広げない）。購読の口の結論はソースで確かめる",
 ]

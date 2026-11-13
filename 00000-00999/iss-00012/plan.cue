@@ -18,18 +18,18 @@ steps: {
 tests: {
 	"T-01": {title: "端末のタブと構造化 Chat のタブの id から、Orca が持つセッションの識別子と記録のパスで読み、引数に transcriptSourceOrder が入る", verifies: ["R-01"]}
 	"T-02": {title: "正規化で、本文、ツール、表示できない印が返り、思考が返らず、並べ替えず、長い本文を切る", verifies: ["R-01"]}
-	"T-03": {title: "before で、重ならない、より古いページが返る（nativeChat と agentSession）", verifies: ["R-01"]}
+	"T-03": {title: "before で、重ならない、より古いページが返り、agentSession の reset（ok: false）は古いページとして返さない（nativeChat と agentSession）", verifies: ["R-01"]}
 	"T-04": {title: "応答と誤りに、記録のパス、authToken、Orca の誤りの文が含まれない", verifies: ["R-01", "F-03"]}
 	"T-05": {title: "窓の差分が、追記、同じ id の更新、窓の前進、書き換え、巻き戻しを、appended と replacement に分ける", verifies: ["R-02", "F-02"]}
 	"T-06": {title: "見張りが、購読者で読みを共有し、セッションの切り替えで replacement、読めないときに unavailable、回復で replacement を配り、最後の購読者で止まり、上限で busy を返す", verifies: ["R-02", "F-01", "F-02"]}
-	"T-07": {title: "誤りの種類（タブがない、セッションがない、記録がない、機能がない、届かない、知らない形）が区別した code と HTTP の状態で返り、0件は読めたときだけ", verifies: ["F-01"]}
+	"T-07": {title: "誤りの種類（agent_not_found、no_session、transcript_not_found、unsupported、unreachable、read_failed、unknown_shape）が区別した code と HTTP の状態で返り、0件は読めたときだけ", verifies: ["F-01"]}
 	"T-08": {title: "before のセッションの鍵が今と違えば 409 で読まない", verifies: ["F-02"]}
 	"T-09": {title: "SSE の道が snapshot と appended を配り、別のオリジンを 403 で拒み、CORS を付けない", verifies: ["R-02", "F-03"]}
 	"T-10": {title: "/embed/agent の CSP が inline を許さず、frame-ancestors が読み取りのオリジンだけ", verifies: ["R-05", "F-03"]}
 	"T-11": {title: "詳細の組み立てが、状態、種類、モデルと推論と意味、親と子、PR と CI、開く要求を作り、https でない PR の URL をリンクにしない", verifies: ["R-03", "F-03"]}
 	"T-12": {title: "会話の組み立てが、吹き出し、callId で組にしたツール、表示できない印を作り、思考を出さない", verifies: ["R-03"]}
 	"T-13": {title: "`<script>` や `<img onerror>` を含む本文が、DOM に描いても要素にならない（textContent だけで描く）", verifies: ["R-03", "F-03"]}
-	"T-14": {title: "画面が replacement で前のページを含めて捨て、unavailable で読めない理由を示す（画面の状態の純粋な関数）", verifies: ["F-01", "F-02"]}
+	"T-14": {title: "画面が replacement で前のページを含めて捨て、要求の後に置き換えを受けた古いページや鍵の違う古いページを足さず、unavailable で読めない理由を示す（画面の状態の純粋な関数）", verifies: ["F-01", "F-02"]}
 	"T-15": {title: "状態の画面のエージェントの行に、詳細とチャットの画面へのリンクが付く", verifies: ["R-04"]}
 	"T-16": {title: "実機の確かめ（Claude Code と Codex の会話を読み、並びと差分と前のページを数え、390px の表示を見る）", verifies: ["R-06", "R-03"]}
 }

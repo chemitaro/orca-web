@@ -18,14 +18,16 @@ design: {
 		text: """
 			`createTranscriptReader({ rpc, capabilities })` が2つの操作を持つ。読む口は `ReadOnlyRpc` だけ（`READ_METHODS` に `agentSession.history` を足す）。
 
-			- `resolve(agentId)`：機能 `readTranscript` が使えなければ `unavailable`。`session.tabs.listAll` を読み（1秒の間は同じ結果を共有する）、状態の API と同じ規則でエージェントの id のタブを探す。
+			- `resolve(agentId)`：Orca に届かなければ（機能の確かめの connection が connected でない）`unreachable`、機能 `readTranscript` が使えなければ `unsupported`。`session.tabs.listAll` を読み（1秒の間は同じ結果を共有する）、状態の API と同じ規則でエージェントの id のタブを探す。
 			  端末のタブは id が paneKey（`<parentTabId>:<leafId>`）かタブの id、構造化 Chat のタブは `chat:<タブの id>`。
 			  端末のタブは、Orca の画面（`resolveNativeChatSession`）と同じく、`agentStatus.agentType`（なければ `launchAgent`）と `agentStatus.providerSession` の `id` と `transcriptPath` を使う。
 			  構造化 Chat は、タブの `agent` と `sessionId` を使う。
 			  結果は `TranscriptTarget`（agentId、source：`nativeChat` か `agentSession`、エージェントの種類、セッションの識別子、記録のパス、セッションの鍵）か、誤り：
-			  `agent_not_found`（タブがない）、`no_session`（セッションの識別子かエージェントの種類がない）、`unavailable`（機能が使えない、Orca に届かない）、`read_failed`、`unknown_shape`。
+			  `agent_not_found`（タブがない）、`no_session`（セッションの識別子かエージェントの種類がない）、`unreachable`、`unsupported`、`read_failed`、`unknown_shape`。
 			- `read(target, { limit, before })`：`nativeChat.readSession`（`agent`、`sessionId`、`transcriptPath`、`limit`、`beforeOffset`、`capabilities: { transcriptSourceOrder: 1 }`）か、
 			  `agentSession.history`（`sessionId`、`direction`：`tail` か `before`、`cursor`、`limit`）。Orca が `{ error, notFound }` を返したら `transcript_not_found`（notFound）か `read_failed`。
+			  `agentSession.history` は `ok: true` の `page` だけを使い、`ok: false`（reset。添えられた末尾のページを含む）は `read_failed` にする（古いページの代わりに末尾を返さない）。
+			  RPC の誤りは、届かない（`unavailable`、`timeout`、`disconnected`）を `unreachable`、`method_not_found` を `unsupported`、ほかの Orca の誤りを `read_failed`、形の誤りを `unknown_shape` にする。
 			  Orca の誤りの文は捨て、code だけを返す。結果は Orca の件の並びと、より古いページの位置（nativeChat は beforeOffset、agentSession は window.oldest）と hasMore。
 
 			セッションの鍵（`key`）は、エージェントの id、source、エージェントの種類、セッションの識別子を NUL でつないだ文字の sha256 の先頭16桁。短い識別子（`short`）はセッションの識別子の先頭8文字。
@@ -36,11 +38,12 @@ design: {
 	"D-02": {
 		title: "会話の正規化（`src/transcript/normalize.ts`、`orca-web.transcript/v1`）"
 		text: """
-			Orca の件（NativeChatMessage、AgentJournalRenderItem）を、`{ id, role, at, parts }` の件に減らす。`role` は `user`、`assistant`、`tool`。
+			Orca の件（NativeChatMessage、AgentJournalRenderItem）を、`{ id, role, at, parts }` の件に減らす。`role` は `user`、`assistant`、`tool`、`system`。
 			`parts` は `text`（text）、`tool-call`（name、input を JSON にした文字、callId）、`tool-result`（output、isError、callId）、`unsupported`（what）。各部品は切ったら `truncated: true`。
 
 			- 思考（role が `reasoning`）は件ごと落とし、印を付けない。
-			- role が `system` の件、`image-ref`、`subagent-group`、`subagent`、`background-task`、知らないブロックは `unsupported` の印にする（system の件は role を `assistant` にする）。
+			- `image-ref`、`subagent-group`、`subagent`、`background-task`、知らないブロックは `unsupported` の印にする。role が `system` の件（Orca の知らせ）は、本文を残し、ほかの部分は同じく印にする。知らない role は `assistant` にし、部品はすべて印にする。
+			- `unsupported` の `what` は決めた名前（image、subagent、background-task、diff、approval、question、status、unknown）だけにし、Orca の文字をそのまま入れない。
 			- 構造化 Chat の `message` は同じ扱い。`tool-call` は role `tool` の件で、呼び出しと（あれば）出力の `head`（`truncated` を引き継ぐ）。`turn`、`agent-start`、`agent-handoff` は出さない。
 			  `diff`、`approval`、`question`、`status`、知らない kind は `unsupported`。並びは（sequence、sequenceIndex）の順。
 			- 端末のエージェントの件は並べ替えない（Orca が返す順のまま）。
@@ -80,9 +83,11 @@ design: {
 		title: "会話の HTTP の道（`src/server/app.ts`）"
 		text: """
 			- `GET /api/transcript?agent=&limit=&before=`：その場で解いて読む。`limit` は 1〜200（既定 40）。`before` のセッションの鍵が今の鍵と違えば 409 `session_changed`。
-			  誤りの状態：400 `invalid_request`、404 `agent_not_found`・`no_session`・`transcript_not_found`、409 `session_changed`、503 `unavailable`・`busy`、502 `read_failed`・`unknown_shape`。
+			  誤りの状態：400 `invalid_request`、404 `agent_not_found`・`no_session`・`transcript_not_found`、409 `session_changed`、501 `unsupported`、503 `unreachable`・`busy`、502 `read_failed`・`unknown_shape`。
 			  誤りの本文は `{ ok: false, error }`。Orca の誤りの文は返さない。
-			- `GET /api/transcript/events?agent=`：`text/event-stream`。`retry: 5000`、15秒ごとの注釈の行。出来事は `snapshot`、`appended`、`replacement`、`unavailable`。
+			- `GET /api/transcript/events?agent=`：`text/event-stream`。`retry: 5000`、15秒ごとの注釈の行。出来事（`event:` の名前と、`data:` の JSON）：
+			  `snapshot`（`{ document }`。document は D-02 の文書で、session の鍵、messages、hasMore、before を持つ）、`replacement`（`{ reason, document }`）、
+			  `appended`（`{ session: { key }, items, updated }`）、`unavailable`（`{ error }`）。画面の「前を読む」は、最後に受けた document の before を使う。
 			  見張りの上限では `unavailable`（`busy`）を送って閉じる。
 			- どちらも Host を確かめ、Origin があれば同じオリジン（`http://<Host>`）だけを通す（ほかは 403）。CORS を付けない。GET のほかは 405。
 			- `/embed/agent` と、その script と css を静的なファイルとして配る。画面は既存の埋め込みの画面と同じ CSP（`default-src 'none'`、`script-src 'self'`、`style-src 'self'`、
@@ -106,7 +111,7 @@ design: {
 			- `/api/state` を5秒ごとに読み、詳細を描き直す。「Orca で開く」は `write.js` の短期のトークンで `/api/open` を送る。`matchMedia('(max-width: 390px)')` の間は出さない。
 			- `EventSource('/api/transcript/events?agent=…')` を開き、snapshot と replacement で全体を描き直し（前のページも捨てる）、appended で updated を同じ id の行に差し替え、items を末尾に足す。
 			  末尾を見ていたときだけ末尾へ送る。unavailable では「読めない」と理由を示し、Orca の画面で確かめるよう促す。
-			- 「前を読む」で `GET /api/transcript?before=` を読み、上に足す。409 なら置き換えを待つ。
+			- 「前を読む」で `GET /api/transcript?before=` を読み、上に足す。足すのは、応答の session の鍵が今の鍵と同じで、要求を送った後に snapshot も replacement も受けていないときだけ（受けていれば応答を捨てる）。409 なら置き換えを待つ。
 			- 幅 390px で読める（`overflow-wrap: anywhere`、ツールの入出力は折り返す `pre`）。明暗の配色。送信の欄は置かない。
 			"""
 		satisfies: ["R-03", "F-01", "F-02", "F-03"]
