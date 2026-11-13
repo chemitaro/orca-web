@@ -89,6 +89,7 @@ test('read-state は取得元ごとの記録を返し、本文や transcript の
   assert.ok(tabs.ok);
   const claudeTab = tabs.data[0]?.tabs[0];
   assert.deepEqual(claudeTab?.agentStatus, {
+    lastAssistantMessage: null,
     agentType: 'claude',
     state: 'working',
     stateStartedAt: ms(21),
@@ -225,4 +226,36 @@ test('JSON でない stdout は、取得元の誤りの文に出ない（FQG-001
   const wts = await r.worktrees();
   assert.deepEqual(!repos.ok && repos.error, { kind: 'invalid-json', message: 'stdout is not JSON (23 bytes)' });
   assert.deepEqual(!wts.ok && wts.error, { kind: 'exit-nonzero', message: 'exited with code 1' });
+});
+
+test('受け箱専用に lastAssistantMessage は500文字、Run は updated_at を拾う', async () => {
+  const cli: CliRecording = {
+    version: 1,
+    kind: 'cli',
+    entries: [
+      okEntry(['orchestration', 'run-list', '--limit', '100'], {
+        runs: [{ id: 'r1', updated_at: '2026-11-13' }, { id: 'r2' }],
+      }),
+    ],
+  };
+  const rpc = rpcRecording();
+  const entry = rpc.exchanges.find((e) => e.method === 'session.tabs.listAll');
+  assert.ok(entry);
+  const result = {
+    snapshots: [
+      {
+        worktree: WT1,
+        tabs: [{ type: 'terminal', id: 'tab1', agentStatus: { lastAssistantMessage: '仮'.repeat(600) } }],
+      },
+    ],
+  };
+  entry.chunks = [`${JSON.stringify({ id: '$ID', ok: true, result })}\n`];
+  const r = createStateReader(
+    new ReadOnlyOrcaCli(new OrcaCli(new ReplayCliRunner(cli))),
+    new ReadOnlyRpc(new ReplayRpcTransport(rpc)),
+  );
+  const tabs = await r.tabs();
+  assert.equal(tabs.ok && tabs.data[0]?.tabs[0]?.agentStatus?.lastAssistantMessage, '仮'.repeat(500));
+  const runs = await r.runs();
+  assert.deepEqual(runs.ok && runs.data.map((run) => run.updatedAt), ['2026-11-13', null]);
 });

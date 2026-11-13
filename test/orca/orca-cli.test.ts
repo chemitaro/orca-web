@@ -134,3 +134,22 @@ test('誤りの文に Orca の生の stdout を入れない（json・document・
   ]);
   assert.equal(!withStderr.ok && withStderr.message, 'bad flag', 'stderr は Orca の誤りの説明として使う');
 });
+
+test('check は peek だけを通し、既読や待機の指定を CLI を呼ばずに拒む', async () => {
+  const seen: string[][] = [];
+  const cli = new ReadOnlyOrcaCli(new OrcaCli(runnerReturning({ stdout: '{"ok":true,"result":{}}' }, seen)));
+  for (const invoke of [cli.json.bind(cli), cli.document.bind(cli)]) {
+    await assert.rejects(invoke(['orchestration', 'check']), /not a read-only command|not allowed/);
+    for (const flag of ['--ack', '--all', '--unread', '--wait', '--retry-request']) {
+      for (const value of [flag, `${flag}=true`]) {
+        await assert.rejects(
+          invoke(['orchestration', 'check', '--peek', value]),
+          /not a read-only command|not allowed/,
+        );
+      }
+    }
+  }
+  assert.equal(seen.length, 0);
+  assert.ok((await cli.json(['orchestration', 'check', '--peek', '--terminal', 'run:r1', '--full'])).ok);
+  assert.ok((await cli.json(['orchestration', 'gate-list', '--run', 'r1', '--full'])).ok);
+});

@@ -211,3 +211,19 @@ test('タイマーの最初の読みの途中に来た snapshot は、その読�
   assert.equal(doc.connection.state, 'connected');
   assert.equal(doc.agents.length, expectedState.agents.length);
 });
+
+test('受け箱用の lastAssistantMessage と updatedAt は状態の文書に公開しない', async () => {
+  const reader = await staticReader();
+  const tabs = await reader.tabs();
+  assert.ok(tabs.ok);
+  const tab = tabs.data[0]?.tabs.find((t) => t.agentStatus);
+  assert.ok(tab?.agentStatus);
+  tab.agentStatus.lastAssistantMessage = '仮の受け箱専用の一言';
+  const runs = await reader.runs();
+  assert.ok(runs.ok && runs.data[0]);
+  runs.data[0].updatedAt = '2026-11-13T00:00:00Z';
+  const text = JSON.stringify(await poller(reader).snapshot());
+  assert.ok(!text.includes('lastAssistantMessage'));
+  assert.ok(!text.includes('仮の受け箱専用'));
+  assert.ok(!text.includes('updatedAt'));
+});

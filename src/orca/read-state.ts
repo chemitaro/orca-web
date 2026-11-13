@@ -109,6 +109,8 @@ export interface OrcaTabOrchestration {
 }
 
 export interface OrcaAgentStatus {
+  /** 受け箱だけで使い、状態の文書には出さない。 */
+  lastAssistantMessage: string | null;
   agentType: string | null;
   state: string | null;
   stateStartedAt: number | null;
@@ -143,6 +145,7 @@ export interface OrcaTabSnapshot {
 }
 
 export interface OrcaRun {
+  updatedAt: string | null;
   id: string;
   objective: string | null;
 }
@@ -311,6 +314,7 @@ function pickAgentStatus(v: unknown): OrcaAgentStatus | null {
   if (!a) return null;
   const o = rec(a.orchestration);
   return {
+    lastAssistantMessage: str(a.lastAssistantMessage)?.slice(0, 500) ?? null,
     agentType: str(a.agentType),
     state: str(a.state),
     stateStartedAt: num(a.stateStartedAt),
@@ -463,7 +467,7 @@ export function createStateReader(cli: ReadOnlyOrcaCli, rpc: RpcTransport): Stat
         'runs',
         (r) => {
           const id = str(r.id);
-          return id ? { id, objective: str(r.objective) } : null;
+          return id ? { id, objective: str(r.objective), updatedAt: str(r.updated_at) } : null;
         },
         (result) => str(result.nextCursor),
       ),
