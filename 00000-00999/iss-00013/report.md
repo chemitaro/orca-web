@@ -2,7 +2,7 @@
 種別: レポート（Issue）
 ID: "iss-00013"
 関連GitHub: ["#13"]
-最終更新: "2026-11-13"
+最終更新: "2026-11-14"
 依存: ["requirement.cue", "design.cue", "plan.cue"]
 ---
 
@@ -12,7 +12,10 @@ ID: "iss-00013"
 
 ## Outcome
 
-（実装の後に書く）
+orca-web から Orca のエージェントへ、確認つきで送れるようになった（意図→確認の画面→確定。確定のときに宛先を確かめ直す）。端末は耐久の agent prompt の経路（`terminal.send`、`agentPrompt`、`orchestrationRequestId`）、構造化 Chat は `agentSession.send` で、1回だけ送り、自分から送り直さない。送る前の記録（`orca-web.send-record/v1`、`sends.jsonl`）を耐久に書けなければ送らず、結果は5つ（refused・unknown・accepted・submitted・input_accepted）に分けて記録し、結果不明は `GET /api/send/{id}`（`?check=1` で読む RPC だけの照会）で確かめる。`sendEnabled`（settings.json、既定は偽、HTTP から変えられない）で止められる。画面は `/embed/agent` の送る欄と確認の画面。
+
+- 合格のコミット：`0c434cb1ad81d1f5c56b0f47a0017f7adacaef45`（記録のコミットなし）。
+- 実装のコミット：751646c・6221991・884554d（S-01〜S-03）、32df614・02f5554・2e916ef（S-04〜S-06）、4df75f0・a15b733（S-07・S-08）、5ee4be1（S-09）、c604956（S-10 の文書）、b4a9327（S-11）、0c434cb（最終品質ゲートの P1 の直し）。
 
 ### 逸脱と判断（タスク担当）
 
@@ -41,6 +44,17 @@ ID: "iss-00013"
 - 結果：`.workbench/spec-review/iss-00013/round-7.json`（Claude、P0〜P3 0）。round 6：Claude pass（P2 1、P3 1）、ChatGPT 新しい会話（verified=yes）fail（P1 2、P2 2、P3 1）。直した。round 7：Claude pass（0）、ChatGPT pass（P3 1、verified=no）
 - P2/P3 の残り：ChatGPT P3 1（decisions の 2026-11-14 の「残る隙は競合だけになった」が、risks の Orca の居る証の場合を含まない。risks と Epic D-03 が正。文書は合格の版のまま変えない）
 
+### コードのレビュー（区切り）：合格
+
+- CP-1（ce5d4e2..2e916ef）：合格（standards P3 1、spec 0）。`.workbench/code-review/iss-00013-cp1/`
+- CP-2（2e916ef..a15b733）：合格（P3 2）。`.workbench/code-review/iss-00013-cp2/`
+
+### 最終品質ゲート：合格（0c434cb）
+
+- campaign iss-00013（c604956）：主 pass、テスト pass、ChatGPT（verified=yes）P1 3（1 を採り、仕様の変更 round 6〜7 と S-11。2 は反証）。仕様の根拠が変わったので打ち切り。
+- campaign iss-00013-v2：attempt 01（b4a9327）主 pass（P3 2）、テスト pass（496）。ChatGPT は回答の取り込みに失敗（60分超）し、GPT-6 Astra / high が代わりの2人目：P1 1（送信の記録の末尾が途中で切れていると、次の送る前の記録が読めなくなる）を採り、0c434cb で直した。attempt 02（0c434cb）主 pass（P0/P1/P2 0、P3 2）、テスト pass（lint 0、498 件、build 0）、ChatGPT GPT-6 / Extra High（verified=yes）pass（P0/P1 0、P2 2）。
+- 記録：`.workbench/final-quality-gate/iss-00013-v2/closure.md`、`review-response.md`。
+
 ## Verification
 
 ### 実機の確かめ（2026-11-13、S-10、タスク担当）
@@ -62,11 +76,16 @@ ID: "iss-00013"
 - 権限の確認待ちの端末を拒むことは、検証用の宛先で安全に作れないので、録画と再生のテストだけで確かめた。
 - 構造化 Chat：検証用のセッションは届いていない（統括が本人に依頼中）。構造化 Chat の送信は録画と再生のテストだけで確かめた。
 - 画面：一時の port（8798）、一時の設定（`sendEnabled: true`）、一時の記録の置き場で起動し、headless の Chrome（CDP、`Browser.close` で閉じた）で、send-test の Claude の `/embed/agent` を開いた。幅 390px と 1024px のどちらも、書く欄と確認の画面のはみ出し 0、送る欄の中の `script`・`img` 0、「確かめる」で確認の画面が出て「やめる」で本文を残して戻る、確定は送っていない（送信の記録のファイルは作られなかった）。Orca で開くは 390px で出ず、1024px で出る。
-- 検証：`npm run lint` 0、`npm test` 472 件合格、`npm run build` 0（HEAD `5ee4be1`）。
+- 検証：`npm run lint` 0、`npm test` 472 件合格、`npm run build` 0（HEAD `5ee4be1`）。合格のコミット 0c434cb では 498 件合格（最終品質ゲートのテストのレーン）。
 
 ## Residual Risks / Follow-ups
 
-（実装の後に書く）
+- 受け入れた残る隙（requirement の risks、統括の了承）：最後の確かめ直しと Orca の書き込みの間の競合（Orca に書き込みの時点の守りを持つ耐久の経路がない）、Orca 自身の居る証の確かめが外れたときの枠のない書き込み、設定の読み直しと rename の間の隙。
+- 実機で確かめていないもの：構造化 Chat の送信（検証用のセッションが届いていない。録画と再生のテストだけ）、権限の確認待ちの端末を拒むこと（安全に作れない）。
+- 直していない P2/P3（最終品質ゲートの情報）：
+  - P3：送る欄に `foreground_mismatch` の言葉がない（識別子のまま出る）。README の前面の説明が「シェルでない」のまま。
+  - P2：同じ ID の照会が並ぶと、後着の unknown の check が先の確定の結果を隠す。照会の結果の追記の失敗を応答で示さない。sends の読みが ENOENT 以外で失敗するとメモリーの refused も照会できない。再起動の直後の照会で分かった method_not_found の経路を止めない。構造化 Chat でカードが消え handoff が rejected のとき、照会が accepted と示す（Orca は withdrawn）。
+- 次の提案：構造化 Chat の実機の確かめ（セッションが用意されたら）、上の P2/P3 をまとめて直す小さな Issue。
 
 ## 実装の記録（実装担当の記録を写す）
 
