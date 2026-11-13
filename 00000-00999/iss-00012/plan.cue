@@ -14,6 +14,7 @@ steps: {
 		title:    "会話の取得元のアダプター（D-01）を仕様と照らして直す"
 		text:     "対象：`src/orca/read-transcript.ts`、`src/orca/rpc.ts` の `READ_METHODS`。確かめ：T-01、T-03、T-04、T-07（読み手の誤りの code）。完了：`node --test test/orca/read-transcript.test.ts test/orca/rpc.test.ts` が通り、D-01 の各文（id の規則、セッションと記録のパスの取り方、誤りの code の写し方、reset の扱い、鍵の作り方、記録のパスを外に出さない）に対応するテストがある。区切りのレビュー：なし"
 		realizes: ["R-01", "F-01", "F-02"]
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -21,6 +22,7 @@ steps: {
 		text:     "対象：`src/transcript/normalize.ts`、`test/transcript/fixture.ts`（自分で作った仮の会話だけ）。確かめ：T-02、T-04。完了：`node --test test/transcript/normalize.test.ts` が通り、思考を印も付けずに落とす、決めた `what` の名前だけ、並べ替えない、切る長さ、`before` の不透明な位置、のそれぞれにテストがある。区切りのレビュー：なし"
 		realizes: ["R-01", "F-03"]
 		after:    ["S-01"]
+		status:   "done"
 		session:  "impl"
 	}
 	"S-03": {
@@ -28,6 +30,7 @@ steps: {
 		text:     "対象：`src/transcript/diff.ts`、`src/transcript/hub.ts`。確かめ：T-05、T-06。完了：`node --test test/transcript/diff.test.ts test/transcript/hub.test.ts` が通り、追記、同じ id の更新、窓の前進、書き換え、巻き戻し、セッションの切り替え、unavailable と回復、共有と停止、上限の busy にテストがある。区切りのレビュー：なし"
 		realizes: ["R-02", "F-01", "F-02"]
 		after:    ["S-02"]
+		status:   "done"
 		session:  "impl"
 	}
 	"S-04": {
@@ -35,6 +38,7 @@ steps: {
 		text:     "対象：`src/server/app.ts`、`src/server/main.ts`。確かめ：T-07、T-08、T-09、T-10。完了：`node --test test/server/*.test.ts` が通り、誤りの code と HTTP の状態の表、409、SSE の出来事の名前と形、別のオリジンの 403、CORS なし、GET 以外の 405、CSP にテストがある。ここで公開の契約（`orca-web.transcript/v1`、SSE の出来事、同じオリジンの境界）が決まるので、区切りのレビュー CP-1 の最後の手順にする。止まって HEAD を報告する"
 		realizes: ["R-01", "R-02", "R-05", "F-01", "F-02", "F-03"]
 		after:    ["S-03"]
+		status:   "done"
 		session:  "impl"
 	}
 	"S-05": {
@@ -42,6 +46,7 @@ steps: {
 		text:     "対象：`src/tools/live-transcript.ts`、`src/tools/transcript-live.ts`、`package.json` の `transcript:live`。確かめ：T-17。完了：`node --test test/tools/*.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、道具の出力に本文、題名、パス、セッションの識別子が出ないことをテストで確かめている。Codex の実装担当の最後の手順なので、止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）。2026-11-13 の本人の補足で、画面の手順を別のセッションに分けるため、もとの S-05（画面）と S-06（開き方と道具）の中身を入れ替えた"
 		realizes: ["R-06"]
 		after:    ["S-04"]
+		status:   "done"
 		session:  "impl"
 	}
 	"S-06": {
@@ -49,6 +54,7 @@ steps: {
 		text:     "対象：`web/embed/agent.*`、`web/view.js`、`web/main.js`。確かめ：T-11、T-12、T-13、T-14、T-15。完了：`node --test test/web/*.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、textContent だけで描く、https だけをリンクにする、置き換えで前のページを捨てる、鍵の違う古いページを足さない、送信の欄がない、エージェントの行のリンク、にテストがある。画面の実装担当（Claude Opus 5.5）の手順。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-03", "R-04", "F-01", "F-02", "F-03"]
 		after:    ["S-05"]
+		status:   "done"
 		session:  "ui"
 	}
 	"S-07": {
@@ -56,6 +62,7 @@ steps: {
 		text:     "タスク担当が行う（文書の手順。方針の「文書を書くステップはタスク担当が書く」）。`npm run transcript:live` を実行し、件数と結論だけを report.md に書く。Orca の版（`orca --version`）と、購読の口が Unix ソケットで使えないことをソースで確かめた結論も書く。`npm start` を一時の port で起動し、このリポジトリの worktree のエージェントの `/embed/agent` を幅 390px と広い幅で見る（Orca で開くは押さない）。会話の中身は記録に写さない。README.md と AGENTS.md の説明が、出来上がったものと食い違えば直す。確かめ：T-16。完了：report.md の Verification に実機の表と結論がある"
 		realizes: ["R-06", "R-03"]
 		after:    ["S-06"]
+		status:   "done"
 		session:  "doc"
 	}
 }
