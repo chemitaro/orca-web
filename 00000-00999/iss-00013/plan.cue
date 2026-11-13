@@ -20,7 +20,7 @@ steps: {
 	}
 	"S-02": {
 		title:    "送る門と RPC の封筒、機能の確かめ（D-01、D-08）"
-		text:     "対象：`src/orca/rpc.ts`、`src/orca/runtime.ts`、`src/orca/send-gates.ts`（新規）、`src/orca/capabilities.ts`、`src/orca/wiring.ts`（SendRpc を作るだけ）。確かめ：T-02、T-03、T-14。完了：`node --test test/orca/*.test.ts` が通り、封筒の位置と authToken を伏せること、門が決めた形だけを通して各種の違う形と一覧にない RPC を送らずに拒むこと、READ_METHODS が変わらないこと、sendTerminal と sendChat の確かめの満たし方と欠け方のテストがある。区切りのレビュー：なし"
+		text:     "対象：`src/orca/rpc.ts`、`src/orca/runtime.ts`、`src/orca/send-gates.ts`（新規）、`src/orca/capabilities.ts`、`src/orca/wiring.ts`（SendRpc を作るだけ）、`sendGuarded` を持つテストのヘルパー（`test/state/helpers.ts`、`test/transcript/fixture.ts` など、`rg sendGuarded src test` で見つかるもの）。確かめ：T-02、T-03、T-14。完了：`node --test test/orca/*.test.ts` と `npm run lint` が通り、封筒の位置と authToken を伏せること、門が決めた形だけを通して各種の違う形と一覧にない RPC を送らずに拒むこと、READ_METHODS が変わらないこと、sendTerminal と sendChat の確かめの満たし方と欠け方のテストがある。区切りのレビュー：なし"
 		realizes: ["R-03", "F-04"]
 		after:    ["S-01"]
 		status:   "todo"
@@ -28,7 +28,7 @@ steps: {
 	}
 	"S-03": {
 		title:    "宛先と票と本文の確かめ（D-02、D-03）"
-		text:     "対象：`src/send/model.ts`（型）、`src/send/target.ts`、`src/send/ticket.ts`（新規、純な関数と票の倉庫）、`test/send/fixture.ts`（自分で作った仮のタブの集合）。確かめ：T-04、T-05、T-06。完了：`node --test test/send/target.test.ts test/send/ticket.test.ts` が通り、resolve の各 reason、compareTargets の各種類、本文の各拒み方、票の期限・1回だけ・上限・同期の消費のテストがある。Codex の実装担当 impl の最後の手順なので、止まって HEAD を報告する。区切りのレビュー：なし"
+		text:     "対象：`src/send/model.ts`（型）、`src/send/target.ts`、`src/send/ticket.ts`（新規、純な関数と票の倉庫）、`test/send/fixture.ts`（自分で作った仮のタブの集合）。確かめ：T-04、T-05、T-06。完了：`node --test test/send/target.test.ts test/send/ticket.test.ts` が通り、resolve の各 reason、compareTargets の各種類（worktree_changed を含む）、buildPreview が宛先と違う worktree の状態で null を返すこと、本文の各拒み方、操作の ID の形、票の期限・1回だけ・上限・同期の消費・操作の ID の保持のテストがある。Codex の実装担当 impl の最後の手順なので、止まって HEAD を報告する。区切りのレビュー：なし"
 		realizes: ["R-01", "R-02", "F-01", "F-04", "F-05"]
 		after:    ["S-02"]
 		status:   "todo"
@@ -36,7 +36,7 @@ steps: {
 	}
 	"S-04": {
 		title:    "送る経路のアダプターと結果の分け方と指紋（D-04）"
-		text:     "対象：`src/orca/send.ts`（新規）。確かめ：T-07、T-08、T-09。完了：`node --test test/orca/send.test.ts` が通り、D-04 の表の各行、指紋の固定の値（Orca v1.4.258 の canonicalize を写した手計算の値）、送る関数が再試行しないこと（時間切れでも1回）、照会が送る RPC を呼ばないことのテストがある。区切りのレビュー：なし"
+		text:     "対象：`src/orca/send.ts`（新規）。確かめ：T-07、T-08、T-09。完了：`node --test test/orca/send.test.ts` が通り、D-04 の表の各行、readForeground のシェルの判定（Orca の isShellProcess と同じ例）、checkChat の sendRecorded の真から history を探す分け方、指紋の固定の値（Orca v1.4.258 の canonicalize を写した手計算の値）、送る関数が再試行しないこと（時間切れでも1回）、照会が送る RPC を呼ばないことのテストがある。区切りのレビュー：なし"
 		realizes: ["R-02", "R-03", "R-05", "F-02", "F-03", "F-04"]
 		after:    ["S-03"]
 		status:   "todo"
@@ -52,7 +52,7 @@ steps: {
 	}
 	"S-06": {
 		title:    "送信の処理（D-06）"
-		text:     "対象：`src/send/service.ts`（新規）。確かめ：T-12、T-13。完了：`node --test test/send/service.test.ts` が通り、intent と confirm の各手順の止まり方（送る RPC が0回）、成功で送る RPC がちょうど1回、同時の2つの確定で1回、同じ票の2回目、本文の違い、宛先の各変化、sendEnabled の偽、before の書き込みの失敗、after の書き込みの失敗、check が unknown のときだけ照会して送る RPC を呼ばないこと、のテストがある。ここで二重送信を防ぐ契約が決まるので、区切りのレビュー CP-1 の最後の手順にする。止まって HEAD を報告する"
+		text:     "対象：`src/send/service.ts`（新規）。確かめ：T-12、T-13、T-23、T-24。完了：`node --test test/send/service.test.ts` が通り、intent と confirm の各手順の止まり方（送る RPC が0回。シェルが前面、前面が読めない、state_out_of_date を含む）、意図の応答に操作の ID があり確定がその ID で記録すること、確定の届かなかった ID の照会が not_found、method_not_found の後に同じ runtime の間その経路が unsupported になり runtime が変わると戻ること、成功で送る RPC がちょうど1回、同時の2つの確定で1回、同じ票の2回目、本文の違い、宛先の各変化、sendEnabled の偽、before の書き込みの失敗、after の書き込みの失敗、check が unknown のときだけ照会して送る RPC を呼ばないこと、のテストがある。ここで二重送信を防ぐ契約が決まるので、区切りのレビュー CP-1 の最後の手順にする。止まって HEAD を報告する"
 		realizes: ["R-01", "R-02", "R-04", "R-05", "R-06", "F-01", "F-02", "F-03", "F-05", "F-06"]
 		after:    ["S-05"]
 		status:   "todo"
@@ -68,7 +68,7 @@ steps: {
 	}
 	"S-08": {
 		title:    "実機の確かめの道具（D-12）"
-		text:     "対象：`src/tools/send-live.ts`（新規）、`package.json` の `send:live`。確かめ：T-17。完了：`node --test test/tools/*.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、worktree の守り（違う worktree、main の worktree の拒み）、場面の数え方、出力に本文・題名・パス・handle・セッションの識別子が出ないことのテストがある（偽の SendService と偽の口で。実物の Orca に送らない）。Codex の実装担当 api の最後の手順で、区切りのレビュー CP-2 の最後の手順。止まって HEAD を報告する"
+		text:     "対象：`src/tools/send-live.ts`（新規）、`package.json` の `send:live`。確かめ：T-17。完了：`node --test test/tools/*.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、handle と worktree の守り（見つからない handle、2つに当たる handle、違う worktree、main の worktree、3つ以上の handle の拒み）、場面 (1)〜(5) の数え方（応答を捨てる包みで送る RPC が1回だけ届き照会が requestShow を呼ぶこと、票を書き換えた確定と送らない場合で送る RPC が0回）、出力に本文・題名・パス・handle・セッションの識別子が出ないことのテストがある（偽の SendService と偽の口で。実物の Orca に送らない）。Codex の実装担当 api の最後の手順で、区切りのレビュー CP-2 の最後の手順。止まって HEAD を報告する"
 		realizes: ["R-09"]
 		after:    ["S-07"]
 		status:   "todo"
@@ -76,7 +76,7 @@ steps: {
 	}
 	"S-09": {
 		title:    "送る欄と確認の画面（D-10）"
-		text:     "対象：`web/embed/agent.html`、`web/embed/agent-frame.js`、`web/embed/send-view.js`、`web/embed/send-dom.js`（新規）、`web/embed/agent.css`、`src/server/app.ts` の STATIC_FILES（2つの js を足すだけ）。確かめ：T-18、T-19、T-20。完了：`node --test test/web/*.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、reduceSend の各出来事、5つの outcome と warning の言葉、409 と期限の経過で本文を残して戻ること、sending の間の2回目の押しを捨てること、unknown の照会、disabled の理由、textContent だけで描くことのテストがある。画面の実装担当（Claude Opus 5.5）の手順。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
+		text:     "対象：`web/embed/agent.html`、`web/embed/agent-frame.js`、`web/embed/send-view.js`、`web/embed/send-dom.js`（新規）、`web/embed/agent.css`、`src/server/app.ts` の STATIC_FILES（2つの js を足すだけ）。確かめ：T-18、T-19、T-20、T-24（画面の側）。完了：`node --test test/web/*.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、reduceSend の各出来事、5つの outcome と warning の言葉、409 と期限の経過で本文を残して戻ること、sending の間の2回目の押しを捨てること、unknown の照会、disabled の理由、textContent だけで描くことのテストがある。画面の実装担当（Claude Opus 5.5）の手順。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-07", "F-01", "F-03"]
 		after:    ["S-08"]
 		status:   "todo"
@@ -84,7 +84,7 @@ steps: {
 	}
 	"S-10": {
 		title:    "実機の確かめと 390px の表示を確かめ、report.md、README.md、AGENTS.md を書く"
-		text:     "タスク担当が行う（文書と、送る RPC を実物の Orca に送る手順）。`npm run send:live -- --worktree <send-test のパス> --agent <Claude の id> --agent <Codex の id>` を、統括が許した2つの宛先だけで実行し、件数と結論だけを report.md に書く。構造化 Chat の検証用のセッションが届いていれば同じく確かめ、なければ録画と再生だけと書く。`npm start` を一時の port と一時の settings（sendEnabled: true）と一時の記録の置き場で起動し、send-test のエージェントの `/embed/agent` を幅 390px と広い幅で見て、確認の画面まで進めて「やめる」で戻る（送らない）。README.md と AGENTS.md に送信の口、記録、sendEnabled、send:live を書く。確かめ：T-21、T-22。完了：report.md の Verification に実機の表と結論がある"
+		text:     "タスク担当が行う（文書と、送る RPC を実物の Orca に送る手順）。`npm run send:live -- --worktree <send-test のパス> --handle <Claude の handle> --handle <Codex の handle>` を、統括が許した2つの宛先だけで実行し、件数と結論だけを report.md に書く。構造化 Chat の検証用のセッションが届いていれば同じく確かめ、なければ録画と再生だけと書く。`npm start` を一時の port と一時の settings（sendEnabled: true）と一時の記録の置き場で起動し、send-test のエージェントの `/embed/agent` を幅 390px と広い幅で見て、確認の画面まで進めて「やめる」で戻る（送らない）。README.md と AGENTS.md に送信の口、記録、sendEnabled、send:live を書く。確かめ：T-21、T-22。完了：report.md の Verification に実機の表と結論がある"
 		realizes: ["R-09", "R-07"]
 		after:    ["S-09"]
 		status:   "todo"
@@ -95,13 +95,13 @@ steps: {
 tests: {
 	"T-01": {title: "会話の読み手が、別の sessionId のページと、続きがあるのに位置が欠けるページを、nativeChat と agentSession の両方で unknown_shape にする", verifies: ["R-08"]}
 	"T-02": {title: "要求の行の最上位に orchestrationRequestId が置かれ、envelope がなければ今と同じ行になり、authToken は inspect と JSON に出ない", verifies: ["R-03"]}
-	"T-03": {title: "送る門が、決めた形の terminal.send と agentSession.send と読む RPC だけを通し、interrupt・requireAgentStatus・操作の ID なし・delivery・画像の block・一覧にない RPC を送らずに拒み、READ_METHODS は変わらない", verifies: ["R-03", "F-02"]}
-	"T-04": {title: "resolveTarget が、端末と構造化 Chat の宛先を解き、asleep、no_session、identity_unavailable、untabbed、agent_not_found、unknown_shape を返す", verifies: ["R-01", "F-04"]}
-	"T-05": {title: "compareTargets が、runtime、タブ、handle、ptyId、incarnation、種類、セッションのそれぞれの変化を種類つきで返し、同じなら変化なし", verifies: ["R-02", "F-01"]}
+	"T-03": {title: "送る門が、決めた形の terminal.send と agentSession.send と読む RPC（terminal.inspectProcess を含む）だけを通し、interrupt・requireAgentStatus・操作の ID なし・delivery・画像の block・一覧にない RPC を送らずに拒み、READ_METHODS は変わらない", verifies: ["R-03", "F-02"]}
+	"T-04": {title: "resolveTarget が、端末と構造化 Chat の宛先を解き、asleep、no_session、identity_unavailable、untabbed、agent_not_found、unknown_shape を返し、buildPreview が宛先と違う worktree の状態では確認の項目を作らない", verifies: ["R-01", "F-01", "F-04"]}
+	"T-05": {title: "compareTargets が、runtime、worktree、タブ、handle、ptyId、incarnation、種類、セッションのそれぞれの変化を種類つきで返し、同じなら変化なし", verifies: ["R-02", "F-01"]}
 	"T-06": {title: "本文の確かめ（空、空白だけ、16 KiB 超、CR と制御文字）と、票の期限・1回だけ・上限・同期の消費", verifies: ["R-01", "R-02", "F-05"]}
-	"T-07": {title: "結果の分け方が、D-04 の表の各行の outcome と detail を返し、Orca の誤りの文を入れない", verifies: ["R-02", "R-04", "F-02", "F-03"]}
+	"T-07": {title: "結果の分け方が、D-04 の表の各行の outcome と detail を返し（まだ送られうる Chat のカードを refused にせず、端末で送った後の Orca の誤りを unknown にする）、Orca の誤りの文を入れない。readForeground がシェルと非シェルと読めない前面を分ける", verifies: ["R-02", "R-04", "F-02", "F-03"]}
 	"T-08": {title: "構造化 Chat の指紋が、Orca v1.4.258 の算法の固定の値と一致する", verifies: ["R-03"]}
-	"T-09": {title: "送る関数が時間切れでも1回だけ送り、照会（requestShow、sendRecorded）が送る RPC を呼ばない", verifies: ["R-05", "F-03"]}
+	"T-09": {title: "送る関数が時間切れでも1回だけ送り、照会（requestShow、sendRecorded と history）が送る RPC を呼ばず、sendRecorded の真だけでは届いたことにしない", verifies: ["R-05", "F-03"]}
 	"T-10": {title: "送信の記録の権限、before の datasync の後に送れること、書けないときに投げること、after・check のメモリー、after のない before の unknown、壊れた行の扱い、authToken を持たないこと", verifies: ["R-04", "R-05", "F-06"]}
 	"T-11": {title: "sendEnabled の読みが、真のときだけ真で、ほかの各場合に偽、保存で消えない", verifies: ["R-06"]}
 	"T-12": {title: "SendService の intent と confirm が、止まるべき各場合に送る RPC を0回、成功で1回だけ送り、同時の2つの確定でも1回", verifies: ["R-01", "R-02", "F-01", "F-02", "F-05"]}
@@ -111,10 +111,12 @@ tests: {
 	"T-16": {title: "sendEnabled を偽にすると、再起動なしで意図と確定が 403 になり、照会の口は使える。守りで拒んだ確定が記録に残る", verifies: ["R-06", "F-05"]}
 	"T-17": {title: "実機の確かめの道具の守りと集計と、出力に本文・題名・パス・handle・セッションの識別子が出ないこと", verifies: ["R-09"]}
 	"T-18": {title: "送る欄の状態の純粋な関数が、確認の項目、5つの outcome と warning の言葉、unknown の照会、disabled の理由を作る", verifies: ["R-07"]}
-	"T-19": {title: "409 と期限の経過で本文を残して書く欄に戻り、sending の間の2回目の押しを捨て、時間切れで送り直さない", verifies: ["R-07", "F-01", "F-03"]}
+	"T-19": {title: "409 と期限の経過で本文を残して書く欄に戻り、sending の間の2回目の押しを捨て、時間切れで送り直さず意図の操作の ID で結果不明を示す", verifies: ["R-07", "F-01", "F-03"]}
 	"T-20": {title: "`<script>` を含む本文と題名が、確認の画面に文字のまま描かれ、要素にならない", verifies: ["R-07"]}
 	"T-21": {title: "実機の確かめ（検証用の端末のエージェントへの送信、結果の区別、照会、送らない場合）", verifies: ["R-09", "R-02", "R-04", "R-05"]}
 	"T-22": {title: "実機の画面で、幅 390px で送る欄と確認の画面が横にはみ出さない（送らずに戻る）", verifies: ["R-07"]}
+	"T-23": {title: "method_not_found の後、同じ runtime の ID の間、その経路の status が送れないと示し、意図と確定が unsupported になり、runtime の ID が変わると戻る", verifies: ["F-04"]}
+	"T-24": {title: "意図の応答に操作の ID があり、確定の応答を失ったときに画面がその ID で照会でき、確定が届かなかった ID の照会が not_found（送っていない）になる", verifies: ["R-01", "R-05", "R-07", "F-03"]}
 }
 
 verification: """
@@ -141,7 +143,8 @@ execution: {
 	}
 	reviews: {
 		spec: {role: "仕様のレビュー（spec-reviewer。strict なので ChatGPT GPT-6 / Extra High の2人目を並べる）", model: "opus", effort: "high"}
-		code: {role: "区切りのレビュー CP-1（code-reviewer ×2）と CP-2（code-reviewer ×1）", after: "S-06", model: "opus", effort: "medium"}
+		cp1: {role: "区切りのレビュー CP-1（code-reviewer ×2：standards と spec）", after: "S-06", model: "opus", effort: "medium"}
+		cp2: {role: "区切りのレビュー CP-2（code-reviewer ×1）", after: "S-08", model: "opus", effort: "medium"}
 		gate: {role: "最終品質ゲート（quality-gate-reviewer。2人目は ChatGPT GPT-6 / Extra High、取れなければ GPT-6 Astra / high）", after: "S-10", model: "opus", effort: "high"}
 	}
 }
