@@ -6,13 +6,13 @@ package spec
 goal: "会話のログの API と、詳細とチャットの画面（読むだけ）を出し、実機で Claude Code と Codex の会話を読めることを確かめる。"
 
 steps: {
-	"S-01": {title: "会話の取得元のアダプターを作り、READ_METHODS に agentSession.history を足す", realizes: ["R-01", "F-01", "F-02"], status: "todo", session: "impl"}
-	"S-02": {title: "会話の正規化と、まとめた録画の fixture（仮の会話）を作る", realizes: ["R-01", "F-03"], status: "todo", after: ["S-01"], session: "impl"}
-	"S-03": {title: "窓の差分と共有の見張りを作る", realizes: ["R-02", "F-01", "F-02"], status: "todo", after: ["S-02"], session: "impl"}
-	"S-04": {title: "会話の HTTP の道、/embed/agent の配り方、起動の組み立てを足す", realizes: ["R-01", "R-02", "R-05", "F-01", "F-02", "F-03"], status: "todo", after: ["S-03"], session: "impl"}
-	"S-05": {title: "詳細とチャットの画面（純粋な組み立てと DOM）を作る", realizes: ["R-03", "F-01", "F-02", "F-03"], status: "todo", after: ["S-04"], session: "impl"}
-	"S-06": {title: "状態の画面のエージェントの表から開けるようにする", realizes: ["R-04"], status: "todo", after: ["S-05"], session: "impl"}
-	"S-07": {title: "実機の確かめの道具を作って実行し、390px の表示を確かめ、report.md、README.md、AGENTS.md を書く", realizes: ["R-06", "R-03"], status: "todo", after: ["S-06"], session: "impl"}
+	"S-01": {title: "会話の取得元のアダプターを作り、READ_METHODS に agentSession.history を足す", realizes: ["R-01", "F-01", "F-02"], status: "done", session: "impl"}
+	"S-02": {title: "会話の正規化と、まとめた録画の fixture（仮の会話）を作る", realizes: ["R-01", "F-03"], status: "done", after: ["S-01"], session: "impl"}
+	"S-03": {title: "窓の差分と共有の見張りを作る", realizes: ["R-02", "F-01", "F-02"], status: "done", after: ["S-02"], session: "impl"}
+	"S-04": {title: "会話の HTTP の道、/embed/agent の配り方、起動の組み立てを足す", realizes: ["R-01", "R-02", "R-05", "F-01", "F-02", "F-03"], status: "done", after: ["S-03"], session: "impl"}
+	"S-05": {title: "詳細とチャットの画面（純粋な組み立てと DOM）を作る", realizes: ["R-03", "F-01", "F-02", "F-03"], status: "done", after: ["S-04"], session: "impl"}
+	"S-06": {title: "状態の画面のエージェントの表から開けるようにする", realizes: ["R-04"], status: "done", after: ["S-05"], session: "impl"}
+	"S-07": {title: "実機の確かめの道具を作って実行し、390px の表示を確かめ、report.md、README.md、AGENTS.md を書く", realizes: ["R-06", "R-03"], status: "done", after: ["S-06"], session: "impl"}
 }
 
 tests: {
