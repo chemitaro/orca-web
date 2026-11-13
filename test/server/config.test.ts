@@ -45,3 +45,9 @@ test('停滞の閾値は既定30分、1〜1440の整数だけを受ける', () =
     assert.throws(() => loadConfig({ ORCA_WEB_STALL_MINUTES: value }), ConfigError, value);
   }
 });
+
+test('送信の記録の場所は空なら既定、ORCA_WEB_SENDS_DIR があればそれを使う', () => {
+  assert.match(loadConfig({}).sendsDir, /\/Library\/Application Support\/orca-web\/sends$/);
+  assert.equal(loadConfig({ ORCA_WEB_SENDS_DIR: '' }).sendsDir, loadConfig({}).sendsDir);
+  assert.equal(loadConfig({ ORCA_WEB_SENDS_DIR: '/tmp/orca-web-test-sends' }).sendsDir, '/tmp/orca-web-test-sends');
+});

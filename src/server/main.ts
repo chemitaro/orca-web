@@ -4,7 +4,10 @@
 import { createMailReader } from '../orca/read-mail.ts';
 import { createStateReader } from '../orca/read-state.ts';
 import { createTranscriptReader } from '../orca/read-transcript.ts';
+import { createSendAdapter } from '../orca/send.ts';
 import { wireOrca } from '../orca/wiring.ts';
+import { SendJournal } from '../send/journal.ts';
+import { SendService } from '../send/service.ts';
 import { StatePoller } from '../state/poller.ts';
 import { SettingsStore } from '../state/settings.ts';
 import { TranscriptHub } from '../transcript/hub.ts';
@@ -39,10 +42,20 @@ const transcriptHub = new TranscriptHub({ reader: transcriptReader });
 const settings = new SettingsStore(config.settingsFile);
 await settings.load();
 
+const send = new SendService({
+  snapshotSync: () => poller.snapshotSync(),
+  capabilities: () => orca.capabilities.get(),
+  rpc: orca.sendRpc,
+  adapter: createSendAdapter({ rpc: orca.sendRpc }),
+  journal: new SendJournal(config.sendsDir),
+  readSendEnabled: () => settings.readSendEnabled(),
+});
+
 let listeners: ListenerSet | null = null;
 // 待ち受けのアドレスごとのサーバーが、1つの処理（とトークン）を共有する。
 const handler = createAppHandler({
   poller,
+  send,
   runs: poller,
   inbox: { snapshot: () => poller.inboxSnapshot(), noteViewer: () => poller.noteInboxViewer() },
   stallMinutes: config.stallMinutes,
