@@ -124,6 +124,113 @@ test('構造化 Chat：journal の位置の順に並べ、思考と turn と age
   ]);
 });
 
+test('構造化 Chat の plan は本文を出さず、決めた名前 plan の印にする', () => {
+  assert.deepEqual(
+    normalizeJournalItems([{ itemId: 'plan-1', sequence: 1, body: { kind: 'plan', text: '仮の計画' } }]),
+    [{ id: 'plan-1', role: 'assistant', at: null, parts: [{ type: 'unsupported', what: 'plan' }] }],
+  );
+});
+
+test('未対応の種類は許した名前だけになり、元の文字や payload を返さない', () => {
+  const blocks = ['image-ref', 'subagent-group', 'subagent', 'background-task', '<private-kind>'].map((type) => ({
+    type,
+    text: '仮の非表示 payload',
+  }));
+  assert.deepEqual(normalizeNativeMessages([{ id: 'n', role: 'user', blocks }])?.[0]?.parts, [
+    { type: 'unsupported', what: 'image' },
+    { type: 'unsupported', what: 'subagent' },
+    { type: 'unsupported', what: 'subagent' },
+    { type: 'unsupported', what: 'background-task' },
+    { type: 'unsupported', what: 'unknown' },
+  ]);
+  const kinds = ['diff', 'approval', 'question', 'status', 'plan', '<private-kind>'];
+  assert.deepEqual(
+    normalizeJournalItems(
+      kinds.map((kind, sequence) => ({
+        itemId: `j${sequence}`,
+        sequence,
+        body: { kind, text: '仮の非表示 payload' },
+      })),
+    )?.map((m) => m.parts[0]),
+    [
+      { type: 'unsupported', what: 'diff' },
+      { type: 'unsupported', what: 'approval' },
+      { type: 'unsupported', what: 'question' },
+      { type: 'unsupported', what: 'status' },
+      { type: 'unsupported', what: 'plan' },
+      { type: 'unsupported', what: 'unknown' },
+    ],
+  );
+});
+
+test('構造化 Chat は sequenceIndex も使い、空の部品と制御の件を落とす', () => {
+  const item = (id: string, sequenceIndex: number, text: string) => ({
+    itemId: id,
+    sequence: 2,
+    sequenceIndex,
+    body: { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text }] },
+  });
+  assert.deepEqual(
+    normalizeJournalItems([
+      item('b', 1, '後'),
+      item('a', 0, '先'),
+      { itemId: 'empty', sequence: 3, body: { kind: 'message', role: 'user', blocks: [] } },
+      { itemId: 'handoff', sequence: 4, body: { kind: 'agent-handoff' } },
+    ])?.map((m) => m.id),
+    ['a', 'b'],
+  );
+  assert.deepEqual(normalizeNativeMessages([{ id: 'empty', role: 'user', blocks: [] }]), []);
+});
+
+test('構造化 Chat の本文と入出力も長さを制限し、bounded output の truncated と失敗を引き継ぐ', () => {
+  const messages = normalizeJournalItems([
+    {
+      itemId: 'm',
+      sequence: 1,
+      body: {
+        kind: 'message',
+        role: 'assistant',
+        blocks: [{ type: 'text', text: 'x'.repeat(100_001) }],
+      },
+    },
+    {
+      itemId: 't',
+      sequence: 2,
+      body: {
+        kind: 'tool-call',
+        name: 'Read',
+        input: 'y'.repeat(4_001),
+        callId: 'call',
+        state: 'failed',
+        output: { head: 'z'.repeat(8_001), truncated: false },
+      },
+    },
+    {
+      itemId: 'short',
+      sequence: 3,
+      body: {
+        kind: 'tool-call',
+        name: 'Read',
+        input: {},
+        callId: 'short',
+        output: { head: 'ok', truncated: true },
+      },
+    },
+  ]);
+  assert.deepEqual(messages?.[0]?.parts, [{ type: 'text', text: 'x'.repeat(100_000), truncated: true }]);
+  assert.deepEqual(messages?.[1]?.parts, [
+    { type: 'tool-call', name: 'Read', input: 'y'.repeat(4_000), callId: 'call', truncated: true },
+    { type: 'tool-result', output: 'z'.repeat(8_000), isError: true, callId: 'call', truncated: true },
+  ]);
+  assert.deepEqual(messages?.[2]?.parts[1], {
+    type: 'tool-result',
+    output: 'ok',
+    isError: false,
+    callId: 'short',
+    truncated: true,
+  });
+});
+
 const target: TranscriptTarget = {
   agentId: 'tab-1:leaf-1',
   source: 'nativeChat',

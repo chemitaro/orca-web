@@ -27,9 +27,10 @@ export type UnsupportedWhat =
   | 'approval'
   | 'question'
   | 'status'
+  | 'plan'
   | 'unknown';
 
-const JOURNAL_UNSUPPORTED: ReadonlySet<string> = new Set(['diff', 'approval', 'question', 'status']);
+const JOURNAL_UNSUPPORTED: ReadonlySet<string> = new Set(['diff', 'approval', 'question', 'status', 'plan']);
 
 export interface TranscriptMessage {
   id: string;
