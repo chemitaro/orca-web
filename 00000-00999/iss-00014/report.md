@@ -13,6 +13,9 @@ ID: "iss-00014"
 - 仕様レビュー：合格（round-2、2026-11-14）。レビュアー spec-reviewer（Opus 5.5 / high）。P0/P1/P2 0、P3 1（R-05 の受入の後半、確かめの後に欄が書かれることを追う手順が計画にない。欄は統括かタスク担当が本人の答えを受けて書き、Issue を閉じる条件にする。直さずに記録）。round-1 は P0/P1 0 で合格だったが、P2 3・P3 2 を直して再レビュー。
   - 合格した文書の sha256：requirement.cue `82afac4d6a8f8974ced3587af00c291802f0b023978cf6fefdd18838567c5fdb`、design.cue `bd6c7e3d29a0369a69bcfed9850ca584457b1ca1718a1cac12f21b31bc74f369`、plan.cue `d7a19d1c1eef63ce831b1d99b362d7dcbe7079b9dd153deaca14fab1849c4574`
   - 結果：`.workbench/spec-review/iss-00014/round-2.json`（対応の記録は `review-response.md`）。照合のコミット `899491691d883d410dd42dee811b1bf86c0503ee`
+- 最終品質ゲート：合格（fqg-iss-00014-1、attempt 1、2026-11-14）。合格のコミット `baf8ea36663af5343a5977a31cd1ad0d342e540c`、範囲 `8994916..baf8ea3`。quality-gate-reviewer（Opus 5.5 / medium）は P0〜P2 0、P3 2、coverage 完全。テスト `npm run lint`・`npm test`（534 pass）・`npm run build` すべて exit 0。closure：`.workbench/final-quality-gate/fqg-iss-00014-1/closure.md`。記録だけのコミットはなし。
+  - P3（直さずに記録）：(1) 試しの画面の横の欄（`#panel`）の `hidden` が CSS の `display:flex` に上書きされ、閉じても狭い幅でも空の欄が出る（`web/trial/trial.css:265`）。(2) 異常終了で残った `trial.pid` があると、次の `npm run trial` が EEXIST で終了コード 1 になる（`src/tools/trial.ts:172`）。
+- PR：https://github.com/chemitaro/orca-web/pull/26（head `baf8ea3`）。CI：observable_ci PASS、merge_readiness READY（2026-11-14）。
 
 詳細: [Report Guide](../../../docs/authoring/report.md)
 
@@ -83,3 +86,4 @@ kill -TERM $(cat <orca-web の worktree iss-00014>/.workbench/trial/trial.pid)
 - 詳細とチャットの iframe は、自分の幅が 390px 以下なら「Orca で開く」を出さない。SpecDock が Mac で狭い欄（390px 以下）に置くと、Mac でも出ない。欄の幅は epic-00526 で決める（試しの画面の Mac の欄は 521px）。
 - 実物の iPhone の Safari での見え方は、本人の確かめで見る（この Issue の確かめは Mac の上の 390px の枠）。
 - 仕様レビューの P3：R-05 の欄を埋める手順は計画の外（統括かタスク担当が本人の答えを受けて書く）。
+- 最終品質ゲートの P3 の2つ（空の横の欄、残った pid のファイル）。(1) は本人の確かめの見た目に出うる（狭い幅で空の「詳細とチャット」の欄）。本人の確かめの直すことと一緒に、次の小さな直しで扱うことを提案する。(2) は `.workbench/trial/trial.pid` を消してから起動し直せば回避できる。
