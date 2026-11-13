@@ -83,7 +83,9 @@ export interface SendRecord extends SendResult {
 export interface JournalIo {
   open: (
     ...args: Parameters<typeof open>
-  ) => Promise<Pick<import('node:fs/promises').FileHandle, 'chmod' | 'writeFile' | 'datasync' | 'close'>>;
+  ) => Promise<
+    Pick<import('node:fs/promises').FileHandle, 'chmod' | 'stat' | 'read' | 'writeFile' | 'datasync' | 'close'>
+  >;
 }
 export class SendJournal {
   readonly #dir: string;
@@ -135,10 +137,18 @@ export class SendJournal {
   async #append(row: JournalRow, durable: boolean): Promise<void> {
     await mkdir(this.#dir, { recursive: true, mode: 0o700 });
     await chmod(this.#dir, 0o700);
-    const file = await this.#io.open(path.join(this.#dir, 'sends.jsonl'), 'a', 0o600);
+    const file = await this.#io.open(path.join(this.#dir, 'sends.jsonl'), 'a+', 0o600);
     try {
       await file.chmod(0o600);
-      await file.writeFile(`${JSON.stringify(row)}\n`);
+      const { size } = await file.stat();
+      let separator = '';
+      if (size > 0) {
+        const tail = Buffer.alloc(1);
+        const { bytesRead } = await file.read(tail, 0, 1, size - 1);
+        if (bytesRead !== 1 || tail[0] !== 0x0a) separator = '\n';
+      }
+      // 切れた行と今回の記録を分け、before では区切りも一緒に耐久化する。
+      await file.writeFile(`${separator}${JSON.stringify(row)}\n`);
       if (durable) await file.datasync();
     } finally {
       await file.close();

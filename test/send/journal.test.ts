@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -39,8 +39,44 @@ test('before は専用権限で永続化し after がなければ結果不明に
   assert.equal(await journal.read('absent'), null);
 });
 
+test('切れた末尾の後の各記録は再起動後も読めて before だけなら結果不明になる', async (t) => {
+  const dir = await directory(t);
+  await mkdir(dir);
+  const file = path.join(dir, 'sends.jsonl');
+  const fragment = '{"schema":"orca-web.send-record/v1","operationId":"broken","kind":';
+  await appendFile(file, fragment);
+  const journal = new SendJournal(dir);
+  await journal.appendBefore(before());
+  let record = await new SendJournal(dir).read('op');
+  assert.ok(record?.before);
+  assert.equal(record.before.text, 'hello');
+  assert.equal(record.outcome, 'unknown');
+  assert.deepEqual(record.detail, { code: 'no_after_record' });
+
+  await appendFile(file, fragment);
+  assert.equal(await journal.appendAfter({ operationId: 'op', outcome: 'unknown', detail: { code: 'timeout' } }), true);
+  record = await new SendJournal(dir).read('op');
+  assert.ok(record?.after);
+  assert.equal(record.after.detail.code, 'timeout');
+
+  await appendFile(file, fragment);
+  assert.equal(await journal.appendCheck({ operationId: 'op', outcome: 'submitted', detail: {} }), true);
+  record = await new SendJournal(dir).read('op');
+  assert.equal(record?.outcome, 'submitted');
+  assert.equal(record?.checks.length, 1);
+
+  await appendFile(file, fragment);
+  assert.equal(await journal.appendRefused({ operationId: 'refused-op', reason: 'busy' }), true);
+  const refused = await new SendJournal(dir).read('refused-op');
+  assert.equal(refused?.outcome, 'refused');
+  assert.equal(refused?.refused?.reason, 'busy');
+  assert.equal(await new SendJournal(dir).read('broken'), null);
+});
+
 test('before は datasync の完了まで戻らず失敗したら投げる', async (t) => {
   const dir = await directory(t);
+  await mkdir(dir);
+  await appendFile(path.join(dir, 'sends.jsonl'), '{"kind":');
   const { open } = await import('node:fs/promises');
   const { promise, resolve } = Promise.withResolvers<void>();
   const started = Promise.withResolvers<void>();
@@ -50,6 +86,8 @@ test('before は datasync の完了まで戻らず失敗したら投げる', asy
       const file = await open(...args);
       return {
         chmod: file.chmod.bind(file),
+        stat: file.stat.bind(file),
+        read: file.read.bind(file),
         writeFile: file.writeFile.bind(file),
         close: file.close.bind(file),
         datasync: async () => {
@@ -67,11 +105,14 @@ test('before は datasync の完了まで戻らず失敗したら投げる', asy
   resolve();
   await pending;
   assert.equal(done, true);
+  assert.ok((await new SendJournal(dir).read('op'))?.before);
   const broken = new SendJournal(dir, {
     open: async (...args: Parameters<typeof open>) => {
       const file = await open(...args);
       return {
         chmod: file.chmod.bind(file),
+        stat: file.stat.bind(file),
+        read: file.read.bind(file),
         writeFile: file.writeFile.bind(file),
         close: file.close.bind(file),
         datasync: async () => {
@@ -81,6 +122,32 @@ test('before は datasync の完了まで戻らず失敗したら投げる', asy
     },
   });
   await assert.rejects(broken.appendBefore(before()), /sync failed/);
+});
+
+test('末尾を読めなければ before の追記を成功とせず失敗を返す', async (t) => {
+  const dir = await directory(t);
+  await mkdir(dir);
+  const filePath = path.join(dir, 'sends.jsonl');
+  await appendFile(filePath, '{"kind":');
+  const { open } = await import('node:fs/promises');
+  const journal = new SendJournal(dir, {
+    open: async (...args) => {
+      const file = await open(...args);
+      return {
+        chmod: file.chmod.bind(file),
+        stat: file.stat.bind(file),
+        read: async () => {
+          throw new Error('tail read failed');
+        },
+        writeFile: file.writeFile.bind(file),
+        datasync: file.datasync.bind(file),
+        close: file.close.bind(file),
+      };
+    },
+  });
+  await assert.rejects(journal.appendBefore(before()), /tail read failed/);
+  assert.equal(await readFile(filePath, 'utf8'), '{"kind":');
+  assert.equal(await new SendJournal(dir).read('op'), null);
 });
 
 test('after と check を保持し再読込でも最新の確定結果と照会の順が残る', async (t) => {
