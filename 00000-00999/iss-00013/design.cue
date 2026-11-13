@@ -57,7 +57,7 @@ design: {
 
 			**送る前の読み**
 			- `readTerminalStatus(handle)`：`terminal.agentStatus { terminal: handle }`。`{ ok, isRunningAgent, status }` か、誤り（`unreachable`、`unsupported`（method_not_found）、`terminal_gone`（`terminal_handle_stale`、`terminal_not_found`、`terminal_gone`、`terminal_exited`）、`unknown_shape`）。
-			- `readForeground(handle, incarnationId)`：`terminal.inspectProcess { terminal: handle, expectedIncarnationId: incarnationId }`。`process.foregroundProcess` が空でない文字なら `{ ok, isShell }`（`isShell` は Orca v1.4.258 の `shell-process-detection.ts` の `isShellProcess` と同じ規則：前後の引用符を除き小文字にし、パスの最後の部分と、`.exe`・`.cmd`・`.bat`・`.ps1` を除いた名前のどれかが、bash、zsh、sh、fish、cmd、powershell、pwsh、nu、ksh、mksh、dash、ash、tcsh、csh、elvish、xonsh（と `.exe` つき）に当たる）。null や形の違いは `foreground_unknown`、誤りは `readTerminalStatus` と同じ分け方。
+			- `readForeground(handle, incarnationId, agentType)`：`terminal.inspectProcess { terminal: handle, expectedIncarnationId: incarnationId }`。`process.foregroundProcess` が空でない文字なら `{ ok, isShell, matchesAgent }`。`isShell` は Orca v1.4.258 の `shell-process-detection.ts` の `isShellProcess` と同じ規則（前後の引用符を除き小文字にし、パスの最後の部分と、`.exe`・`.cmd`・`.bat`・`.ps1` を除いた名前のどれかが、bash、zsh、sh、fish、cmd、powershell、pwsh、nu、ksh、mksh、dash、ash、tcsh、csh、elvish、xonsh（と `.exe` つき）に当たる）。`matchesAgent` は Orca v1.4.258 の `agent-process-recognition.ts` の `normalizeProcessName` と `isExpectedAgentProcess` と同じ規則で、正規化した名前（前後の引用符を除き、パスの最後の部分を小文字にし、`.exe`・`.cmd`・`.bat`・`.ps1` を除く）が、agentType が `claude` なら `claude` か `claude.` で始まる、`codex` なら `codex` か `codex.` か `codex-` で始まるとき真。ほかの agentType は常に偽。null や形の違いは `foreground_unknown`、誤りは `readTerminalStatus` と同じ分け方。
 			- `readChatFence(sessionId)`：`agentSession.history { sessionId, direction: "tail", limit: 1 }`。`ok: true`、`page.sessionId` が頼んだものと同じ、`page.fence` が正の整数のときだけ `{ ok, fence }`。違えば `unknown_shape`。
 
 			**送る**
@@ -128,7 +128,7 @@ design: {
 			1. 機能の確かめ（D-08）。つながらなければ `unreachable`。
 			2. タブの集合を読み、`resolveTarget`。runtime の ID は、タブの集合の応答の `runtimeId` が null でなく、機能の確かめの値と同じときだけ使い、null なら `unreachable`、違えば `unreachable`（理由 `runtime_changed`）。
 			3. 経路の機能が使えないか、止めた経路なら `unsupported`（`missing` を付ける）。
-			4. 端末なら `readTerminalStatus`：`isRunningAgent` が真でなければ `not_sendable`（`no_agent`）、`status` が `permission` なら `not_sendable`（`permission`）。続けて `readForeground`：`isShell` なら `not_sendable`（`shell_foreground`）、読めなければ `not_sendable`（`foreground_unknown`）。構造化 Chat なら `readChatFence`。
+			4. 端末なら `readTerminalStatus`：`isRunningAgent` が真でなければ `not_sendable`（`no_agent`）、`status` が `permission` なら `not_sendable`（`permission`）。続けて `readForeground`：`isShell` なら `not_sendable`（`shell_foreground`）、`matchesAgent` が偽なら `not_sendable`（`foreground_mismatch`）、読めなければ `not_sendable`（`foreground_unknown`）。構造化 Chat なら `readChatFence`。
 			5. `buildPreview` が null なら `not_sendable`（`state_out_of_date`）。
 
 			**`status(agentId)`**：`{ enabled, available, route, reason }`。enabled は `sendEnabled`。route と available と reason は `preflight` の結果。送る RPC は送らない。
@@ -140,7 +140,7 @@ design: {
 			2. `sendEnabled` が真でなければ `send_disabled`（票は消費しない）。
 			3. `TicketStore.take` と、取り出せたときの処理中の印（`inFlight` の集合に操作の ID を足す）を、同じ同期の処理の中で行う（間に await を入れない）。なければ・期限切れなら `ticket_invalid`（reason `unknown` か `expired`）。ここから先、票は使い済みで、記録は票の操作の ID で書く。処理中の印は、手順 8 の後か、送る前に止めて `appendRefused` を書いた後に（成功・失敗によらず `finally` で）外す。
 			4. `checkText(text)` と `digestText(text) === 票の digest`。違えば `target_changed`（種類 `text_changed`）。
-			5. `preflight` をやり直し、その宛先と票の宛先を `compareTargets`。違えば `target_changed`（種類つき）。preflight の誤りのうち、宛先が消えたか変わったことを示すもの（`agent_not_found` は種類 `tab_gone`、`unreachable` の理由 `runtime_changed` は種類 `runtime_changed`、`not_sendable` の reason `asleep`・`untabbed`・`no_session`・`identity_unavailable`・`state_out_of_date` は同じ名前の種類）は `target_changed` にする。`not_sendable` の `no_agent`・`permission`・`shell_foreground`・`foreground_unknown` はそのまま `not_sendable`（409）。つながらない `unreachable` は 503 のまま。どれも送らない。
+			5. `preflight` をやり直し、その宛先と票の宛先を `compareTargets`。違えば `target_changed`（種類つき）。preflight の誤りのうち、宛先が消えたか変わったことを示すもの（`agent_not_found` は種類 `tab_gone`、`unreachable` の理由 `runtime_changed` は種類 `runtime_changed`、`not_sendable` の reason `asleep`・`untabbed`・`no_session`・`identity_unavailable`・`state_out_of_date` は同じ名前の種類）は `target_changed` にする。`not_sendable` の `no_agent`・`permission`・`shell_foreground`・`foreground_mismatch`・`foreground_unknown` はそのまま `not_sendable`（409）。つながらない `unreachable` は 503 のまま。どれも送らない。
 			6. `appendBefore`（票の操作の ID）。失敗したら `record_failed`（送らない）。
 			7. 経路の送る関数を1回だけ呼び（構造化 Chat は手順 5 で読んだ fence を使う）、`classifyTerminal`／`classifyChat` で分ける。
 			8. `appendAfter`。失敗したら応答に `recordWarning: "after_record_failed"` を付ける。`{ operationId, outcome, detail }` を返す。

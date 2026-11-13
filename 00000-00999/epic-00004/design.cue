@@ -26,14 +26,14 @@ design: {
 		text: """
 			構造化 Chat は agentSession.send（clientOperationId、expectedRuntimeFence、payloadFingerprint）。
 			端末のエージェントは、耐久の agent prompt の経路（terminal.send の agentPrompt と、要求の封筒の orchestrationRequestId。Orca CLI の terminal send --text --enter と同じ）を使う。
-			orca-web は送る直前に terminal.agentStatus（エージェントがいる、権限の確認待ちでない）と、terminal.inspectProcess（前面のプロセスがシェルでない）と、タブの ptyId・incarnation・provider のセッションが確かめのときと同じかを確かめ、1つでも違えば送らない。
+			orca-web は送る直前に terminal.agentStatus（エージェントがいる、権限の確認待ちでない）と、terminal.inspectProcess（前面のプロセスが宛先のエージェントそのもの）と、タブの ptyId・incarnation・provider のセッションが確かめのときと同じかを確かめ、1つでも違えば送らない。
 			送った後の receipt でエージェントの経路で書いたかを確かめ、確かめられなければ要確認として示す。権限の確認待ちは拒む。
 			どの組み合わせが保護つきで送れるかを機能の確かめで決め、確かめられない組み合わせは送信を止める。シェルへの代わりの送信はしない。
 			2026-11-13 の書き換え（統括の許し、iss-00013）。Orca 1.4.258 のソースで確かめた3点による：
 			(1) 守りの経路（terminal-agent-send-guard、requireAgentStatus: sendable）は本文と Enter を同時に送れず2段になる。
 			(2) 守りの経路は本文を貼り付けの枠なしの生のキー入力で書く（改行で途中で確定しうる）。
 			(3) 守りの経路には要求の ID も receipt もなく、結果不明を後から照会できない。耐久の経路は、貼り付けの前と Enter の前に権限の確認待ちを確かめ、同じ ID の再送で2回目を書かず、orchestration.requestShow で照会できる。
-			残る隙：Orca がその時に前面のプロセスをエージェントと認めないと、守りなしで書く（この判定は RPC で外に出ていない）。前面がシェルの場合は orca-web が止めるので、残るのは確かめと書き込みの間の競合と、シェルでないが Orca が認めないプロセスへの書き込み。iss-00013 の requirement の risks に書いた。
+			残る隙：Orca がその時に前面のプロセスをエージェントと認めないと、守りなしで書く（この判定は RPC で外に出ていない）。前面が宛先のエージェントそのものでなければ orca-web が止めるので、残るのは確かめと書き込みの間の競合だけ。iss-00013 の requirement の risks に書いた。
 			"""
 		satisfies: ["R-02", "F-02", "F-04"]
 	}

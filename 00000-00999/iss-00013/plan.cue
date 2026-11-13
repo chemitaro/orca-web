@@ -116,6 +116,7 @@ tests: {
 	"T-21": {title: "実機の確かめ（検証用の端末のエージェントへの送信、結果の区別、照会、送らない場合）", verifies: ["R-09", "R-02", "R-04", "R-05"]}
 	"T-22": {title: "実機の画面で、幅 390px で送る欄と確認の画面が横にはみ出さない（送らずに戻る）", verifies: ["R-07"]}
 	"T-23": {title: "method_not_found の後、同じ runtime の ID の間、その経路の status が送れないと示し、意図と確定が unsupported になり、runtime の ID が変わると戻る", verifies: ["F-04"]}
+	"T-25": {title: "readForeground と preflight が、前面のプロセスが宛先の種類そのもの（claude、codex、codex-…、パスや .exe つき）のときだけ通し、シェルを shell_foreground、ほかのプログラム（python3、node、版の番号の名前、種類の違うエージェント）を foreground_mismatch で、送る RPC を送らずに拒む", verifies: ["F-02", "R-02"]}
 	"T-24": {title: "意図の応答に操作の ID があり、確定の応答を失ったときに画面がその ID で照会でき、確定が届かなかった ID の照会が not_sent になりその後の確定は送らず、処理の途中の ID の照会は in_progress になる", verifies: ["R-01", "R-05", "R-07", "F-03"]}
 }
 
@@ -140,6 +141,7 @@ execution: {
 		api: {task: "実装（S-07〜S-08。HTTP の口と、実機の確かめの道具。Codex の実装担当、Orca の worker）", model: "gpt-6.1-sol", effort: "medium", rationale: "本人の指示（2026-11-13）：API・サーバー側は Codex GPT-6.1 Sol / medium。provider: codex"}
 		ui: {task: "画面の実装（S-09。Claude の実装担当、Orca の worker）", model: "claude-opus-5-5", effort: "high", rationale: "本人の指示（2026-11-13、統括の依頼書）：画面と一体の部分は Claude Opus 5.5、strict なので方針の「実装担当（フロントエンド）× strict」の high。provider: claude"}
 		doc: {task: "実機の確かめと文書（S-10。タスク担当が自分で行う）", model: "opus", effort: "high", rationale: "方針の §2 注記：文書を書く手順はタスク担当が書く。実物の Orca に送る確かめは、統括が許した宛先だけを、タスク担当が自分で行う"}
+		fix1: {task: "最終品質ゲート attempt 01 の直し（D-04 の readForeground の matchesAgent と D-06 の foreground_mismatch。S-04・S-06 のコード）。Codex の実装担当、Orca の worker", model: "gpt-6-astra", effort: "high", rationale: "直す対象が logic のセッションの手順（S-04、S-06）なので同じ値。provider: codex"}
 	}
 	reviews: {
 		spec: {role: "仕様のレビュー（spec-reviewer。strict なので ChatGPT GPT-6 / Extra High の2人目を並べる）", model: "opus", effort: "high"}

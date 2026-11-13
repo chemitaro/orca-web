@@ -50,7 +50,7 @@ requirements: {
 		text: """
 			`POST /api/send/intent`（物は `{ agent, text }`。agent は状態の API のエージェントの id）が、Orca の最新の読みで宛先を解いて固定し、確認に要る項目と、使い捨ての確認の票を返す。
 			確認の項目：リポジトリの名前、worktree のパスとブランチ、エージェントの種類、題名、状態、送る経路（端末か構造化 Chat か）、セッションの短い識別子（先頭の8文字）、本文。確認の項目の worktree は、解いた宛先の worktree と同じでなければならない（違えば票を出さない）。
-			票は、宛先と本文の sha256 と操作の ID に結び付き、期限は 60 秒で、1回だけ使える。操作の ID は意図の応答で画面に渡し、確定の応答を失っても、画面はその ID で照会できる。送れない宛先（タブがない、スリープ中の端末、セッションが結ばれていない、権限の確認待ちの端末、エージェントが動いていない端末、前面のプロセスがシェルか読めない端末、必須の識別子が取れない）には票を出さず、理由を返す。
+			票は、宛先と本文の sha256 と操作の ID に結び付き、期限は 60 秒で、1回だけ使える。操作の ID は意図の応答で画面に渡し、確定の応答を失っても、画面はその ID で照会できる。送れない宛先（タブがない、スリープ中の端末、セッションが結ばれていない、権限の確認待ちの端末、エージェントが動いていない端末、前面のプロセスが宛先のエージェントそのものでないか読めない端末、必須の識別子が取れない）には票を出さず、理由を返す。
 			本文は、空や空白だけでない、UTF-8 で 16 KiB までの文字。タブと改行のほかの制御文字（C0、DEL、C1）を含めない。
 			"""
 		acceptance: [
@@ -62,7 +62,7 @@ requirements: {
 	"R-02": {
 		title: "利用者が確定すると、確かめ直したうえで、その宛先にだけ1回だけ届く（確定）"
 		text: """
-			`POST /api/send/confirm`（物は `{ ticket, text }`）が、票を使い済みにしてから、Orca の最新の読みで次を確かめ直す：Orca の runtime の ID、宛先の同一性（端末はタブ、leaf、端末の handle、ptyId、incarnation、エージェントの種類、provider のセッションの識別子。構造化 Chat はタブ、セッションの識別子、エージェントの種類）、本文の sha256、送れる状態（端末は `terminal.agentStatus` でエージェントがいて権限の確認待ちでなく、`terminal.inspectProcess` で前面のプロセスがシェルでない）。
+			`POST /api/send/confirm`（物は `{ ticket, text }`）が、票を使い済みにしてから、Orca の最新の読みで次を確かめ直す：Orca の runtime の ID、宛先の同一性（端末はタブ、leaf、端末の handle、ptyId、incarnation、エージェントの種類、provider のセッションの識別子。構造化 Chat はタブ、セッションの識別子、エージェントの種類）、本文の sha256、送れる状態（端末は `terminal.agentStatus` でエージェントがいて権限の確認待ちでなく、`terminal.inspectProcess` で前面のプロセスが宛先のエージェントそのもの）。
 			1つでも違えば、送らずに 409 で確かめに戻す。同じでなければ送る経路で1回だけ送り、結果を返す。同時に送るのは1つだけで、送っている間の確定は断る。
 			"""
 		acceptance: [
@@ -168,7 +168,7 @@ failures: {
 	"F-02": {
 		title: "権限の確認待ちや、エージェントが動いていない端末には送らない。シェルへの代わりの送信もしない"
 		text: """
-			意図と確定の両方で `terminal.agentStatus` を読み、`isRunningAgent` が真でないか `status` が `permission` なら 409 `not_sendable` で送らない。さらに `terminal.inspectProcess`（`expectedIncarnationId` つき）で前面のプロセスを読み、シェル（Orca の `isShellProcess` と同じ規則）か、読めなければ送らない（`terminal.agentStatus` は題名の状態だけでエージェントありと返すことがあり、Orca が保護つきで書くかの判定とは別物のため）。
+			意図と確定の両方で `terminal.agentStatus` を読み、`isRunningAgent` が真でないか `status` が `permission` なら 409 `not_sendable` で送らない。さらに `terminal.inspectProcess`（`expectedIncarnationId` つき）で前面のプロセスを読み、宛先のエージェントの種類そのもの（Orca の `isExpectedAgentProcess` と同じ名前の規則。claude は `claude`、codex は `codex`・`codex-…`）でなければ送らない。シェル、ほかのプログラム（例：`python3`）、読めない前面は、どれも送らない（`terminal.agentStatus` は題名の状態だけでエージェントありと返すことがあり、Orca が保護つきで書くかの判定とは別物のため）。
 			Orca が `refusedReason`（`no-agent`、`permission`）で拒んだら refused として記録する。送った後の Orca の誤り（`agent_prompt_blocked`、`terminal_handle_stale` など。本文を書いた後にも起きうる）は unknown として記録する。どちらも送り直さない。
 			送った後の receipt に、エージェントの経路で書いた証（`send.prompt` の provider が claude、codex、antigravity）がなければ、unknown（要確認）として記録し、画面にその旨を示す。
 			"""
@@ -213,7 +213,7 @@ constraints: [
 ]
 
 risks: [
-	"端末の経路の残る隙：Orca は、その時に前面のプロセスをエージェントと認めないと（v1.4.258 の `isTerminalRunningSettledPromptAgent` が偽、`useSettledAgentPrompt` が偽の枝）、守りなしで本文と Enter を生のまま端末に書く。この判定は RPC で外に出ていない。orca-web は前面のプロセスがシェルでないことまでは確かめる（F-02）ので、残るのは (1) 確かめ直しと Orca の書き込みの間（ミリ秒）の競合と、(2) 前面がシェルでないが Orca がエージェントと認めないプロセス（例：名前が版の番号に見える Claude を Orca が確かめ損ねた）への生の書き込み。どちらも送った後の receipt で検出して unknown（要確認）と示すが、書いたことは取り消せない",
+	"端末の経路の残る隙：Orca は、その時に前面のプロセスをエージェントと認めないと（v1.4.258 の `isTerminalRunningSettledPromptAgent` が偽、`useSettledAgentPrompt` が偽の枝）、守りなしで本文と Enter を生のまま端末に書く。この判定は RPC で外に出ていない。orca-web は前面のプロセスが宛先のエージェントそのものであることを確かめる（F-02）ので、残るのは確かめ直しと Orca の書き込みの間（ミリ秒。送る前の記録の書き込みを含む）の競合だけ。その間にエージェントが終わると、終わった後の前面（シェルなど）に生のまま書かれうる。送った後の receipt で検出して unknown（要確認）と示すが、書いたことは取り消せない。Orca 1.4.258 には、書き込みの時点で守りつきかつ耐久の経路がない（守りの経路は2段で receipt がない）",
 	"構造化 Chat の宛先の同一性は sessionId だけで確かめる（Orca 1.4.258 は送信で `expectedRuntimeFence` を見ない）",
 	"`agentSession.sendRecorded` の偽と、`orchestration.requestShow` の absent は、届いていない証拠ではない。`agentSession.sendRecorded` の真は、受けた記録があることだけを示し、届いたかは示さない",
 	"`terminal.send`、`agentSession.send`、`orchestration.requestShow`、`agentSession.sendRecorded` は Orca の非公開の口。版が変わったら、録画を取り直し、実機の確かめをやり直す",
@@ -232,6 +232,7 @@ decisions: [
 	"2026-11-13 タスク担当：操作の ID は意図のときに作って票に結び付け、意図の応答で返す（仕様のレビュー round 1 の P1。確定の応答を失っても照会できるように）。形は `<13桁のミリ秒>-<32桁の16進>`（構造化 Chat の clientOperationId の形。端末の orchestrationRequestId は任意の文字列を受けるので同じ形を使う。Orca は 24 時間より古い clientOperationId を拒むが、票の期限は 60 秒）",
 	"2026-11-13 タスク担当：送る前の確かめに `terminal.inspectProcess` の前面のプロセスがシェルでないことを足す（仕様のレビュー round 1 の P1。`terminal.agentStatus` は題名だけでエージェントありと返す枝がある）。残る隙を risks に書き直した。統括が了承した（2026-11-13、msg_0d4cef153a1c）",
 	"2026-11-13 タスク担当（仕様のレビュー round 3 の P1）：照会は、await の前に処理中の判定と票の取り消しを済ませてから記録を読む。確定のときの宛先の消失（タブがない、runtime の変化、スリープ）は 409 `target_changed` にする。端末の receipt の provider が確かめたエージェントの種類と違えば unknown（`agent_mismatch`）にする。項目の保存は設定のファイルを比べてから入れ替える",
+	"2026-11-14 タスク担当（最終品質ゲート attempt 01 の ChatGPT の P1）：前面のプロセスの確かめを「シェルでない」から「宛先のエージェントそのもの」に強める。実機の検証用の端末の前面は `claude` と `codex` だった。名前が版の番号に見える Claude などは送れない（Orca の画面から送る）側に倒す。残る隙は競合だけになった（risks）",
 	"2026-11-13 タスク担当：構造化 Chat のスリープは送る前に拒まない。Orca v1.4.258 で、スリープの印 `sleptAt` は購読の口（`agentSession.subscribeStatus`）の要約だけにあり、Unix ソケットで使える読む口（`session.tabs.listAll` の `chatStatus`、`agentSession.history`）にはない。送ると、Orca の画面の入力欄から送るのと同じく Orca が扱う（受けない場合は Orca が拒み、refused になる）。端末のスリープは PTY がなく送れないので拒む",
 	"2026-11-13 タスク担当：記録のない ID の照会は、処理の途中なら in_progress、そうでなければその ID の票を取り消してから not_sent と答える（仕様のレビュー round 2 の P1。照会の後に届いた確定が送ると、「送っていない」を信じた利用者の再送と二重になる）",
 	"2026-11-13 タスク担当：送った後の結果は、記録がある限り HTTP 200 で返し、5つの区別を `outcome` で示す（refused と unknown も 200）。送る前に止めたものだけを 4xx・5xx にする",
