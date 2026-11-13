@@ -3,6 +3,7 @@
 // 「Orca で開く」は write.js の短期のトークンで /api/open を呼ぶ。幅 390px 以下では出さない。
 import { renderFreshness, renderStage } from './inbox-dom.js';
 import { buildInboxView, inboxApiPath, projectFromSearch, searchForProject } from './inbox-view.js';
+import { inboxLinks } from './runs-view.js';
 import { createWriter } from './write.js';
 
 const POLL_MS = 10_000;
@@ -13,6 +14,7 @@ const els = {
   project: /** @type {HTMLSelectElement} */ (document.querySelector('#project')),
   freshness: /** @type {HTMLElement} */ (document.querySelector('#freshness')),
   stages: /** @type {HTMLElement} */ (document.querySelector('#stages')),
+  projectLink: /** @type {HTMLAnchorElement} */ (document.querySelector('#project-link')),
 };
 
 const OPEN_MESSAGES = {
@@ -52,7 +54,15 @@ async function openInOrca(target, status, button) {
   button.disabled = false;
 }
 
+/** 見出しのプロジェクトの画面へのリンクを、選んだプロジェクトに合わせる（選んでいなければ隠す）。 */
+function renderLinks() {
+  const link = inboxLinks(project).find((l) => l.href.startsWith('/projects/'));
+  els.projectLink.hidden = !link;
+  if (link) els.projectLink.href = link.href;
+}
+
 function render() {
+  renderLinks();
   if (!lastDoc) {
     const text = lastError ? `orca-web に接続できない（${lastError}）` : '読み込み中…';
     els.freshness.replaceChildren(renderFreshness(document, [{ text, kind: lastError ? 'bad' : 'info' }]));

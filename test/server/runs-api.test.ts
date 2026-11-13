@@ -217,3 +217,27 @@ test('Run 一覧・木・プロジェクトの画面を index と同じ CSP で�
     }
   });
 });
+
+test('木・一覧・プロジェクトの画面は絶対パスのスクリプトと CSS を読み、その JavaScript を配り、受け箱は /runs にリンクする', async () => {
+  await withApp({}, async (send) => {
+    for (const [path, script] of [
+      ['/runs', '/runs.js'],
+      ['/runs/run-a', '/run.js'],
+      ['/projects/repo-a', '/project.js'],
+    ]) {
+      const page = await send(path);
+      assert.ok(page.text.includes(`<script type="module" src="${script}"></script>`), path);
+      assert.ok(page.text.includes('<link rel="stylesheet" href="/style.css" />'), path);
+      assert.ok(!/<script>[^<]/.test(page.text), 'no inline script');
+      assert.ok(!/\sstyle=/.test(page.text), 'no inline style');
+    }
+    for (const path of ['/runs.js', '/run.js', '/project.js', '/runs-view.js', '/runs-dom.js']) {
+      const reply = await send(path);
+      assert.equal(reply.status, 200, path);
+      assert.equal(reply.headers['content-type'], 'text/javascript; charset=utf-8');
+    }
+    const inbox = await send('/');
+    assert.match(inbox.text, /href="\/runs"/);
+    assert.match(inbox.text, /id="project-link"/);
+  });
+});

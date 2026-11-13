@@ -15,7 +15,11 @@
           <span>プロジェクト</span>
           <select id="project"></select>
         </label>
-        <a class="settings" href="/settings">一覧と設定</a>
+        <nav class="links">
+          <a href="/runs">Run の一覧</a>
+          <a id="project-link" href="/runs" hidden>プロジェクトの画面</a>
+          <a href="/settings">一覧と設定</a>
+        </nav>
       </div>
       <div id="freshness" role="status" aria-live="polite"><p>読み込み中…</p></div>
     </header>

@@ -40,7 +40,7 @@ const ANSWER_IN_ORCA = new Set(['blocked', 'waiting', 'question', 'decision_gate
 
 const DETAIL_PREFIX = '/embed/agent?id=';
 
-const defaultTime = (iso) => {
+export const defaultTime = (iso) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString('ja-JP', { hour12: false });
 };
@@ -99,7 +99,7 @@ function itemRow(item, now) {
 }
 
 /** 文字列の時刻のうち、いちばん新しいもの。 */
-function latest(times) {
+export function latest(times) {
   let best = null;
   for (const t of times) {
     if (typeof t !== 'string' || Number.isNaN(Date.parse(t))) continue;
@@ -145,7 +145,7 @@ function freshnessLines(doc, formatTime, error) {
   return lines;
 }
 
-function projectOptions(doc, project) {
+export function projectOptions(doc, project) {
   const options = [{ value: '', label: 'すべてのプロジェクト', selected: !project }];
   let found = false;
   for (const p of doc.projects ?? []) {
