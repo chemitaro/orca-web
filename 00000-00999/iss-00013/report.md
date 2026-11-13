@@ -34,6 +34,13 @@ ID: "iss-00013"
   - round 5：Claude pass（0）。ChatGPT には送っていない（round 4 の後の変更は P2 の直しだけ）
 - P2/P3 の残り：0（Claude）。ChatGPT の P2 で採らなかったもの：実機の確かめの道具の宛先を、統括が許した2つの handle の値に製品のコードで限ること（宛先は実行のたびに渡す。実行の記録で確かめる）
 
+### 仕様の変更の再レビュー（round 6〜7、2026-11-14）：合格
+
+- 変更の理由：最終品質ゲート attempt 01 の2人目（ChatGPT、verified=yes）の P1（宛先と無関係の非シェルの前面にも送れる）。前面のプロセスが宛先のエージェントそのもの（Orca の `recognizeAgentProcess` と同じ規則）であることを要する形に変え、直しの手順 S-11（session fix1、Codex GPT-6 Astra / high）を足した。
+- 合格の固定（sha256）：requirement.cue `c6519f006337a30631107f9235d5e808367cd63c9106d7b65d53f0db6183471f`、design.cue `01210f095b741f3a45edc9eca88de3d4af3b5042d508118200035c8fa87fb808`、plan.cue `e0a2e374daab2684035d0c091cf4599a1c9c38d73f302c16c216b29cc31340a9`、epic-00004/design.cue `96907b22b5e819ff4b8f84545f39a09350fab2320a763f6fe7a7fefd5f12cab6`（canonical `54ce31434c6f448ea9a0d9c4595ca01ef30ba821`）
+- 結果：`.workbench/spec-review/iss-00013/round-7.json`（Claude、P0〜P3 0）。round 6：Claude pass（P2 1、P3 1）、ChatGPT 新しい会話（verified=yes）fail（P1 2、P2 2、P3 1）。直した。round 7：Claude pass（0）、ChatGPT pass（P3 1、verified=no）
+- P2/P3 の残り：ChatGPT P3 1（decisions の 2026-11-14 の「残る隙は競合だけになった」が、risks の Orca の居る証の場合を含まない。risks と Epic D-03 が正。文書は合格の版のまま変えない）
+
 ## Verification
 
 ### 実機の確かめ（2026-11-13、S-10、タスク担当）
