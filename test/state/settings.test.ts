@@ -80,3 +80,84 @@ test('checkSelection は配列でない値、知らない識別子、重複、�
   assert.equal(checkSelection(['agent.model', 'agent.model']).ok, false);
   assert.equal(checkSelection([1]).ok, false);
 });
+
+test('sendEnabled は毎回読み直し version 1 の真だけを認める', async () => {
+  await withDir(async (dir) => {
+    const file = path.join(dir, 'settings.json');
+    const store = new SettingsStore(file);
+    assert.equal(await store.readSendEnabled(), false);
+    for (const raw of [
+      '{}',
+      '{',
+      'null',
+      '{"version":2,"sendEnabled":true}',
+      '{"version":1,"sendEnabled":"true"}',
+      '{"version":1,"sendEnabled":false}',
+    ]) {
+      await writeFile(file, raw);
+      assert.equal(await store.readSendEnabled(), false);
+    }
+    await writeFile(file, '{"version":1,"sendEnabled":true}');
+    assert.equal(await store.readSendEnabled(), true);
+    await writeFile(file, '{"version":1,"sendEnabled":false}');
+    assert.equal(await store.readSendEnabled(), false);
+    assert.equal(await new SettingsStore(dir).readSendEnabled(), false);
+  });
+});
+
+test('項目の保存は正しい版の sendEnabled だけを残す', async () => {
+  await withDir(async (dir) => {
+    const file = path.join(dir, 'settings.json');
+    const store = new SettingsStore(file);
+    for (const sendEnabled of [true, false]) {
+      await writeFile(file, JSON.stringify({ version: 1, fields: [], sendEnabled }));
+      await store.saveSelected(['agent.model']);
+      assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { version: 1, fields: ['agent.model'], sendEnabled });
+    }
+    for (const raw of ['{', '{"version":2,"sendEnabled":true}', '{"version":1,"sendEnabled":"true"}']) {
+      await writeFile(file, raw);
+      await store.saveSelected([]);
+      assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { version: 1, fields: [] });
+    }
+  });
+});
+
+test('項目の保存中に送信を停止されたら読み直して停止を残す', async () => {
+  await withDir(async (dir) => {
+    const file = path.join(dir, 'settings.json');
+    let reads = 0;
+    await writeFile(file, '{"version":1,"sendEnabled":true}');
+    const store = new SettingsStore(file, {
+      read: async (file) => {
+        reads++;
+        if (reads === 2) await writeFile(file, '{"version":1,"sendEnabled":false}');
+        return readFile(file);
+      },
+    });
+    await store.saveSelected(['agent.model']);
+    assert.equal(JSON.parse(await readFile(file, 'utf8')).sendEnabled, false);
+    assert.equal(reads, 4);
+    const { readdir } = await import('node:fs/promises');
+    assert.deepEqual(await readdir(dir), ['settings.json']);
+  });
+});
+
+test('3回とも保存中に変われば保存せず一時ファイルを残さない', async () => {
+  await withDir(async (dir) => {
+    const file = path.join(dir, 'settings.json');
+    let reads = 0;
+    const store = new SettingsStore(file, {
+      read: async (file) => {
+        reads++;
+        await writeFile(file, JSON.stringify({ version: 1, sendEnabled: false, revision: reads }));
+        return readFile(file);
+      },
+    });
+    await assert.rejects(store.saveSelected([]), /file changed/);
+    assert.equal(reads, 6);
+    assert.deepEqual(store.selected, DEFAULT_SELECTED);
+    const { readdir } = await import('node:fs/promises');
+    assert.deepEqual(await readdir(dir), ['settings.json']);
+    assert.equal(JSON.parse(await readFile(file, 'utf8')).revision, 6);
+  });
+});
