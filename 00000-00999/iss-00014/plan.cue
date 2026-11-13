@@ -12,7 +12,7 @@ steps: {
 		title:    "試しの静的なサーバーと起動の道具（D-02、D-03）と、許しの確かめのテスト（D-04 のテスト）を作る"
 		text:     "対象：`src/tools/trial-host.ts`、`src/tools/trial.ts`、`package.json`（`trial` の script）、`test/tools/trial-host.test.ts`、`test/tools/trial.test.ts`、`test/server/trial-origins.test.ts`。`web/trial/` のファイルはまだないので、サーバーのテストは一時のディレクトリに置いた仮のファイルで確かめる。確かめ：T-01、T-02、T-03、T-04。完了：`npm run lint`、`npm test`、`npm run build` が通り、`node src/tools/trial.ts --dry-run` が URL と環境を出す（実機の Orca に触れない）。区切りのレビュー：なし。止まって HEAD を報告する（セッション impl の最後）"
 		realizes: ["R-04", "F-01", "F-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -20,7 +20,7 @@ steps: {
 		text:     "対象：`web/trial/`（index.html、trial.js、trial-view.js、trial.css、phone.html、forbidden.html、forbidden.js）、`test/web/trial-view.test.ts`。S-01 のサーバーの表とファイル名を合わせる。確かめ：T-05。完了：`npm run lint`、`npm test`、`npm run build` が通る。`node src/tools/trial.ts --state-dir <一時のディレクトリ>` を起動し、Chrome で `/`、`/phone.html`、`/forbidden.html` を開いて描けることを見る（Orca で開くは押さない。送信は有効にしない）。終わったら止める。区切りのレビュー：なし。止まって HEAD を報告する"
 		realizes: ["R-01", "R-02", "R-03", "F-01"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "ui"
 	}
 	"S-03": {
@@ -28,7 +28,7 @@ steps: {
 		text:     "タスク担当が行う。`npm run trial -- --tailscale-ip <IP>` を裏で起動し、Chrome で Mac の幅の `/`、`/phone.html`、`/forbidden.html` を、127.0.0.1 の URL と Tailscale の IP の URL の両方で確かめ（forbidden は 127.0.0.1 の 47901 だけ）、写しを `.workbench/trial-evidence/` に置く。開くボタンは worktree `iss-00014`（このリポジトリ）でだけ押す。送信は D-05 のとおり試しの送り先の2つだけ。不足が見つかったら、テストで確かめられる直しは impl、画面の直しは ui のセッションに、新しい worker として依頼する（そのときは state と report に記録する）。確かめ：T-06、T-07、T-08。完了：report.md の Verification に結論と件数がある"
 		realizes: ["R-01", "R-02", "R-03", "R-04", "F-01", "F-02", "F-03"]
 		after:    ["S-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 	"S-04": {
@@ -36,7 +36,7 @@ steps: {
 		text:     "タスク担当が行う（文書の手順）。確かめ：T-09。完了：README.md と AGENTS.md が出来上がったものと合い、report.md に開く URL、見てほしい点、止め方と、空の `## 本人の確かめ` の欄（R-05）がある。`npm run lint` が通る"
 		realizes: ["R-04", "R-05"]
 		after:    ["S-03"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }
