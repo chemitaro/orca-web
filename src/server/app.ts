@@ -10,6 +10,7 @@ import { buildInbox } from '../inbox/classify.ts';
 import type { InboxInputs } from '../inbox/model.ts';
 import type { OpenErrorCode, OpenOutcome, OpenRequest } from '../orca/open.ts';
 import type { TranscriptErrorCode, TranscriptReader } from '../orca/read-transcript.ts';
+import { buildRunList, buildRunTree } from '../runs/tree.ts';
 import { checkSelection, FIELDS } from '../state/fields.ts';
 import type { StateDocument } from '../state/model.ts';
 import type { SettingsStore } from '../state/settings.ts';
@@ -25,6 +26,7 @@ export interface StateSource {
 
 export interface AppOptions {
   poller?: StateSource;
+  runs?: StateSource;
   inbox?: { snapshot(): Promise<InboxInputs>; noteViewer(): void };
   stallMinutes?: number;
   settings?: SettingsStore;
@@ -101,6 +103,7 @@ const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?:
   '/inbox.js': { file: 'inbox.js', type: 'text/javascript; charset=utf-8' },
   '/inbox-view.js': { file: 'inbox-view.js', type: 'text/javascript; charset=utf-8' },
   '/inbox-dom.js': { file: 'inbox-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/runs': { file: 'runs.html', type: 'text/html; charset=utf-8', page: 'index' },
   '/settings': { file: 'settings.html', type: 'text/html; charset=utf-8', page: 'index' },
   '/main.js': { file: 'main.js', type: 'text/javascript; charset=utf-8' },
   '/view.js': { file: 'view.js', type: 'text/javascript; charset=utf-8' },
@@ -351,6 +354,7 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
   async function handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const pathname = url.pathname;
     const method = req.method ?? 'GET';
+    const runTreeRoute = /^\/api\/runs\/(.*)\/tree$/.exec(pathname);
     const host = checkHost(req, selfHosts(req));
     if (!host.ok) {
       sendRejection(res, host);
@@ -362,7 +366,12 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
         else sendJson(res, 200, options.health ? { ok: true, ...options.health() } : { ok: true });
         return;
       }
-      if (TRANSCRIPT_ROUTES.has(pathname) || pathname === '/api/inbox') {
+      if (
+        TRANSCRIPT_ROUTES.has(pathname) ||
+        pathname === '/api/inbox' ||
+        pathname === '/api/runs' ||
+        runTreeRoute !== null
+      ) {
         // 同じオリジンだけ（Origin がないか、自分のオリジン）。CORS を付けない。
         const origin = req.headers.origin;
         if (origin !== undefined && origin !== `http://${req.headers.host}`) {
@@ -373,7 +382,39 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
           sendError(res, 405, 'method_not_allowed');
           return;
         }
-        if (pathname === '/api/inbox') {
+        if (runTreeRoute !== null) {
+          let id: string;
+          try {
+            id = decodeURIComponent(runTreeRoute[1] ?? '');
+          } catch {
+            sendError(res, 400, 'invalid_request');
+            return;
+          }
+          if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
+            sendError(res, 400, 'invalid_request');
+            return;
+          }
+          if (!options.runs) {
+            sendError(res, 503, 'runs_unavailable');
+            return;
+          }
+          options.runs.noteViewer();
+          const document = buildRunTree(await options.runs.snapshot(), id);
+          if (document === null) sendError(res, 404, 'not_found');
+          else sendJson(res, 200, document);
+        } else if (pathname === '/api/runs') {
+          const project = url.searchParams.get('project');
+          if (project !== null && project.length > 512) {
+            sendError(res, 400, 'invalid_request');
+            return;
+          }
+          if (!options.runs) {
+            sendError(res, 503, 'runs_unavailable');
+            return;
+          }
+          options.runs.noteViewer();
+          sendJson(res, 200, buildRunList(await options.runs.snapshot(), project));
+        } else if (pathname === '/api/inbox') {
           const project = url.searchParams.get('project');
           if (project !== null && project.length > 512) {
             sendError(res, 400, 'invalid_request');
@@ -455,7 +496,20 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
       return;
     }
 
-    const asset = Object.hasOwn(STATIC_FILES, pathname) ? STATIC_FILES[pathname] : undefined;
+    let asset = Object.hasOwn(STATIC_FILES, pathname) ? STATIC_FILES[pathname] : undefined;
+    const pageRoute = /^\/(runs|projects)\/([^/]+)$/.exec(pathname);
+    if (pageRoute) {
+      let id = '';
+      try {
+        id = decodeURIComponent(pageRoute[2] ?? '');
+      } catch {
+        // 誤ったエンコードは、画面の道として扱わない。
+      }
+      const isRun = pageRoute[1] === 'runs';
+      if (isRun ? /^[A-Za-z0-9_-]{1,128}$/.test(id) : isBoundedText(id, 512)) {
+        asset = { file: isRun ? 'run.html' : 'project.html', type: 'text/html; charset=utf-8', page: 'index' };
+      }
+    }
     if (!asset) {
       sendError(res, 404, 'not_found');
       return;
