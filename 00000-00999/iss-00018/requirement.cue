@@ -15,7 +15,7 @@ background: """
 	親の epic-00016 の slice iss-00018（R-03、R-04）と、init-00002 の R-10 を受ける。
 	決定の経緯：hearing-20261106.md の「最終の形の決定」と「設計案への回答」（2026-11-13、利用者）、画面案の案 C、設計案（https://claude.ai/artifact/R4uRVUWgQeXsbTpet8Y9qu）。
 	受け箱（`/api/inbox`、`/`）は iss-00017、項目から開く詳細とチャットは iss-00012 の `/embed/agent?id=…`、状態の読み取り（Run・Task・worker を含む）は iss-00005〜iss-00008。
-	実機の観測（タスク担当、2026-11-13、読むだけ。件数だけ）：`orchestration run-list --full` の Run は `coordinator_handle`（今の統括の端末）を持つ。`task-list --full` の task は `parent_id` と `created_by_terminal_handle` を持つ。
+	実機の観測（タスク担当、2026-11-13、読むだけ。件数だけ）：`orchestration run-list --full` の Run は `coordinator_handle`（Run に結んだ統括の端末。閉じた端末のまま残ることがある。decisions を参照）を持つ。`task-list --full` の task は `parent_id` と `created_by_terminal_handle` を持つ。
 	Run `run_b7c4f4c08bbc` で worker 89、そのうち task に `parent_id` のある入れ子の worker 5。入れ子の 5 件はすべて、`parent_id` の task の worker の端末が、子の task の `created_by_terminal_handle` と一致した。
 	Run の統括は `run-use` で替わる（この Run は世代 6）ので、上の段の task の `created_by_terminal_handle` は今の `coordinator_handle` と一致しないことが多い（84 件のうち一致 10）。
 	"""
@@ -37,7 +37,7 @@ requirements: {
 	"R-01": {
 		title: "オーケストレーションの木が、Run ごとに統括と作業者の親子を1本の木で示す"
 		text: """
-			木の根は Run の今の統括（`coordinator_handle` の端末）。その下に、その Run の worker（Dispatch）を、task の親子（`parent_id`）に従って並べる。親の task のない worker は統括の子。
+			木の根は Run の今の統括（決め方は decisions の「今の統括の端末」の項。`coordinator_handle` が今ある端末ならそれ）。その下に、その Run の worker（Dispatch）を、task の親子（`parent_id`）に従って並べる。親の task のない worker は統括の子。
 			各節に、役割（統括、作業者）、担当の Issue（分かれば）、task の題名、エージェントの種類、モデル（作業者は起動時の値）、推論、状態、経過、プロジェクトを出す。取れない値は「—」。
 			作業者の worktree のプロジェクト（Orca の repo）が統括のプロジェクトと違えば、その節にプロジェクトの札を付け、木は分けない。
 			オーケストレーションで起動していないエージェント（Run の統括の端末でも、worker にも結び付かないエージェント）は木に入れない。

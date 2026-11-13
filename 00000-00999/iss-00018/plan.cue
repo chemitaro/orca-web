@@ -41,7 +41,7 @@ steps: {
 	}
 	"S-05": {
 		title:    "根の統括の決め方を、閉じた coordinator_handle のときに最近の依頼の端末へ直す（D-01、D-02 の S-04 の後の仕様の変更）"
-		text:     "対象：`src/state/normalize.ts`、`src/state/model.ts`、`src/runs/tree.ts`、`src/runs/model.ts`、`web/runs-view.js`（根の行の添え書き）、`test/state/`、`test/runs/`、`test/web/runs-view.test.ts`。確かめ：T-13。完了：`npm run lint`、`npm test`、`npm run build` が通る。区切りのレビュー：なし（最終品質ゲートで見る）。止まって HEAD を報告する"
+		text:     "対象：`src/state/normalize.ts`、`src/state/model.ts`、`src/runs/tree.ts`、`src/runs/model.ts`、`web/runs-view.js`・`web/runs-dom.js`（根の行の添え書き）、`test/state/`、`test/runs/`、`test/web/runs-view.test.ts`・`test/web/runs-dom.test.ts`。確かめ：T-13。完了：`npm run lint`、`npm test`、`npm run build` が通る。区切りのレビュー：なし（最終品質ゲートで見る）。止まって HEAD を報告する"
 		realizes: ["R-01", "R-02", "F-01"]
 		after:    ["S-04"]
 		status:   "todo"
