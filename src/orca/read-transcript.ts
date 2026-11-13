@@ -131,22 +131,26 @@ export function parseNativePage(result: unknown): ReadResult {
   if (!Array.isArray(result.messages) || typeof result.hasMore !== 'boolean')
     return { ok: false, error: 'unknown_shape' };
   const offset = result.beforeOffset;
+  if (result.hasMore && (!Number.isInteger(offset) || (offset as number) < 0))
+    return { ok: false, error: 'unknown_shape' };
   const before =
     result.hasMore && Number.isInteger(offset) && (offset as number) >= 0 ? { offset: offset as number } : null;
   return { ok: true, page: { source: 'nativeChat', rows: result.messages, hasMore: before !== null, before } };
 }
 
 /** agentSession.history の結果を解く。reset に添えられた末尾の page は使わない。 */
-export function parseJournalPage(result: unknown): ReadResult {
+export function parseJournalPage(result: unknown, expectedSessionId: string): ReadResult {
   if (!isRecord(result) || typeof result.ok !== 'boolean') return { ok: false, error: 'unknown_shape' };
   // reset（ok: false）は末尾のページを添えるが、古いページの代わりに返さない。
   if (result.ok !== true) return { ok: false, error: 'read_failed' };
   if (!isRecord(result.page)) return { ok: false, error: 'unknown_shape' };
   const page = result.page;
+  if (page.sessionId !== expectedSessionId) return { ok: false, error: 'unknown_shape' };
   if (!Array.isArray(page.items) || typeof page.hasOlder !== 'boolean' || !isRecord(page.window)) {
     return { ok: false, error: 'unknown_shape' };
   }
   const oldest = page.window.oldest;
+  if (page.hasOlder && !isCursor(oldest)) return { ok: false, error: 'unknown_shape' };
   const before =
     page.hasOlder && isCursor(oldest) ? { cursor: { epoch: oldest.epoch, sequence: oldest.sequence } } : null;
   return { ok: true, page: { source: 'agentSession', rows: page.items, hasMore: before !== null, before } };
@@ -213,7 +217,7 @@ export function createTranscriptReader(deps: {
         params.cursor = options.before.cursor;
       }
       const o = await deps.rpc.call<unknown>('agentSession.history', params, { timeoutMs: RPC_TIMEOUT_MS });
-      return o.ok ? parseJournalPage(o.result) : { ok: false, error: rpcError(o) };
+      return o.ok ? parseJournalPage(o.result, target.sessionId) : { ok: false, error: rpcError(o) };
     },
   };
 }
