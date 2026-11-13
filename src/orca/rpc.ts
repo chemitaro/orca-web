@@ -181,8 +181,13 @@ export class UnixSocketRpc implements RpcTransport {
   }
 }
 
-/** この Issue で送ってよい、読むだけの RPC の名前。 */
-export const READ_METHODS: readonly string[] = ['session.tabs.list', 'session.tabs.listAll', 'nativeChat.readSession'];
+/** 送ってよい、読むだけの RPC の名前。streaming の method（subscribe）は入れない（Unix ソケットは受けない）。 */
+export const READ_METHODS: readonly string[] = [
+  'session.tabs.list',
+  'session.tabs.listAll',
+  'nativeChat.readSession',
+  'agentSession.history',
+];
 
 /** 読む RPC だけを送れる口。一覧にない名前は送らずに例外にする（呼び出し側の誤り）。 */
 export class ReadOnlyRpc implements RpcTransport {

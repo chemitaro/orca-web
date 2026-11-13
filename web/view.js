@@ -111,7 +111,7 @@ function latest(values) {
 
 /**
  * 状態と項目の一覧と選んだ項目から、表を作る。列は選んだ項目だけ（項目の一覧の順）。選んだ項目のない対象の表は出さない。
- * 返す形：{ status: { connection, reason, stale, lastSuccessAt }, tables: [{ entity, title, columns, rows: [{ key, label, cells }] }] }
+ * 返す形：{ status: { connection, reason, stale, lastSuccessAt }, tables: [{ entity, title, columns, rows: [{ key, label, link, cells }] }] }
  */
 export function buildView(state, fields, selected, options = {}) {
   const chosen = new Set(selected);
@@ -127,6 +127,8 @@ export function buildView(state, fields, selected, options = {}) {
     const rows = rowsFor(table.entity, state).map((row) => ({
       key: rowKey(table.entity, row),
       label: rowLabel(table.entity, row, worktreeNames),
+      // エージェントの行だけ、詳細とチャットの画面（/embed/agent）を開くリンクを持つ。
+      link: table.entity === 'agent' ? `/embed/agent?id=${encodeURIComponent(row.id)}` : null,
       cells: columns.map((c) => cell(row, c.id.slice(c.id.indexOf('.') + 1), options)),
     }));
     tables.push({ entity: table.entity, title: table.title, columns, rows });

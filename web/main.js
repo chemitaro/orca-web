@@ -71,7 +71,19 @@ function renderTables(view) {
     const tbody = el('tbody');
     for (const row of table.rows) {
       const tr = el('tr');
-      tr.append(el('th', row.label));
+      const th = el('th');
+      if (row.link) {
+        // 詳細とチャットの画面を新しいタブで開く。
+        const a = el('a', row.label);
+        a.href = row.link;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.title = '詳細とチャットを開く';
+        th.append(a);
+      } else {
+        th.textContent = row.label;
+      }
+      tr.append(th);
       for (const cell of row.cells) {
         const td = el('td', cell.text);
         if (cell.note) {

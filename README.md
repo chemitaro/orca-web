@@ -5,7 +5,8 @@ SpecDock のダッシュボードに部品として埋め込む。
 
 - 状態の API と画面：repo・worktree・エージェント・オーケストレーションの状態（種類、状態、時刻、親子、PR と CI、取れるときのモデルと推論）。表示する項目を選べる。
 - 「Orca で開く」：この Mac の Orca で、指定の worktree の既存のタブを前面に出す。別の画面に1行で置けるボタンの部品がある。
-- 後の予定：会話のログを読み、指示を送る軽いチャット（epic-00004）。
+- エージェントの詳細とチャット（読むだけ）：`/embed/agent?id=…` で、エージェントの詳細と会話のログを読む。状態の画面のエージェントの行から開ける。
+- 後の予定：確かめたうえで指示を送る（epic-00004 の iss-00013）。
 
 ## 必要なもの
 
@@ -72,7 +73,8 @@ npm run service:uninstall              # 外して定義を消す（ログと項
 - Tailscale の IP で待ち受けられない（ログインの直後で Tailscale がまだ動いていないなど）ときは、127.0.0.1 だけで動き、ログに1行を書き、30 秒ごとに試し直す。`GET /api/health` の `listeners` に、アドレスごとの状態（`listening`、`retrying` と誤りの種類）が出る。
 - すべての要求で Host を完全一致で確かめる（`127.0.0.1:<port>`、`localhost:<port>`、`<Tailscale の IP>:<port>`。違えば 421）。
 - 書き込み（`POST /api/open`、`PUT /api/settings/fields`）は、同じオリジンの JSON と、`POST /api/token` が出す短期のトークン（`X-Orca-Web-Token`）を要する。書き込みに CORS は付けない。
-- Orca の authToken と書き込みのトークンを、ログ、URL、画面に出さない。
+- 会話の API（`GET /api/transcript`、`GET /api/transcript/events`）は同じオリジンだけに読ませ、CORS を付けない（別のオリジンは 403）。
+- Orca の authToken と書き込みのトークンを、ログ、URL、画面に出さない。会話の記録のパスを応答に出さない。
 
 ## SpecDock のダッシュボードに置く
 
@@ -104,6 +106,25 @@ SpecDock の画面に1行のスクリプトを置く。スクリプトが自分�
 - 親の画面の幅が 390px 以下の間は、ボタンを出さず、読み込まない（スマホでは出ない）。
 - 押すと、この Mac の Orca で既存のタブを前面に出す。新しいタブやファイルは作らない（スリープ中のエージェントの復元と、タブのない worktree を選んだときに Orca が作る最初の端末は、Orca の通常の動きとして起こりうる）。
 
+### エージェントの詳細とチャット（読むだけ）
+
+SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジンなので、会話の API を同じオリジンで読む。
+
+```html
+<iframe src="http://127.0.0.1:8791/embed/agent?id=<エージェントの id を URL の符号にしたもの>"
+        title="エージェント" style="border:0;width:100%;height:640px"></iframe>
+```
+
+- `id`：状態の API のエージェントの `id`（端末のタブは paneKey、構造化 Chat は `chat:<タブの id>`）。`theme`（`light`、`dark`）も渡せる。
+- 上に詳細（題名、worktree、種類、状態、モデルと推論とその意味、親と子、PR と CI、Orca で開く）、下に会話。幅 390px 以下では詳細を畳んで始め、Orca で開くを出さない。
+- 会話は、指示と返答の吹き出し、折り畳んだツール、Orca の知らせの行。思考は出さない。画像や未知の部分は「表示できない」と示す。読めないときは、空の会話ではなく理由を示す。送信の欄はない。
+- 置ける画面は `ORCA_WEB_READ_ORIGINS` のオリジンだけ（`frame-ancestors`）。
+
+会話の API：
+
+- `GET /api/transcript?agent=<id>&limit=<1〜200>&before=<前の応答の before>`：会話の末尾（`schema: "orca-web.transcript/v1"`）。`before` で古いページを読む。セッションが変わっていれば 409 `session_changed`。読めないときは `agent_not_found`・`no_session`・`transcript_not_found`（404）、`unsupported`（501）、`unreachable`・`busy`（503）、`read_failed`・`unknown_shape`（502）。
+- `GET /api/transcript/events?agent=<id>`：Server-Sent Events。`snapshot`（文書）、`appended`（足された件と、同じ id で中身が変わった件）、`replacement`（全体の置き換え。前のページも捨てる）、`unavailable`（読めない理由）。Orca の Unix ソケットは購読の口を受けないので、サーバーが 1.5 秒ごとに末尾を読み直して差を作る。同じエージェントを見る画面は読みを共有する。
+
 ### スマホ（tailnet）
 
 SpecDock のダッシュボードを Tailscale のアドレスで開くと、状態は `http://<Tailscale の IP>:8791/api/state` から読める。開くボタンは幅 390px 以下では出ない。
@@ -116,6 +137,7 @@ npm run lint        # biome と型の検査
 npm run build       # dist/ に出す（常駐はこれを動かす）
 npm run probe:live  # この Mac の Orca で読むだけの確かめ（集計だけ）
 npm run open:live   # この Mac の Orca で開く口を確かめる（このリポジトリの worktree だけ）
+npm run transcript:live  # この Mac の Orca で会話を読むだけで確かめる（件数と結論だけ）
 ```
 
 設計と調査の記録は SpecDock の Scope（`spec-dock/initiatives/`）にある。
