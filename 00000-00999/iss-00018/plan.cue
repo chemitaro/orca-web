@@ -10,7 +10,7 @@ goal: "Run ごとのオーケストレーションの木と、プロジェクト
 steps: {
 	"S-01": {
 		title:    "状態の読み取りと文書に、Run の統括の端末と worktree、task を作った端末を足す（D-01）"
-		text:     "対象：`src/orca/read-state.ts`、`src/state/normalize.ts`、`src/state/model.ts`、（任意で `src/state/fields.ts`）、`test/orca/read-state.test.ts`、`test/state/`（fixture と expected）。確かめ：T-01。完了：`node --test test/orca/read-state.test.ts test/state/*.test.ts` と `npm run lint` が通り、既存の状態の項目の値が変わらない。区切りのレビュー：なし"
+		text:     "対象：`src/orca/read-state.ts`、`src/state/normalize.ts`、`src/state/model.ts`、（任意で `src/state/fields.ts`）、`test/orca/read-state.test.ts`、`test/state/`（fixture と expected）、`run-list` の命令を含む録画の fixture。確かめ：T-01。完了：`node --test test/orca/read-state.test.ts test/state/*.test.ts` と `npm run lint` が通り、既存の状態の項目の値が変わらない。区切りのレビュー：なし"
 		realizes: ["R-01", "R-02", "F-01"]
 		status:   "todo"
 		session:  "impl-logic"
@@ -33,7 +33,7 @@ steps: {
 	}
 	"S-04": {
 		title:    "木、一覧、プロジェクトの画面と、受け箱からのリンク（D-04）を作る"
-		text:     "対象：`web/run.html`、`web/run.js`、`web/runs.html`、`web/runs.js`、`web/project.html`、`web/project.js`、`web/runs-view.js`、`web/runs-dom.js`、`web/inbox-view.js`（共有する関数の export だけ）、`web/index.html`（リンク）、`web/style.css`、`src/server/app.ts` の配るファイルの表、`test/web/`、`test/server/`。確かめ：T-09、T-10、T-11。完了：`npm run lint`、`npm test`、`npm run build` が通る。`npm start` を一時の port で起動して、広い幅と 390px で見る（Orca で開くは押さない）。区切りのレビュー：なし（最終品質ゲートで見る）。止まって HEAD を報告する"
+		text:     "対象：`web/run.html`、`web/run.js`、`web/runs.html`、`web/runs.js`、`web/project.html`、`web/project.js`、`web/runs-view.js`、`web/runs-dom.js`、`web/inbox-view.js`（共有する関数の export だけ）、`web/index.html` と `web/inbox.js`（リンク）、`web/style.css`、`src/server/app.ts` の配るファイルの表、`test/web/`、`test/server/`。確かめ：T-09、T-10、T-11。完了：`npm run lint`、`npm test`、`npm run build` が通る。`npm start` を一時の port で起動して、広い幅と 390px で見る（Orca で開くは押さない）。区切りのレビュー：なし（最終品質ゲートで見る）。止まって HEAD を報告する"
 		realizes: ["R-01", "R-02", "R-03"]
 		after:    ["S-03"]
 		status:   "todo"
@@ -50,15 +50,15 @@ steps: {
 }
 
 tests: {
-	"T-01": {title: "`run-list` の `coordinator_handle` と `task-list` の `created_by_terminal_handle` を拾い（なければ null）、RunState の `coordinatorWorktreeId` を terminals、なければ agents から決め、ハンドルが null なら not-provided、結べなければ not-linked、terminals が読めていなければ source-failed にする。既存の状態の項目の値は変わらない", verifies: ["R-01", "F-01"]}
+	"T-01": {title: "`run-list` を `--full` 付きで呼び、その `coordinator_handle` と `task-list` の `created_by_terminal_handle` を拾い（なければ null）、RunState の `coordinatorWorktreeId` を terminals、なければ agents から決め、ハンドルが null なら not-provided、結べなければ not-linked、terminals が読めていなければ source-failed にする。既存の状態の項目の値は変わらない", verifies: ["R-01", "F-01"]}
 	"T-02": {title: "統括を根に、親の task のない worker が統括の子、`parent_id` のある worker がその task の worker の子になり、親の候補が複数なら created_by の端末が一致するもの、なければ並びの最初が親になる。兄弟は task の createdAt の古い順（null は最後、同じなら dispatchId の順）", verifies: ["R-01"]}
 	"T-03": {title: "節の項目：作業者のモデルは起動時の値（エージェントの今の値を使わない）、推論は起動時の値、なければエージェントの値。統括はエージェントの値。state は エージェント、スリープ、worker の順。取れない値は null。worker に結び付かないエージェントは節にならない。詳細のリンクは agentId を encodeURIComponent する", verifies: ["R-01"]}
 	"T-04": {title: "作業者の project が統括の project と違えば otherProject が真、同じか、どちらかが分からなければ偽", verifies: ["R-01"]}
 	"T-05": {title: "親の task に worker がない、worker の task が文書にない、親子が輪になる worker は、根の子で orphan が真。統括の端末が分からなくても根を作り、根の項目は null。知らない Run の id は null", verifies: ["F-01"]}
 	"T-06": {title: "一覧：プロジェクトで絞ると、統括か作業者の節のどれかがそのプロジェクトの Run が全部、ほかは出ない。統括が別のプロジェクトなら fromOtherProject が統括のプロジェクト、同じか分からなければ null。projects の count、並び（active、latestTaskAt、id）、鮮度の写し", verifies: ["R-02"]}
-	"T-07": {title: "`GET /api/runs` と `GET /api/runs/<id>/tree` が文書を返し、`?project=` で絞り、知らない id を 404、形の正しくない id と長すぎる project を 400、別のオリジンを 403、GET 以外を 405、runs がなければ 503 にし、CORS を付けない", verifies: ["R-01", "R-02", "F-02"]}
+	"T-07": {title: "`GET /api/runs` と `GET /api/runs/<id>/tree` が文書を返し、noteViewer を呼び、`?project=` で絞り、知らない id を 404、形の正しくない id と長すぎる project を 400、別のオリジンを 403、GET 以外を 405、runs がなければ 503 にし、CORS を付けない", verifies: ["R-01", "R-02", "F-02"]}
 	"T-08": {title: "`/runs`、`/runs/<id>`、`/projects/<id>` が index と同じ CSP で HTML を配り、形の正しくない id の画面の道は 404", verifies: ["R-03"]}
-	"T-09": {title: "画面の組み立て（runs-view.js）が、木の行（字下げの深さ、役割、Issue、題名、種類、モデル、推論、状態と経過の文、札、orphan の印、詳細のリンク）と、null の「—」と、一覧の行と「<名前> の統括から」の札と、鮮度の文を作る", verifies: ["R-01", "R-02", "R-03"]}
+	"T-09": {title: "画面の組み立て（runs-view.js）が、木の行（字下げの深さ、役割、Issue、題名、種類、モデル、推論、状態と経過の文、すべての節のプロジェクト名（null は「—」）、otherProject の札、orphan の印、詳細のリンク）と、null の「—」と、一覧の行と「<名前> の統括から」の札と、木と一覧の文書の平らな sources からの鮮度の文（連絡の取得元を出さない）を作る", verifies: ["R-01", "R-02", "R-03"]}
 	"T-10": {title: "`<script>` を含む題名とプロジェクト名が DOM で要素にならない（textContent だけ）。リンクの href が `/runs/<encodeURIComponent(id)>` と `/embed/agent?id=…` だけ", verifies: ["R-03"]}
 	"T-11": {title: "プロジェクトの画面が受け箱を `?project=` で、Run の一覧を `?project=` で読む URL を組む（純粋な関数）。受け箱の画面の見出しに `/runs` と、選んだプロジェクトの `/projects/<id>` のリンクが出る", verifies: ["R-02"]}
 	"T-12": {title: "実機の確かめ：`run_b7c4f4c08bbc` が1本の木で出て、orca-web の節に札が付き、orca-web のプロジェクトの画面に spec-dock の統括からの札つきで出る。1280px と 390px で横にはみ出さない", verifies: ["R-01", "R-02", "R-03"]}

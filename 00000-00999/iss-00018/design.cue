@@ -15,7 +15,7 @@ design: {
 	"D-01": {
 		title: "状態の読み取りと文書への項目の追加（`read-state.ts`、`normalize.ts`、`model.ts`）"
 		text: """
-			- `OrcaRun` に `coordinatorHandle`（`run-list` の各件の `coordinator_handle` の文字列。なければ null）を足す。`run-list` に `--full` が要るなら足す（読む命令のまま。`ReadOnlyOrcaCli` の READ_COMMANDS は変えない）。
+			- `OrcaRun` に `coordinatorHandle`（`run-list` の各件の `coordinator_handle` の文字列。なければ null）を足す。`run-list` の呼び出しに `--full` を足す（実機で、`--full` のない簡潔な形は `id` と `objective` だけで、`coordinator_handle` は `--full` のときだけ出た。タスク担当、2026-11-13）。読む命令のままで、`ReadOnlyOrcaCli` の READ_COMMANDS は変えない。録画の fixture の命令の引数も合わせて直す。
 			- `OrcaTask` に `createdByTerminalHandle`（`task-list --full` の `created_by_terminal_handle`。なければ null）を足す。
 			- `RunState` に `coordinatorHandle: string | null`（端末のハンドル。WorkerState の terminalHandle と同じ扱い）と、
 			  `coordinatorWorktreeId: Fact<string>`（取得元 `terminals` の、そのハンドルの端末の `worktreeId`。なければ、状態の文書の agents のうち `terminalHandle` が等しいものの `worktreeId`。
@@ -75,7 +75,7 @@ design: {
 	"D-03": {
 		title: "HTTP の道（`src/server/app.ts`、`src/server/main.ts`）"
 		text: """
-			`AppOptions.runs?: { snapshot(): Promise<StateDocument> }` を受ける（`main.ts` が共有のポーリングの状態の文書を渡す。Orca を新たに読まない）。
+			`AppOptions.runs?: { snapshot(): Promise<StateDocument>; noteViewer(): void }` を受ける（`main.ts` が共有のポーリングの状態の文書と、`/api/state` と同じ `poller.noteViewer()` を渡す。Orca を新たに読まない）。両方の API は、文書を返す前に `noteViewer()` を呼ぶ（見る人がいる間はポーリングが速い間隔で読む）。
 			- `GET /api/runs?project=<repo の id>`：`buildRunList` の文書。`project` が 512 文字を超えれば 400。
 			- `GET /api/runs/<id>/tree`：`<id>` が `^[A-Za-z0-9_-]{1,128}$` でなければ 400、`buildRunTree` が null なら 404、ほかは文書。
 			どちらも、Host を確かめ、`Origin` があって自分のオリジンでなければ 403（受け箱と同じ）、CORS を付けない、GET 以外は 405、`runs` がなければ 503。
@@ -89,12 +89,13 @@ design: {
 		text: """
 			`runs-view.js` は、木の文書から行の列（字下げの深さ、役割の文、Issue、題名、種類、モデル、推論、状態の文、経過の文、プロジェクトの札、`orphan` の印、詳細のリンク）を、
 			一覧の文書から Run の行（題名、統括のプロジェクト、プロジェクトの札の並び、作業者の数、動いている数、「<名前> の統括から」の札）を作る純粋な関数。null の値は「—」。
-			経過と鮮度の文は受け箱（`inbox-view.js`）の関数を使う（二重に書かない。要れば export する）。`test/web/` から確かめる。
+			木の行は、すべての節にプロジェクトの名前の列を持ち（project が null なら「—」）、それとは別に、otherProject が真の節に札を付ける。
+			経過の文は受け箱（`inbox-view.js`）の関数を使う（二重に書かない。要れば export する）。鮮度の文は、木と一覧の文書の平らな `sources`（取得元ごとの `{ lastSuccessAt, stale, error }`）を読む関数を `runs-view.js` に新しく書く（受け箱の `freshnessLines` は受け箱の文書の形を読むので使わない。連絡の取得元は出さない）。`test/web/` から確かめる。
 			`runs-dom.js` は textContent だけで描く。リンクの href は自分で組んだ相対でない URL（`/runs/<encodeURIComponent(id)>`、`/embed/agent?id=…`）だけ。
 			- `/runs/<id>`：木を 10 秒ごとに読み直す。札は「<プロジェクト名>」を点線の枠で示す（色だけに頼らない。文字で出す）。390px では字下げを 1 段 12px 以下にする。
 			- `/runs`：全 Run の一覧。プロジェクトの選択（`?project=`）を付ける。
 			- `/projects/<id>`：上に受け箱（`/api/inbox?project=<id>`。iss-00017 の `inbox-view.js` と `inbox-dom.js` を使う）、下にそのプロジェクトの Run の一覧（`/api/runs?project=<id>`）。
-			- 受け箱の画面（`/`）の見出しに `/runs` へのリンクと、プロジェクトを選んでいるときは `/projects/<id>` へのリンクを足す。
+			- 受け箱の画面（`/`）の見出しに `/runs` へのリンクと、プロジェクトを選んでいるときは `/projects/<id>` へのリンクを足す（選択に従うリンクは `inbox.js` が、選択を変えるたびに書き換える）。
 			鮮度：文書の `connection` と `stale` と `sources` から、最後に読めた時刻と読めない取得元を見出しの下に出す。API が読めなければ前の内容を残して「更新できない」と示す。
 			Orca で開く、送信の操作は置かない（詳細とチャットのリンクだけ）。CSP は既存の index と同じ（inline を許さない）。390px で1列、横にはみ出さない。
 			"""
