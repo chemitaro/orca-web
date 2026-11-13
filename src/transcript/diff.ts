@@ -10,9 +10,14 @@ export type WindowDiff =
 
 const same = (a: TranscriptMessage, b: TranscriptMessage): boolean => JSON.stringify(a) === JSON.stringify(b);
 
-export function diffWindow(prev: readonly TranscriptMessage[], next: readonly TranscriptMessage[]): WindowDiff {
+export function diffWindow(
+  prev: readonly TranscriptMessage[],
+  next: readonly TranscriptMessage[],
+  { full }: { full: boolean },
+): WindowDiff {
   if (prev.length === 0) return next.length ? { type: 'appended', items: [...next], updated: [] } : { type: 'none' };
   for (let o = 0; o < prev.length; o++) {
+    if (o > 0 && !full) break;
     const overlap = prev.length - o;
     if (overlap > next.length) continue;
     let aligned = true;

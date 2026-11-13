@@ -114,7 +114,7 @@ export async function collectTranscripts(reader: TranscriptReader, agents: reado
 
     const second = await reader.read(t, { limit });
     const again = second.ok ? normalizePage(second.page) : null;
-    bump(b.secondRead, again ? diffWindow(messages, again).type : 'error');
+    bump(b.secondRead, again && second.ok ? diffWindow(messages, again, { full: second.page.hasMore }).type : 'error');
 
     if (first.page.before) {
       const older = await reader.read(t, { limit, before: first.page.before });

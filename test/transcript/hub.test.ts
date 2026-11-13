@@ -22,6 +22,7 @@ class FakeReader implements TranscriptReader {
   readError: ReadResult | null = null;
   resolves = 0;
   reads = 0;
+  hasMore = false;
 
   async resolve(agentId: string): Promise<Resolved> {
     this.resolves++;
@@ -34,7 +35,10 @@ class FakeReader implements TranscriptReader {
     this.reads++;
     if (this.readError) return this.readError;
     const rows = this.rows.get(`${target.agentId}/${target.sessionId}`) ?? [];
-    return { ok: true, page: { source: 'nativeChat', rows, hasMore: false, before: null } };
+    return {
+      ok: true,
+      page: { source: 'nativeChat', rows, hasMore: this.hasMore, before: this.hasMore ? { offset: 1 } : null },
+    };
   }
 }
 
@@ -55,6 +59,35 @@ function collect(hub: TranscriptHub, agentId: string) {
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+test('窓の前進は今の hasMore が真のときだけ認め、40件でも偽なら replacement', async () => {
+  for (const full of [false, true]) {
+    const { reader, hub } = setup();
+    reader.session.set('a', 's1');
+    reader.hasMore = true;
+    reader.rows.set(
+      'a/s1',
+      Array.from({ length: 40 }, (_, i) => row(`m${i + 1}`)),
+    );
+    const { events } = collect(hub, 'a');
+    await hub.tick();
+    reader.hasMore = full;
+    reader.rows.set(
+      'a/s1',
+      Array.from({ length: 40 }, (_, i) => row(`m${i + 2}`)),
+    );
+    await hub.tick();
+    const event = events[1];
+    if (full) {
+      assert.equal(event?.type, 'appended');
+      assert.deepEqual(event.type === 'appended' && event.items.map((m) => m.id), ['m41']);
+    } else {
+      assert.equal(event?.type, 'replacement');
+      assert.equal(event.type === 'replacement' && event.reason, 'rewritten');
+    }
+    hub.close();
+  }
+});
 
 test('最初に snapshot、足されると appended だけ、書き換わると replacement が届く', async () => {
   const { reader, hub } = setup();
@@ -171,6 +204,44 @@ test('見張りと購読者の数に上限があり、超えると busy で断�
   );
 });
 
+test('close の後に接続側が購読を解除しても、購読者数は0のままで読み直さない', async () => {
+  const { reader, hub } = setup();
+  reader.session.set('a', 's1');
+  const { sub } = collect(hub, 'a');
+  assert.ok(sub.ok);
+  await hub.tick();
+  hub.close();
+  sub.unsubscribe();
+  sub.unsubscribe();
+  assert.equal(hub.subscriberCount, 0);
+  const reads = reader.reads;
+  await hub.tick();
+  assert.equal(reader.reads, reads);
+});
+
+test('セッションの解決中に最後の購読が閉じたら、その後に記録を読まない', async () => {
+  let finish!: (result: Resolved) => void;
+  let reads = 0;
+  const reader: TranscriptReader = {
+    resolve: () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    read: async () => {
+      reads++;
+      return { ok: true, page: { source: 'nativeChat', rows: [], hasMore: false, before: null } };
+    },
+  };
+  const hub = new TranscriptHub({ reader, tailIntervalMs: 0 });
+  const { events, sub } = collect(hub, 'a');
+  assert.ok(sub.ok);
+  sub.unsubscribe();
+  finish({ ok: true, target: targetFor('a', 's1') });
+  await settle();
+  assert.equal(reads, 0);
+  assert.deepEqual(events, []);
+});
+
 test('セッションは5秒ごとに解き直し、その間は末尾だけを読む', async () => {
   const { reader, hub, advance } = setup();
   reader.session.set('a', 's1');
@@ -183,4 +254,31 @@ test('セッションは5秒ごとに解き直し、その間は末尾だけを�
   advance(3_500);
   await hub.tick();
   assert.equal(reader.resolves, 2);
+});
+
+test('初回の読みが途中なら、複数の購読と tick が同じ結果を待ち、読みを重ねない', async () => {
+  let finish!: (result: ReadResult) => void;
+  let reads = 0;
+  const reader: TranscriptReader = {
+    resolve: async (id) => ({ ok: true, target: targetFor(id, 's1') }),
+    read: () => {
+      reads++;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    },
+  };
+  const hub = new TranscriptHub({ reader, tailIntervalMs: 0 });
+  const one = collect(hub, 'a');
+  const two = collect(hub, 'a');
+  await settle();
+  const tick1 = hub.tick();
+  const tick2 = hub.tick();
+  assert.equal(reads, 1);
+  finish({ ok: true, page: { source: 'nativeChat', rows: [row('m1')], hasMore: false, before: null } });
+  await Promise.all([tick1, tick2]);
+  assert.deepEqual(one.events, two.events);
+  assert.equal(one.events.length, 1);
+  assert.equal(one.events[0]?.type, 'snapshot');
+  hub.close();
 });

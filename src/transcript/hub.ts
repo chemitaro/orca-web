@@ -102,6 +102,7 @@ export class TranscriptHub {
       unsubscribe: () => {
         if (!active) return;
         active = false;
+        if (this.#closed) return;
         w.listeners.delete(listener);
         this.#subscribers--;
         if (w.listeners.size === 0) this.#watches.delete(w.agentId);
@@ -160,6 +161,7 @@ export class TranscriptHub {
     let sessionChanged = false;
     if (!watch.target || this.#now() - watch.resolvedAt >= this.#resolveMs) {
       const resolved = await this.#reader.resolve(watch.agentId);
+      if (this.#watches.get(watch.agentId) !== watch) return;
       watch.resolvedAt = this.#now();
       if (!resolved.ok) {
         watch.target = null;
@@ -200,7 +202,7 @@ export class TranscriptHub {
       this.#emit(watch, { type: 'replacement', reason: 'session-changed', document });
       return;
     }
-    const diff = diffWindow(prev, messages);
+    const diff = diffWindow(prev, messages, { full: read.page.hasMore });
     if (diff.type === 'appended') {
       this.#emit(watch, { type: 'appended', session: { key: target.key }, items: diff.items, updated: diff.updated });
     } else if (diff.type === 'replacement') {
