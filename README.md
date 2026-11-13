@@ -78,7 +78,7 @@ npm run service:uninstall              # 外して定義を消す（ログと項
 - すべての要求で Host を完全一致で確かめる（`127.0.0.1:<port>`、`localhost:<port>`、`<Tailscale の IP>:<port>`。違えば 421）。
 - 書き込み（`POST /api/open`、`PUT /api/settings/fields`）は、同じオリジンの JSON と、`POST /api/token` が出す短期のトークン（`X-Orca-Web-Token`）を要する。書き込みに CORS は付けない。
 - 会話の API（`GET /api/transcript`、`GET /api/transcript/events`）と受け箱の API（`GET /api/inbox`）、木と一覧の API（`GET /api/runs?project=`、`GET /api/runs/<id>/tree`）は同じオリジンだけに読ませ、CORS を付けない（別のオリジンは 403）。
-- 受け箱は、オーケストレーションの連絡を `orca orchestration check --peek --terminal run:<id>` だけで読み、判断の門を `gate-list` で読む。統括の連絡を既読にしない（読む口は `--peek` のない check と `--ack`・`--all` などを送らずに拒む）。連絡は受け箱を見る人がいる間だけ読む。
+- 受け箱は、オーケストレーションの連絡を `orca orchestration check --peek --terminal run:<id>` だけで読み、判断の門を `gate-list` で読む。統括の連絡を既読にしない（読む口は `--peek` のない check と `--ack`・`--all` などを送らずに拒む）。連絡は受け箱を見る人がいる間だけ読む。読む Run は、`updated_at` が7日以内の Run に加えて、生きている worker がいる Run、統括の端末が今ある Run、task の作成か完了が7日以内の Run（最大 50。動いている Run を先に選ぶ）。連絡と判断の門の時刻は ISO 8601 の UTC にそろえる。
 - 送信の口（`POST /api/send/intent`、`POST /api/send/confirm`）は、書き込みと同じ守り（同じオリジンの JSON と短期のトークン）を要し、CORS を付けない。送れるかの口（`GET /api/send/status`）と送信の照会（`GET /api/send/<操作の ID>`）は同じオリジンの読みだけ（`Sec-Fetch-Site` が cross-site・same-site なら 403）。守りで拒んだ送信の要求は送信の記録に書かず、件数だけをログに出す。
 - Orca の authToken と書き込みのトークンを、ログ、URL、画面に出さない。会話の記録のパスを応答に出さない。サーバーのログに送った本文を出さない。
 
@@ -95,6 +95,22 @@ const state = await res.json();   // schema: "orca-web.state/v1"。worktree ご�
 
 - `GET /api/fields`：表示できる項目の一覧と、選んだ項目。
 - Orca に届かないときも 200 で、`connection.state: "unreachable"` と、取得元ごとの最後に読めた時刻（鮮度）を返す。
+
+### 稼働の印（worktree ごとの要約）
+
+`GET /api/worktrees/summary` は、エージェントが1つ以上いる worktree ごとに、エージェントの数と状態を返す小さな文書（`orca-web.worktree-summary/v1`）。SpecDock の構造の図に丸を描くために使う。読み取りの CORS は `/api/state` と同じ（`ORCA_WEB_READ_ORIGINS` のオリジンだけ。ほかのオリジンは 403）。
+
+```js
+const res = await fetch('http://127.0.0.1:8791/api/worktrees/summary');
+const summary = await res.json();
+// summary.worktrees[i]: { id, path, branch, project: {id, name} | null, issue, counts, agents }
+// counts: { working, blocked, waiting, done, sleeping, unknown, total }
+// agents[j]: { id, mark, agentType, since, detail }   detail は /embed/agent?id=… の道
+```
+
+- `mark` は `working`・`blocked`・`waiting`・`done`・`sleeping`（状態がなく、端末が復元待ち）・`unknown`（知らない値や欠け）。受け箱と同じ決め方。
+- `since` はその状態になった時刻（ISO 8601）。作業を終えてからの待ち時間の起点に使える。
+- 会話や連絡の本文、タブの題名、最後の一言は返さない。Orca に届かないときも 200 で、`stale` と `connection.state` で示す。
 
 ### 「Orca で開く」のボタン
 
