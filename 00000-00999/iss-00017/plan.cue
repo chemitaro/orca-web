@@ -58,7 +58,7 @@ tests: {
 	"T-06": {title: "連絡の読み取りが、決めた項目だけを拾い（本文、question の本文、options、reportPath を拾わない）、統括あてでない件を捨て、worker_done の PR の URL だけを拾う", verifies: ["R-01"]}
 	"T-07": {title: "ReadOnlyOrcaCli が、`--peek` のない check と、`--ack`・`--all`・`--unread`・`--wait`・`--retry-request` の付いた check を呼ばずに拒む（既読にしない）", verifies: ["R-01"]}
 	"T-08": {title: "門の読み取りが pending だけを返し、名前の揺れを受け、知らない形を invalid-shape にする。runs の読み取りが updatedAt を拾い（なければ null）、状態の文書に lastAssistantMessage と updatedAt が出ない", verifies: ["R-01", "F-01"]}
-	"T-09": {title: "ポーリングが、見る人がいるときだけ、7 日以内（updatedAt が null の Run は後ろに）・上限 50 の Run を読み、失敗した Run は前の値を残して runsFailed に数え、全部の失敗を error にし、stale を D-03 の規則（未成功、error、間隔の 3 倍）で決める", verifies: ["R-01", "F-01"]}
+	"T-09": {title: "ポーリングが、見る人がいるときだけ、7 日以内（updatedAt が null の Run は後ろに）・上限 50 の Run を読み、失敗した Run は前の値を残して runsFailed に数え、全部の失敗を error にし、stale を D-03 の規則（未成功、error、間隔の 3 倍）で決める。runs が一度も読めていないときは runs-unavailable の error で成功と扱わず、runs が読めて Run が 0 件のときだけ成功（runsRead: 0）", verifies: ["R-01", "F-01"]}
 	"T-10": {title: "`GET /api/inbox` が文書を返し、`?project=` で絞り、別のオリジンを 403、GET 以外を 405、長すぎる project を 400、inbox がなければ 503 にし、CORS を付けない", verifies: ["R-01", "R-02"]}
 	"T-11": {title: "`ORCA_WEB_STALL_MINUTES` の既定 30 と、範囲外・整数でない値の ConfigError", verifies: ["R-01"]}
 	"T-12": {title: "Orca に届かないとき、`/api/inbox` が最後に読めた内容と stale と connection を返す", verifies: ["F-01"]}

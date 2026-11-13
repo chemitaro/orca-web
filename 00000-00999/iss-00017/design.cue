@@ -88,7 +88,8 @@ design: {
 			Run ごとに `readRunMail` と `readGates` を、同時に 4 までで読む。
 			Run ごとに最後に成功した値を残し、失敗した Run は前の値を使って、`runsFailed` に数える（`runsRead` は成功した数）。1回の読みで全部の Run が失敗したら写しの `error` に入れ、1つでも成功すれば `error` は null。
 			写しの `stale`：一度も成功していない、`error` がある、または最後に成功してから orchestration の組の今の間隔の 3 倍（状態の正規化の STALE_FACTOR と同じ倍数）を超えた、のどれか。
-			見る人がいなくなって読みを止めている間も、この規則のまま（時間がたてば stale になる）。読む Run が 0 件なら、読みは成功として扱う（`runsRead: 0`）。
+			見る人がいなくなって読みを止めている間も、この規則のまま（時間がたてば stale になる）。`runs` の取得元が一度も成功していない（写しの data が null）ときは、連絡を読まずに、写しの `error` を `{ kind: "runs-unavailable" }` にする（成功として扱わない。`lastSuccessAt` は変えない）。
+			`runs` が読めていて、読む Run が 0 件のときだけ、読みは成功として扱う（`runsRead: 0`）。
 			`inboxSnapshot(): Promise<{ state: StateDocument, mail: MailSnapshot, lastWords: Map }>` を出す。`lastWords` は、正規化と同じ id の決め方（`paneKey`、なければタブの id）で、
 			端末のタブの `lastAssistantMessage` から作る（id の作り方は normalize の関数を共有して、二重に書かない）。
 			連絡の取得元の記録と再生は、既存の `ReplayCliRunner` で行う（録画の fixture は手書きの仮の文）。
