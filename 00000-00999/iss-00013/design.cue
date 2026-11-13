@@ -33,10 +33,10 @@ design: {
 			- 構造化 Chat `{ route: "chat", agentId, worktreeId, tabId, sessionId, agentType, runtimeId }`
 			`resolveTarget(listAll, agentId, runtimeId)` が `session.tabs.listAll` の結果から解く（会話の読み手の `resolveFromTabs` と同じ id の規則：端末は paneKey `<parentTabId>:<leafId>`（なければタブの id）、構造化 Chat は `chat:<タブの id>`）。worktreeId はタブを含む snapshot の `worktree`。
 			- 端末：タブの `status` が `ready`、`terminal`（handle）、`ptyId`、`incarnationId`、`agentStatus.agentType`、`agentStatus.providerSession.id` がすべて空でない文字。欠ければ `{ ok: false, error: "not_sendable", reason: "identity_unavailable" }`。スリープ（`status` が ready でない）は reason `asleep`、provider のセッションがなければ `no_session`。
-			- 構造化 Chat：タブの `agent` と `sessionId` が空でない文字。欠ければ `no_session`。
+			- 構造化 Chat：タブの `agent` と `sessionId` が空でない文字。欠ければ `no_session`。構造化 Chat のスリープ（`sleptAt`）は Unix ソケットの読む口では分からないので、宛先の解決では見ない（requirement の decisions）。
 			- 見つからなければ `agent_not_found`。状態の文書で `untabbed` のエージェントは `not_sendable` の reason `untabbed`。形が違えば `unknown_shape`。
 			`compareTargets(confirmed, fresh)` が、`route` と上のすべての識別子（worktreeId を含む）と `runtimeId` を比べ、違えば最初に違った項目の種類（`runtime_changed`、`worktree_changed`、`tab_changed`、`terminal_changed`（handle・ptyId・incarnation）、`agent_changed`（種類）、`session_changed`）を返す。
-			`buildPreview(state, target)` は確認の項目 `SendPreview`（リポジトリの名前、worktree のパスとブランチ、エージェントの種類、題名、状態、経路、セッションの短い識別子＝provider のセッションの識別子か sessionId の先頭8文字）を、状態の文書（poller の最新）から作る。状態の文書のそのエージェントの `worktreeId` と、`worktrees` の中のその worktree が、`target.worktreeId` と一致しなければ null を返す（D-06 が `not_sendable` の reason `state_out_of_date` にする）。確認の項目の worktree が実際の宛先と違うまま確定させないため。
+			`buildPreview(state, target)` は確認の項目 `SendPreview`（リポジトリの名前、worktree のパスとブランチ、エージェントの種類、題名、状態、経路、セッションの短い識別子＝provider のセッションの識別子か sessionId の先頭8文字）を、状態の文書（poller の最新）から作る。状態の文書のそのエージェントの `worktreeId` と、`worktrees` の中のその worktree が、`target.worktreeId` と一致しないか、端末ならそのエージェントの `terminalHandle` が `target.handle` と、`agentType` の値が `target.agentType` と一致しなければ null を返す（D-06 が `not_sendable` の reason `state_out_of_date` にする）。確認の項目の worktree と枠が実際の宛先と違うまま確定させないため。題名と状態は poller の間隔（数秒）だけ遅れうるので、画面は「状態の画面の値」として示す。
 			"""
 		satisfies: ["R-01", "R-02", "F-01", "F-04"]
 	}
@@ -94,7 +94,7 @@ design: {
 
 			**照会**（読むだけ）
 			- `checkTerminal(operationId)`：`orchestration.requestShow { request: operationId }`。`completed` で receipt に `send` があれば、その receipt を上の端末の表で分けて返す。`pending` は unknown（`code: "orca_pending"`）、`absent` は unknown（`code: "orca_absent"`。届いていない証拠ではない）。
-			- `checkChat(target, operationId)`：`agentSession.sendRecorded { sessionId, clientMessageId: operationId }`。偽は unknown（`code: "orca_not_recorded"`）。真なら続けて `agentSession.history { sessionId, direction: "tail", limit: 200 }` の `page.submissions` と `page.queuedMessages` から、`clientMessageId`（カードは `messageId`）が操作の ID のものを探し、あれば上の Chat の表で分ける（`page.sessionId` が違えば探さない）。見つからなければ unknown（`code: "orca_recorded"`。Orca は受けた記録を持つが、届いたかは分からない）。
+			- `checkChat(target, operationId)`：`agentSession.sendRecorded { sessionId, clientMessageId: operationId }`。偽は unknown（`code: "orca_not_recorded"`）。真なら続けて `agentSession.history { sessionId, direction: "tail", limit: 200 }` の `page.queuedMessages` から `messageId` が操作の ID のカード、なければ `page.submissions` から `clientMessageId` が操作の ID のもの、なければ `queuedMessageId` が操作の ID のもの（カードから渡したもの。`submittedSequence` が最大のもの）を探し、あれば上の Chat の表で分ける（`page.sessionId` が違えば探さない）。見つからなければ unknown（`code: "orca_recorded"`。Orca は受けた記録を持つが、届いたかは分からない）。
 			"""
 		satisfies: ["R-02", "R-03", "R-05", "F-02", "F-03", "F-04"]
 	}
@@ -154,7 +154,7 @@ design: {
 		title: "送信を止める設定（`src/state/settings.ts`）"
 		text: """
 			`SettingsStore.readSendEnabled(): Promise<boolean>` が、呼ぶたびに設定のファイルを読み、JSON の最上位の `sendEnabled === true` のときだけ真を返す。ファイルがない、読めない、JSON でない、`version` が 1 でない、`sendEnabled` が真の真偽でないときは偽。例外を投げない。
-			`saveSelected` は、書く前にファイルを読み、`sendEnabled` が真偽ならその値を残して書く（`{ version: 1, fields, sendEnabled? }`）。項目の選択を読む `load` の振る舞いは変えない。HTTP に `sendEnabled` を変える口を作らない。
+			`saveSelected` は、書く前にファイルを読み、そのファイルが JSON で `version` が 1 で `sendEnabled` が真偽のときだけ、その値を残して書く（`{ version: 1, fields, sendEnabled? }`）。それ以外（ない、読めない、壊れている、版が違う）は `sendEnabled` を書かない（送れない側に倒す。版の違うファイルの `sendEnabled: true` を項目の保存が有効にしないため）。項目の選択を読む `load` の振る舞いは変えない。HTTP に `sendEnabled` を変える口を作らない。
 			"""
 		satisfies: ["R-06"]
 	}

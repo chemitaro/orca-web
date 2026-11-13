@@ -44,7 +44,7 @@ steps: {
 	}
 	"S-05": {
 		title:    "送信の記録と sendEnabled（D-05、D-07）"
-		text:     "対象：`src/send/journal.ts`（新規）、`src/state/settings.ts`。確かめ：T-10、T-11。完了：`node --test test/send/journal.test.ts test/state/settings.test.ts` が通り、権限（0700、0600）、before の datasync の後に戻ること、書けないときに投げること、after と check のメモリーの持ち方、after のない before が unknown になること、壊れた行を飛ばすこと、sendEnabled の各場合（なし、偽、壊れたファイル、version 違い、真）と保存で消えないことのテストがある。テストは一時のディレクトリだけを使う。区切りのレビュー：なし"
+		text:     "対象：`src/send/journal.ts`（新規）、`src/state/settings.ts`。確かめ：T-10、T-11。完了：`node --test test/send/journal.test.ts test/state/settings.test.ts` が通り、権限（0700、0600）、before の datasync の後に戻ること、書けないときに投げること、after と check のメモリーの持ち方、after のない before が unknown になること、壊れた行を飛ばすこと、sendEnabled の各場合（なし、偽、壊れたファイル、version 違い、真）と、保存で消えないこと、版の違うファイルや壊れたファイルの上の保存が sendEnabled を書かないことのテストがある。テストは一時のディレクトリだけを使う。区切りのレビュー：なし"
 		realizes: ["R-04", "R-06", "F-06"]
 		after:    ["S-04"]
 		status:   "todo"
@@ -103,7 +103,7 @@ tests: {
 	"T-08": {title: "構造化 Chat の指紋が、Orca v1.4.258 の算法の固定の値と一致する", verifies: ["R-03"]}
 	"T-09": {title: "送る関数が時間切れでも1回だけ送り、照会（requestShow、sendRecorded と history）が送る RPC を呼ばず、sendRecorded の真だけでは届いたことにしない", verifies: ["R-05", "F-03"]}
 	"T-10": {title: "送信の記録の権限、before の datasync の後に送れること、書けないときに投げること、after・check のメモリー、after のない before の unknown、壊れた行の扱い、authToken を持たないこと", verifies: ["R-04", "R-05", "F-06"]}
-	"T-11": {title: "sendEnabled の読みが、真のときだけ真で、ほかの各場合に偽、保存で消えない", verifies: ["R-06"]}
+	"T-11": {title: "sendEnabled の読みが、真のときだけ真で、ほかの各場合に偽、保存で消えず、版の違うファイルの上の保存では有効にならない", verifies: ["R-06"]}
 	"T-12": {title: "SendService の intent と confirm が、止まるべき各場合に送る RPC を0回、成功で1回だけ送り、同時の2つの確定でも1回", verifies: ["R-01", "R-02", "F-01", "F-02", "F-05"]}
 	"T-13": {title: "SendService が、記録の書き込みの失敗で送らず、after の失敗を応答に示し、check が unknown のときだけ照会し、送り直さない", verifies: ["R-04", "R-05", "F-03", "F-06"]}
 	"T-14": {title: "機能の確かめが、sendTerminal と sendChat の満たし方と欠け方を返し、確かめのために書き込みの RPC を呼ばない", verifies: ["F-04"]}
