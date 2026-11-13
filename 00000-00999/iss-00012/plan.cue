@@ -27,7 +27,7 @@ tests: {
 	"T-09": {title: "SSE の道が snapshot と appended を配り、別のオリジンを 403 で拒み、CORS を付けない", verifies: ["R-02", "F-03"]}
 	"T-10": {title: "/embed/agent の CSP が inline を許さず、frame-ancestors が読み取りのオリジンだけ", verifies: ["R-05", "F-03"]}
 	"T-11": {title: "詳細の組み立てが、状態、種類、モデルと推論と意味、親と子、PR と CI、開く要求を作り、https でない PR の URL をリンクにしない", verifies: ["R-03", "F-03"]}
-	"T-12": {title: "会話の組み立てが、吹き出し、callId で組にしたツール、表示できない印を作り、思考を出さない", verifies: ["R-03"]}
+	"T-12": {title: "会話の組み立てが、吹き出し、callId で組にしたツール、表示できない印、system の知らせの行を作り、思考を出さない", verifies: ["R-03"]}
 	"T-13": {title: "`<script>` や `<img onerror>` を含む本文が、DOM に描いても要素にならない（textContent だけで描く）", verifies: ["R-03", "F-03"]}
 	"T-14": {title: "画面が replacement で前のページを含めて捨て、要求の後に置き換えを受けた古いページや鍵の違う古いページを足さず、unavailable で読めない理由を示す（画面の状態の純粋な関数）", verifies: ["F-01", "F-02"]}
 	"T-15": {title: "状態の画面のエージェントの行に、詳細とチャットの画面へのリンクが付く", verifies: ["R-04"]}

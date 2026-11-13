@@ -104,7 +104,7 @@ design: {
 			- `buildDetail(state, agentId)`：状態の文書から、エージェント、worktree、親（parentPaneKey が指すエージェント）、子（parentPaneKey がこのエージェントの paneKey のエージェント）を引き、
 			  詳細の行（題名、worktree、種類、状態と開始時刻、モデルと推論（値の意味の名前）、親、子、PR、CI）と、Orca で開く要求（`{ worktree, agent? }`。agent は端末のタブの paneKey だけ）を作る。
 			  見つからなければ `null`。取れない値は「—」と欠けた理由。PR のリンクは `https:` の URL のときだけ。値は view.js の `formatValue` を使う。
-			- `buildChat(messages)`：正規化した件から、描く行（吹き出し、ツールの折り畳み、表示できない印）を作る。ツールの結果は、同じ `callId` の呼び出しの行に入れる（なければ単独の行）。
+			- `buildChat(messages)`：正規化した件から、描く行（吹き出し、ツールの折り畳み、表示できない印、system の本文の知らせの行（中央の小さな文字で、吹き出しにしない））を作る。ツールの結果は、同じ `callId` の呼び出しの行に入れる（なければ単独の行）。
 
 			`agent-frame.js` が DOM を作り、文字をすべて textContent で入れる。
 
