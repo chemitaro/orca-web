@@ -97,10 +97,16 @@ test('端末の receipt は宛先と provider と観測した段階から判定�
   ];
   for (const [receipt, expected] of cases)
     assert.deepEqual(send.classifyTerminal(ok({ send: receipt }), terminalTarget()), expected);
-  assert.deepEqual(send.classifyTerminal(ok({ send: { accepted: false }, replayed: true }), terminalTarget()), {
-    outcome: 'refused',
-    detail: { replayed: true },
-  });
+  assert.deepEqual(
+    send.classifyTerminal(
+      ok({ send: { accepted: false }, mutation: { requestId: 'op', replayed: true } }),
+      terminalTarget(),
+    ),
+    {
+      outcome: 'refused',
+      detail: { replayed: true },
+    },
+  );
 });
 
 test('Chat は未配送のカードを拒否にせず D-04 の各状態を区別する', () => {

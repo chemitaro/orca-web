@@ -67,7 +67,7 @@ function terminalReceipt(result: unknown, target: TerminalSendTarget): SendResul
 export function classifyTerminal(outcome: RpcOutcome, target: TerminalSendTarget): SendResult {
   if (!outcome.ok) return failure(outcome, 'terminal.send');
   const classified = terminalReceipt(outcome.result, target);
-  if (object(outcome.result).replayed === true) classified.detail.replayed = true;
+  if (object(object(outcome.result).mutation).replayed === true) classified.detail.replayed = true;
   return classified;
 }
 function chatReceipt(result: unknown): SendResult {
