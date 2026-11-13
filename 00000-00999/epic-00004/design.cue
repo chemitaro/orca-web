@@ -7,7 +7,7 @@ design: {
 		title: "会話のログの API"
 		text: """
 			`GET /api/transcript?agent=…`（とページング）と、変化を受ける口（SSE など。サーバーが nativeChat.subscribe／agentSession.subscribe を購読する）。
-			Orca の記録を、役割（利用者、エージェント、ツール）と本文と折り畳むツールに正規化し、思考と未対応の部分を落として「表示できない」の印を付ける。
+			Orca の記録を、役割（利用者、エージェント、ツール）と本文と折り畳むツールに正規化し、思考は印も付けずに落とし、未対応の部分（画像、未知のブロックなど）にだけ「表示できない」の印を付ける。購読の口が Unix ソケットで使えないときは、末尾を短い間隔で読み直して差を送る（iss-00012 の調べ）。
 			追記と置き換えを区別して送る。セッションの識別子と記録のパスは Orca が持つものを使い、ファイルの名前から作らない。
 			"""
 		satisfies: ["R-01", "F-05"]
@@ -34,17 +34,22 @@ design: {
 		title: "送信の記録"
 		text: """
 			利用者の置き場（例：`~/Library/Application Support/orca-web/sends/`、権限 0600）に、送る前（操作の ID、宛先、本文、digest、時刻、世代）と
-			送った後（結果の5つの区別、Orca の receipt）を追記する。送る前の記録に失敗したら送らない。結果不明は、同じ操作の ID での確かめだけを許す。
+			送った後（結果の5つの区別、Orca の receipt）を追記する。送る前の記録に失敗したら送らない。結果不明は、`GET /api/send/{操作の ID}` で同じ操作の ID の状態を確かめるだけを許す（Orca の receipt か、構造化 Chat の clientOperationId で照会）。設定 `sendEnabled` が偽なら、送信の口はすべて拒み、画面は読むだけになる。
 			"""
 		satisfies: ["R-03", "F-03"]
 	}
 	"D-05": {
 		title: "チャットの小窓と埋め込み"
 		text: """
-			`/embed/chat?agent=…` の iframe の画面。素の ES Modules。本文は textContent で描く。390px で詳細を広げられる。iframe の中で短期のトークンを得て、
+			`/embed/agent?id=…` の iframe の画面（詳細とチャット。描画は iss-00012 が持つ）。素の ES Modules。本文は textContent で描く。390px で詳細を広げられる。iframe の中で短期のトークンを得て、
 			書き込みの守り（epic-00003）の下で送る。frame-ancestors で SpecDock のオリジンだけに埋め込みを許す。postMessage は対象の選択とテーマだけ。
 			"""
-		satisfies: ["R-04", "F-06"]
+		satisfies: ["R-01", "R-04", "F-06"]
+	}
+	"D-06": {
+		title: "稼働の印の要約の API"
+		text:  "`GET /api/worktrees/summary` が worktree ごとに、パス、ブランチ、エージェントの数と状態（working・blocked・waiting・done・スリープ）を返す。読み取りの CORS は SpecDock のオリジンだけ。"
+		satisfies: ["R-04"]
 	}
 }
 

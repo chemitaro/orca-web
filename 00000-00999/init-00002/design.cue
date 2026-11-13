@@ -56,6 +56,22 @@ design: {
 			"""
 		satisfies: ["R-05", "R-06", "R-07", "F-03"]
 	}
+	"D-07": {
+		title: "単独の画面（受け箱、木、プロジェクト）"
+		text: """
+			受け箱は、状態の API とオーケストレーションの連絡（統括あての question・decision_gate・worker_done を --peek で読む）と PR の checks から
+			段を決める。木は Run・Task・worker を Run ごとに組み、節の worktree からプロジェクトの札を決める。画面は素の ES Modules。
+			"""
+		satisfies: ["R-09", "R-10"]
+	}
+	"D-08": {
+		title: "SpecDock への3つの部品"
+		text: """
+			稼働の印は `GET /api/worktrees/summary`（worktree ごとのエージェントの数と状態）を SpecDock が読んで描く。開くボタンは `/embed/open-button`、
+			詳細とチャットは `/embed/agent?id=…` の iframe。組み込みそのものは spec-dock の epic-00471・epic-00526 で行い、その前に利用者が確かめる。
+			"""
+		satisfies: ["R-07"]
+	}
 	"D-06": {
 		title: "書き込みの守り"
 		text: """
