@@ -33,6 +33,8 @@ ID: "iss-00037"
   - 写し：[親のリンク・明](artifacts/20261114t121916z--embed-agent-newtab-parent-light.png)、[親のリンク・暗](artifacts/20261114t121916z-01--embed-agent-newtab-parent-dark.png)、[子のリンク・明](artifacts/20261114t121916z-02--embed-agent-newtab-child-light.png)、[子のリンク・暗](artifacts/20261114t121916z-03--embed-agent-newtab-child-dark.png)
   - 試しのサーバーは確かめの後に止めた。
 
+- PR：https://github.com/chemitaro/orca-web/pull/38（Refs #37）。
+
 ## 逸脱と判断
 
 - 仕様レビューの P2（走査の対象の欠け）に、仕様を変えずに「import を推移的にたどった全ファイル」を走査させる指示で答えた（意味を強める読み）。
@@ -43,4 +45,10 @@ ID: "iss-00037"
 - spec-review：合格（round 1）。spec-reviewer（Claude Opus 5.5 / medium、standard）。統括の決定（依頼書）を authority として渡した。対象の sha256 は requirement.cue `c6d56ce9…3464e1`、design.cue `61e47860…91618f`、plan.cue `6ef7a76d…94b1`。結果は P0 0・P1 0・P2 1・P3 0（`.workbench/spec-review/iss-00037/round-1.json`、検査 `round-1.check.json` は valid・pass）。
   - P2：T-02 の走査の対象が、`/embed/agent` が読む `web/write.js`・`web/view.js`・`web/embed/elapsed.js` を欠く。仕様は変えず、実装担当に「agent-frame.js から import を推移的にたどった全ファイル（web/ の外の階層も含む）」を走査させる（意味を強める読み。逸脱と判断に記録）。
 
+- final-quality-gate：合格（campaign `iss-00037-c1`、attempt 1、合格のコミット `49b5482`、base `3d547c1`）。quality-gate-reviewer（Claude Opus 5.5 / medium）P0〜P3 すべて 0、coverage_complete true。テストのレーン `npm run lint`・`npm test`（686 件）・`npm run build` はすべて exit 0。second_opinion none。PR #38 の head は合格のコミットと同じで、CI（lint、テスト、ビルド）は `49b5482` で pass。記録は [closure.md](closure.md)。
+
 ## Residual Risks / Follow-ups
+
+- 新しいタブが増える（iPhone の Safari では新しいタブに切り替わる）。宛先の取り違えを防ぐことを優先した（統括の決定）。
+- SpecDock 側の2回目の load の守り（iss-00593 の F-08）とは独立に効く。
+- `spec-dock work finish` は #37 を閉じるので、マージの後に統括か利用者が行う。explanation.html は雛形のまま（前の Issue と同じ）。
