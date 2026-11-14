@@ -4,6 +4,7 @@ import {
   agentHref,
   buildChat,
   buildDetail,
+  detailMarkWorktree,
   errorLabel,
   initialChat,
   olderResult,
@@ -212,4 +213,35 @@ test('olderResult は、前のページの応答を足すか、409 で置き換�
   const failed = olderResult(s, { status: 502, body: { ok: false, error: 'read_failed' } }, s.generation);
   assert.equal(failed.chat, s);
   assert.match(failed.notice ?? '', /前のページを読めない/);
+});
+
+test('T-17：detailMarkWorktree は、このエージェントだけを持ち経過の起点を外した worktree の写しを返し、なければ null', () => {
+  const me = {
+    id: 'me',
+    mark: 'waiting',
+    agentType: 'codex',
+    elapsedFrom: '2026-11-14T00:00:00.000Z',
+    elapsedBasis: 'state',
+  };
+  const summary = {
+    schema: 'orca-web.worktree-summary/v1',
+    worktrees: [
+      { id: 'w0', path: '/a', agents: [{ id: 'x', mark: 'done' }] },
+      { id: 'w1', path: '/b', agents: [{ id: 'y', mark: 'working' }, me] },
+    ],
+  };
+  assert.deepEqual(detailMarkWorktree(summary, 'me'), {
+    id: 'w1',
+    path: '/b',
+    agents: [{ ...me, elapsedFrom: null, elapsedBasis: null }],
+  });
+  assert.equal(me.elapsedFrom, '2026-11-14T00:00:00.000Z', '元の文書を変えない');
+  assert.equal(detailMarkWorktree(summary, 'nobody'), null);
+  assert.equal(detailMarkWorktree(summary, ''), null);
+  assert.equal(detailMarkWorktree({ ...summary, schema: 'x' }, 'me'), null);
+  assert.equal(detailMarkWorktree(null, 'me'), null);
+  assert.equal(
+    detailMarkWorktree({ schema: 'orca-web.worktree-summary/v1', worktrees: [null, { agents: 'x' }] }, 'me'),
+    null,
+  );
 });

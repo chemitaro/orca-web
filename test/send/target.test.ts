@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TerminalSendTarget } from '../../src/send/model.ts';
-import { buildPreview, compareTargets, resolveTarget } from '../../src/send/target.ts';
+import { buildPreview, compareTargets, resolveTarget, targetFingerprint } from '../../src/send/target.ts';
 import { agent, fact, repo, state, worktree } from '../runs/fixture.ts';
 import {
   CHAT_AGENT,
@@ -199,4 +199,21 @@ test('状態の worktree、handle、種類が宛先と一致しなければ確�
   assert.ok(first);
   first.worktreeId = 'other-worktree';
   assert.equal(buildPreview(chatState, chatTarget()), null);
+});
+
+test('指紋は経路ごとの固定値で、各識別項目を区別し識別子を含まない', () => {
+  for (const [target, expected] of [
+    [terminalTarget(), '6339a27dcf1cdc2cf7f87b7fa5b4591f'],
+    [chatTarget(), '0e1821f3ebe7bdfe81c7053700be51f1'],
+  ] as const) {
+    assert.equal(targetFingerprint(target), expected);
+    assert.match(targetFingerprint(target), /^[a-f0-9]{32}$/);
+    for (const [key, value] of Object.entries(target)) {
+      if (key === 'agentId' || key === 'route') continue;
+      assert.notEqual(targetFingerprint({ ...target, [key]: `${value}-changed` }), expected, key);
+      assert.ok(!expected.includes(value), key);
+    }
+    assert.equal(targetFingerprint({ ...target, agentId: 'derived-id' }), expected);
+  }
+  assert.notEqual(targetFingerprint({ ...terminalTarget(), leafId: null }), targetFingerprint(terminalTarget()));
 });

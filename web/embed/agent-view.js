@@ -43,6 +43,25 @@ export function safeHref(url) {
   }
 }
 
+const SUMMARY_SCHEMA = 'orca-web.worktree-summary/v1';
+
+/**
+ * 稼働の印の要約から、このエージェントのいる worktree を、このエージェントだけを持つ写しにする（D-08）。
+ * 写しのエージェントは経過の起点（elapsedFrom、elapsedBasis）を null にする（印に経過を出さない。R-11）。見つからなければ null。
+ * @param {any} summary GET /api/worktrees/summary の文書
+ * @param {string} agentId
+ */
+export function detailMarkWorktree(summary, agentId) {
+  if (!summary || typeof summary !== 'object' || summary.schema !== SUMMARY_SCHEMA) return null;
+  if (!Array.isArray(summary.worktrees) || !agentId) return null;
+  for (const worktree of summary.worktrees) {
+    if (!worktree || typeof worktree !== 'object' || !Array.isArray(worktree.agents)) continue;
+    const agent = worktree.agents.find((a) => a && typeof a === 'object' && a.id === agentId);
+    if (agent) return { ...worktree, agents: [{ ...agent, elapsedFrom: null, elapsedBasis: null }] };
+  }
+  return null;
+}
+
 export const agentHref = (id) => `/embed/agent?id=${encodeURIComponent(id)}`;
 
 function agentLabel(agent, worktreeNames) {

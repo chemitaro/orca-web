@@ -5,7 +5,7 @@ import type { SendRpc } from '../orca/send-gates.ts';
 import type { StateDocument } from '../state/model.ts';
 import type { SendJournal, SendRecord } from './journal.ts';
 import type { SendPreview, SendTarget } from './model.ts';
-import { buildPreview, compareTargets, resolveTarget } from './target.ts';
+import { buildPreview, compareTargets, resolveTarget, targetFingerprint } from './target.ts';
 import { checkText, digestText, newOperationId, TicketStore } from './ticket.ts';
 
 export interface SendFailure {
@@ -21,7 +21,8 @@ export interface SendFailure {
     | 'unsupported'
     | 'unknown_shape'
     | 'unreachable'
-    | 'record_failed';
+    | 'record_failed'
+    | 'record_unreadable';
   reason?: string;
   missing?: string[];
 }
@@ -47,8 +48,15 @@ export interface SendDeps {
 }
 export type CheckResult =
   | { operationId: string; state: 'in_progress' | 'not_sent' }
-  | { operationId: string; state: 'recorded'; record: SendRecord; checkError?: 'unreachable' };
-type Preflight = SendAnswer<{ target: SendTarget; preview: SendPreview; fence?: number }>;
+  | {
+      operationId: string;
+      state: 'recorded';
+      record: SendRecord;
+      checkError?: 'unreachable';
+      checkWarning?: 'check_record_failed';
+    };
+type SendRefusal = Omit<SendFailure, 'error'> & { error: Exclude<SendFailure['error'], 'record_unreadable'> };
+type Preflight = { ok: true; target: SendTarget; preview: SendPreview; fence?: number } | SendRefusal;
 export class SendService {
   readonly #deps: SendDeps;
   #busy = false;
@@ -62,13 +70,17 @@ export class SendService {
     this.#tickets = deps.tickets ?? new TicketStore({ now: deps.now ?? Date.now });
     this.#operationId = deps.operationId ?? (() => newOperationId((deps.now ?? Date.now)()));
   }
-  async #preflight(agentId: string): Promise<Preflight> {
-    const cap = await this.#deps.capabilities();
-    if (cap.connection.state !== 'connected' || !cap.runtimeId) return { ok: false, error: 'unreachable' };
+  #rememberRuntime(cap: CapabilityReport): cap is CapabilityReport & { runtimeId: string } {
+    if (cap.connection.state !== 'connected' || !cap.runtimeId) return false;
     if (cap.runtimeId !== this.#runtimeId) {
       this.#blocked.clear();
       this.#runtimeId = cap.runtimeId;
     }
+    return true;
+  }
+  async #preflight(agentId: string): Promise<Preflight> {
+    const cap = await this.#deps.capabilities();
+    if (!this.#rememberRuntime(cap)) return { ok: false, error: 'unreachable' };
     const tabs = await this.#deps.rpc.call('session.tabs.listAll', {});
     if (!tabs.ok || !tabs.runtimeId) return { ok: false, error: 'unreachable' };
     if (tabs.runtimeId !== cap.runtimeId) return { ok: false, error: 'unreachable', reason: 'runtime_changed' };
@@ -110,7 +122,7 @@ export class SendService {
     if (!preview) return { ok: false, error: 'not_sendable', reason: 'state_out_of_date' };
     return { ok: true, target: resolved.target, preview, ...(fence === undefined ? {} : { fence }) };
   }
-  #readError(failure: SendReadFailure, target: SendTarget): SendFailure {
+  #readError(failure: SendReadFailure, target: SendTarget): SendRefusal {
     if (failure.error === 'unsupported' && failure.method) this.#block(target, failure.method);
     if (failure.error === 'unsupported')
       return { ok: false, error: 'unsupported', missing: failure.method ? [`rpc:${failure.method}`] : [] };
@@ -125,14 +137,33 @@ export class SendService {
     methods.add(method);
     this.#blocked.set(target.route, methods);
   }
-  async status(
-    agentId: string,
-  ): Promise<{ enabled: boolean; available: boolean; route: SendTarget['route'] | null; reason: string | null }> {
+  async status(agentId: string): Promise<{
+    enabled: boolean;
+    available: boolean;
+    route: SendTarget['route'] | null;
+    reason: string | null;
+    target: string | null;
+    agentType: string | null;
+  }> {
     const enabled = await this.#deps.readSendEnabled();
     const checked = await this.#preflight(agentId);
     return checked.ok
-      ? { enabled, available: true, route: checked.target.route, reason: null }
-      : { enabled, available: false, route: null, reason: checked.reason ?? checked.error };
+      ? {
+          enabled,
+          available: true,
+          route: checked.target.route,
+          reason: null,
+          target: targetFingerprint(checked.target),
+          agentType: checked.target.agentType,
+        }
+      : {
+          enabled,
+          available: false,
+          route: null,
+          reason: checked.reason ?? checked.error,
+          target: null,
+          agentType: null,
+        };
   }
   async confirm({
     ticket,
@@ -218,7 +249,7 @@ export class SendService {
       this.#busy = false;
     }
   }
-  async #refuse(failure: SendFailure, operationId = this.#operationId(), agentId?: string): Promise<SendFailure> {
+  async #refuse(failure: SendRefusal, operationId = this.#operationId(), agentId?: string): Promise<SendFailure> {
     const reason =
       failure.error === 'agent_not_found' || failure.error === 'invalid_text' ? 'target_changed' : failure.error;
     await this.#deps.journal.appendRefused({
@@ -234,7 +265,13 @@ export class SendService {
     // 処理中の判定と未使用票の取消しは、記録の読みより先に同期して終える。
     if (this.#inFlight.has(operationId)) return { ok: true, operationId, state: 'in_progress' };
     this.#tickets.cancelByOperation(operationId);
-    let record = await this.#deps.journal.read(operationId);
+    let checkWarning: 'check_record_failed' | undefined;
+    let record: SendRecord | null;
+    try {
+      record = await this.#deps.journal.read(operationId);
+    } catch {
+      return { ok: false, error: 'record_unreadable' };
+    }
     if (query && record?.outcome === 'unknown' && record.before) {
       const target = record.before.target;
       const result =
@@ -243,7 +280,13 @@ export class SendService {
           : await this.#deps.adapter.checkChat(target, operationId);
       if (!result.ok && result.error === 'unreachable')
         return { ok: true, operationId, state: 'recorded', record, checkError: 'unreachable' };
-      if (!result.ok && result.error === 'unsupported' && result.method) this.#block(target, result.method);
+      if (!result.ok && result.error === 'unsupported' && result.method) {
+        try {
+          if (this.#rememberRuntime(await this.#deps.capabilities())) this.#block(target, result.method);
+        } catch {
+          // 現在の runtime が読めないときは、記録の古い世代で経路を止めない。
+        }
+      }
       const classified: SendResult = result.ok
         ? { outcome: result.outcome, detail: result.detail }
         : {
@@ -253,17 +296,33 @@ export class SendService {
               ...(result.method ? { method: result.method } : {}),
             },
           };
-      await this.#deps.journal.appendCheck({ operationId, ...classified });
-      record = (await this.#deps.journal.read(operationId)) ?? record;
+      if (!(await this.#deps.journal.appendCheck({ operationId, ...classified }))) checkWarning = 'check_record_failed';
+      try {
+        record = (await this.#deps.journal.read(operationId)) ?? record;
+      } catch {
+        return { ok: false, error: 'record_unreadable' };
+      }
     }
-    return record ? { ok: true, operationId, state: 'recorded', record } : { ok: true, operationId, state: 'not_sent' };
+    return record
+      ? { ok: true, operationId, state: 'recorded', record, ...(checkWarning ? { checkWarning } : {}) }
+      : { ok: true, operationId, state: 'not_sent' };
   }
-  async intent({ agent, text }: { agent: string; text: string }): Promise<SendAnswer<IntentResult>> {
+  async intent({
+    agent,
+    text,
+    target,
+  }: {
+    agent: string;
+    text: string;
+    target?: string;
+  }): Promise<SendAnswer<IntentResult>> {
     if (!(await this.#deps.readSendEnabled())) return { ok: false, error: 'send_disabled' };
     const valid = checkText(text);
     if (!valid.ok) return valid;
     const checked = await this.#preflight(agent);
     if (!checked.ok) return checked;
+    if (target !== undefined && target !== targetFingerprint(checked.target))
+      return { ok: false, error: 'target_changed', reason: 'changed_since_shown' };
     const operationId = this.#operationId();
     const digest = digestText(text);
     const ticket = this.#tickets.issue({ target: checked.target, digest, operationId });

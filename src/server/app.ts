@@ -66,6 +66,7 @@ const SEND_ERROR_STATUS: Record<SendFailure['error'], number> = {
   unknown_shape: 502,
   unreachable: 503,
   record_failed: 503,
+  record_unreadable: 503,
 };
 
 const DEFAULT_WEB_DIR = path.resolve(import.meta.dirname, '..', '..', 'web');
@@ -376,14 +377,21 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
       const key = pathname === '/api/send/intent' ? 'agent' : 'ticket';
       if (
         !isRecord(body) ||
-        Object.keys(body).some((k) => k !== key && k !== 'text') ||
+        Object.keys(body).some((k) => k !== key && k !== 'text' && !(key === 'agent' && k === 'target')) ||
         !isBoundedText(body[key], key === 'agent' ? MAX_AGENT_CHARS : 128 * 1024) ||
-        typeof body.text !== 'string'
+        typeof body.text !== 'string' ||
+        (key === 'agent' &&
+          'target' in body &&
+          (typeof body.target !== 'string' || !/^[a-f0-9]{32}$/.test(body.target)))
       )
         return sendError(res, 400, 'invalid_request');
       const answer =
         key === 'agent'
-          ? await service.intent({ agent: body[key] as string, text: body.text })
+          ? await service.intent({
+              agent: body[key] as string,
+              text: body.text,
+              ...('target' in body ? { target: body.target as string } : {}),
+            })
           : await service.confirm({ ticket: body[key] as string, text: body.text });
       if (!answer.ok) return sendJson(res, SEND_ERROR_STATUS[answer.error], answer);
       const { ok: _ok, ...result } = answer;

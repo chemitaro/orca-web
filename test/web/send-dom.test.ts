@@ -60,103 +60,126 @@ const fakeDocument = {
 
 const DANGER = '<script>alert(1)</script><img src=x onerror=alert(2)>';
 const OP = '1763000000000-0123456789abcdef0123456789abcdef';
-const T0 = Date.parse('2026-11-13T00:00:00.000Z');
-const ALLOWED = new Set(['DIV', 'P', 'DL', 'DT', 'DD', 'UL', 'LI', 'BUTTON', 'SPAN']);
+const FP_A = 'a'.repeat(32);
+const FP_B = 'b'.repeat(32);
+const ALLOWED = new Set(['DIV', 'P', 'UL', 'LI', 'BUTTON', 'SPAN']);
+type State = ReturnType<typeof initialSend>;
 
-function confirmState(text: string) {
-  let s = reduceSend(initialSend(), {
-    type: 'status',
-    status: 200,
-    body: { enabled: true, available: true, route: 'terminal', reason: null },
-  });
-  s = reduceSend(s, { type: 'input', text });
-  s = reduceSend(s, { type: 'submit' });
-  return reduceSend(s, {
-    type: 'intent',
-    status: 200,
-    body: {
-      ticket: 'tk',
-      expiresAt: T0 + 60_000,
-      operationId: OP,
-      text,
-      digest: 'd',
-      preview: {
-        repoName: DANGER,
-        worktreePath: DANGER,
-        branch: DANGER,
-        agentType: 'claude',
-        title: DANGER,
-        state: 'idle',
-        route: 'terminal',
-        sessionShortId: 'abcd1234',
-      },
-    },
-  });
-}
+const run = (state: State, ...events: Record<string, unknown>[]): State =>
+  events.reduce<State>((s, e) => reduceSend(s, e as never), state);
+const statusOk = (target = FP_A) => ({
+  type: 'status',
+  status: 200,
+  body: { enabled: true, available: true, route: 'terminal', reason: null, target, agentType: 'claude' },
+});
+const sent = (text: string) =>
+  run(
+    initialSend(),
+    statusOk(),
+    { type: 'input', text },
+    { type: 'submit' },
+    { type: 'intent', status: 200, body: { ticket: 'tk', operationId: OP, text } },
+  );
+const draw = (state: State) => renderSendPanel(fakeDocument, buildSendView(state)) as unknown as FakeElement;
 
-test('`<script>` を含む本文と題名が、確認の画面に文字のまま描かれ、要素にならない', () => {
-  const view = buildSendView(confirmState(`${DANGER}\n二行目`), { formatTime: () => 't' });
-  const panel = renderSendPanel(fakeDocument, view) as unknown as FakeElement;
+function checkNodes(panel: FakeElement) {
   const nodes = panel.all();
   for (const node of nodes) assert.ok(ALLOWED.has(node.tagName), `思わない要素 ${node.tagName}`);
-  assert.ok(!nodes.some((n) => n.tagName === 'SCRIPT' || n.tagName === 'IMG'));
-  const text = panel.textContent;
-  assert.ok(text.includes(`${DANGER}\n二行目`), '本文は改行を含めて文字のまま');
-  assert.equal(text.split(DANGER).length - 1, 5, '題名、リポジトリ、worktree、ブランチ、本文の5か所');
-  const body = nodes.find((n) => n.className.includes('send-text'));
-  assert.equal(body?.textContent, `${DANGER}\n二行目`);
-  const buttons = nodes.filter((n) => n.tagName === 'BUTTON');
-  assert.deepEqual(
-    buttons.map((b) => [b.dataset.action, b.textContent, b.type, b.disabled]),
-    [
-      ['confirm', '送る', 'button', false],
-      ['cancel', 'やめる', 'button', false],
-    ],
-  );
-});
+  return nodes;
+}
+const buttonsOf = (nodes: FakeElement[]) =>
+  nodes.filter((n) => n.tagName === 'BUTTON').map((b) => [b.dataset.action, b.textContent, b.type, b.disabled]);
 
-test('送っている間はボタンを押せなくし、結果と warning と操作の ID を文字で描く', () => {
-  const sending = reduceSend(confirmState('本文'), { type: 'confirm', now: T0 + 1 });
-  const sendingPanel = renderSendPanel(fakeDocument, buildSendView(sending)) as unknown as FakeElement;
-  const sendingButtons = sendingPanel.all().filter((n) => n.tagName === 'BUTTON');
-  assert.ok(sendingButtons.length > 0);
-  assert.ok(sendingButtons.every((b) => b.disabled));
+test('T-12：理由・warning・code に紛れた HTML は文字のまま描かれ、要素にならない', () => {
+  const disabled = run(initialSend(), {
+    type: 'status',
+    status: 200,
+    body: { enabled: true, available: false, route: null, reason: DANGER, target: null, agentType: null },
+  });
+  const reasonPanel = draw(disabled);
+  checkNodes(reasonPanel);
+  assert.ok(reasonPanel.textContent.includes(DANGER), '理由は文字のまま');
 
-  const result = reduceSend(sending, {
+  const warned = reduceSend(sent('本文'), {
     type: 'confirmed',
     status: 200,
-    body: { operationId: OP, outcome: 'unknown', detail: { warning: 'agent_not_verified', code: DANGER } },
+    body: { operationId: OP, outcome: 'accepted', detail: { warning: DANGER } },
   });
-  const panel = renderSendPanel(fakeDocument, buildSendView(result)) as unknown as FakeElement;
-  const nodes = panel.all();
-  for (const node of nodes) assert.ok(ALLOWED.has(node.tagName), `思わない要素 ${node.tagName}`);
-  const text = panel.textContent;
-  assert.match(text, /結果不明/);
-  assert.match(text, /要確認/);
-  assert.ok(text.includes(OP));
-  assert.ok(text.includes(DANGER), 'detail の値も文字のまま');
-  const outcome = nodes.find((n) => n.className.includes('send-outcome'));
-  assert.equal(outcome?.dataset.outcome, 'unknown');
+  const warnPanel = draw(warned);
+  const nodes = checkNodes(warnPanel);
+  const items = nodes.filter((n) => n.tagName === 'LI');
   assert.deepEqual(
-    nodes.filter((n) => n.tagName === 'BUTTON').map((b) => b.dataset.action),
-    ['query', 'back'],
+    items.map((n) => n.textContent),
+    [`注意：${DANGER}`],
   );
+  assert.equal(nodes.find((n) => n.tagName === 'UL')?.className, 'send-warnings');
+  const message = nodes.find((n) => n.className === 'send-message');
+  assert.equal(message?.dataset.kind, 'info');
+
+  const refused = run(
+    initialSend(),
+    statusOk(),
+    { type: 'input', text: 'x' },
+    { type: 'submit' },
+    {
+      type: 'intent',
+      status: 409,
+      body: { ok: false, error: 'not_sendable', reason: DANGER },
+    },
+  );
+  const refusedPanel = draw(refused);
+  checkNodes(refusedPanel);
+  assert.ok(refusedPanel.textContent.includes(DANGER), 'reason は文字のまま');
+
+  const unknownCode = run(
+    initialSend(),
+    statusOk(),
+    { type: 'input', text: 'x' },
+    { type: 'submit' },
+    {
+      type: 'intent',
+      status: 503,
+      body: { ok: false, error: 'unreachable', reason: DANGER },
+    },
+  );
+  assert.ok(draw(unknownCode).textContent.includes(DANGER), '知らない reason も文字のまま');
 });
 
-test('止まっているときは理由を描き、ボタンを押せなくする', () => {
-  const off = reduceSend(initialSend(), {
-    type: 'status',
-    status: 200,
-    body: { enabled: false, available: true, route: 'terminal', reason: null },
+test('T-12：結果不明の帯は文と「確かめる」「閉じる」を作り、照会の間は押せなくする', () => {
+  const unknown = reduceSend(sent('本文'), { type: 'confirm-failed' });
+  const nodes = checkNodes(draw(unknown));
+  assert.ok(nodes.some((n) => n.className === 'send-unknown'));
+  assert.ok(nodes.some((n) => n.textContent === '届いたか分かりません。自動では送り直しません。'));
+  assert.deepEqual(buttonsOf(nodes), [
+    ['query', '確かめる', 'button', false],
+    ['dismiss', '閉じる', 'button', false],
+  ]);
+  const checking = checkNodes(draw(reduceSend(unknown, { type: 'query' })));
+  assert.deepEqual(buttonsOf(checking), [
+    ['query', '確かめています…', 'button', true],
+    ['dismiss', '閉じる', 'button', true],
+  ]);
+});
+
+test('T-12：changed は知らせの1行と「新しい宛先で続ける」を作り、新しい指紋がなければ知らせだけ', () => {
+  const changed = run(initialSend(), statusOk(), { type: 'input', text: 'x' }, statusOk(FP_B));
+  const nodes = checkNodes(draw(changed));
+  assert.ok(nodes.some((n) => n.className === 'send-changed' && /宛先が変わりました/.test(n.textContent)));
+  assert.deepEqual(buttonsOf(nodes), [['adopt', '新しい宛先で続ける', 'button', false]]);
+  const noPending = checkNodes(draw({ ...changed, pendingTarget: null }));
+  assert.deepEqual(buttonsOf(noPending), []);
+});
+
+test('T-12：書く欄では確認の画面・期限・ボタンを作らない（送るボタンは agent.html にある）', () => {
+  const panel = draw(run(initialSend(), statusOk(), { type: 'input', text: '本文' }));
+  const nodes = checkNodes(panel);
+  assert.deepEqual(buttonsOf(nodes), []);
+  assert.doesNotMatch(panel.textContent, /期限|この宛先に|確かめる/);
+});
+
+test('T-12：innerHTML を使うと偽の要素が投げる', () => {
+  const el = new FakeElement('div');
+  assert.throws(() => {
+    el.innerHTML = DANGER;
   });
-  const panel = renderSendPanel(fakeDocument, buildSendView(off)) as unknown as FakeElement;
-  const message = panel.all().find((n) => n.className.includes('send-message'));
-  assert.match(message?.textContent ?? '', /設定で送信が止まっています/);
-  assert.equal(message?.dataset.kind, 'error');
-  assert.ok(
-    panel
-      .all()
-      .filter((n) => n.tagName === 'BUTTON')
-      .every((b) => b.disabled),
-  );
 });

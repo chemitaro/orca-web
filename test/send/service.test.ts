@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -9,9 +9,19 @@ import { createSendAdapter } from '../../src/orca/send.ts';
 import { SendRpc } from '../../src/orca/send-gates.ts';
 import { SendJournal } from '../../src/send/journal.ts';
 import { SendService } from '../../src/send/service.ts';
+import { targetFingerprint } from '../../src/send/target.ts';
 import { digestText, TicketStore } from '../../src/send/ticket.ts';
 import { agent, fact, repo, state, worktree } from '../runs/fixture.ts';
-import { CHAT_AGENT, chatTab, inventory, RUNTIME, TERMINAL_AGENT, terminalTab } from './fixture.ts';
+import {
+  CHAT_AGENT,
+  chatTab,
+  chatTarget,
+  inventory,
+  RUNTIME,
+  TERMINAL_AGENT,
+  terminalTab,
+  terminalTarget,
+} from './fixture.ts';
 
 const ok = (result: unknown, runtimeId: string | null = RUNTIME): RpcOutcome => ({ ok: true, result, runtimeId });
 async function fixture(t: import('node:test').TestContext, agentType: 'claude' | 'codex' = 'codex') {
@@ -299,7 +309,14 @@ test('preflight は untabbed と前面のシェルと読めない状態を送ら
 
 test('status は送信せず Chat の fence と利用可能性を確かめる', async (t) => {
   const f = await fixture(t);
-  assert.deepEqual(await f.service.status(CHAT_AGENT), { enabled: true, available: true, route: 'chat', reason: null });
+  assert.deepEqual(await f.service.status(CHAT_AGENT), {
+    enabled: true,
+    available: true,
+    route: 'chat',
+    reason: null,
+    target: targetFingerprint(chatTarget()),
+    agentType: 'claude',
+  });
   assert.ok(f.calls.some((c) => c.method === 'agentSession.history'));
   f.responses.set('agentSession.history', ok({ ok: true, page: { sessionId: 'other', fence: 4 } }));
   assert.deepEqual(await f.service.intent({ agent: CHAT_AGENT, text: 'hello' }), { ok: false, error: 'unknown_shape' });
@@ -309,6 +326,8 @@ test('status は送信せず Chat の fence と利用可能性を確かめる', 
     available: false,
     route: null,
     reason: 'unknown_shape',
+    target: null,
+    agentType: null,
   });
   assert.equal(f.sends().length, 0);
 });
@@ -829,4 +848,157 @@ test('無効な票の拒否を記録している間も次の確定を busy に�
   await invalid;
   assert.deepEqual(second, { ok: false, error: 'busy' });
   assert.equal(f.sends().length, 0);
+});
+
+test('status は端末の指紋と種類を返し、preflight が通らなければ null にする', async (t) => {
+  const f = await fixture(t);
+  assert.deepEqual(await f.service.status(TERMINAL_AGENT), {
+    enabled: true,
+    available: true,
+    route: 'terminal',
+    reason: null,
+    target: targetFingerprint(terminalTarget()),
+    agentType: 'codex',
+  });
+  f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: '/bin/zsh' } }));
+  assert.deepEqual(await f.service.status(TERMINAL_AGENT), {
+    enabled: true,
+    available: false,
+    route: null,
+    reason: 'shell_foreground',
+    target: null,
+    agentType: null,
+  });
+  assert.equal(f.sends().length, 0);
+});
+
+test('意図の違う指紋では票も送信も記録も作らず、同じ指紋と省略は票を返す', async (t) => {
+  const f = await fixture(t);
+  for (const agent of [TERMINAL_AGENT, CHAT_AGENT]) {
+    const status = await f.service.status(agent);
+    assert.ok(status.target);
+    assert.deepEqual(await f.service.intent({ agent, text: 'hello', target: '0'.repeat(32) }), {
+      ok: false,
+      error: 'target_changed',
+      reason: 'changed_since_shown',
+    });
+    const matched = await f.service.intent({ agent, text: 'hello', target: status.target });
+    const legacy = await f.service.intent({ agent, text: 'hello' });
+    assert.ok(matched.ok && matched.ticket);
+    assert.ok(legacy.ok && legacy.ticket);
+  }
+  assert.equal(f.sends().length, 0);
+  assert.equal(await f.journal.read('1234567890123-00000000000000000000000000000005'), null);
+});
+
+test('照会の結果が保存できなくても結果を返し checkWarning を添える', async (t) => {
+  const f = await fixture(t);
+  const dir = await mkdtemp(path.join(tmpdir(), 'orca-web-check-record-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  let broken = false;
+  const journal = new SendJournal(dir, {
+    open: async (...args) => {
+      if (broken) throw new Error('disk failed');
+      return open(...args);
+    },
+  });
+  const service = new SendService({ ...f.deps, journal });
+  f.responses.set('terminal.send', { ok: false, kind: 'timeout', message: 'private' });
+  const intent = await service.intent({ agent: TERMINAL_AGENT, text: 'hello' });
+  assert.ok(intent.ok);
+  await service.confirm({ ticket: intent.ticket, text: 'hello' });
+  broken = true;
+  const result = await service.check(intent.operationId, { query: true });
+  assert.ok(result.ok && result.state === 'recorded');
+  assert.equal(result.record.outcome, 'submitted');
+  assert.equal(result.checkWarning, 'check_record_failed');
+  assert.equal((await new SendJournal(dir).read(intent.operationId))?.outcome, 'unknown');
+  assert.equal(f.sends().length, 1);
+});
+
+test('記録を読めない照会は not_sent ではなく record_unreadable で送り直さない', async (t) => {
+  const f = await fixture(t);
+  f.journal.read = async () => {
+    throw new Error('read failed');
+  };
+  for (const query of [false, true]) {
+    assert.deepEqual(await f.service.check('1234567890123-00000000000000000000000000000001', { query }), {
+      ok: false,
+      error: 'record_unreadable',
+    });
+  }
+  assert.equal(f.calls.length, 0);
+});
+
+test('再起動後 preflight 前の method_not_found は現在の runtime の経路だけを止める', async (t) => {
+  for (const route of ['terminal', 'chat'] as const) {
+    for (const runtime of ['same', 'different', 'unreachable'] as const) {
+      await t.test(`${route}: ${runtime}`, async (t) => {
+        const f = await fixture(t);
+        const agent = route === 'terminal' ? TERMINAL_AGENT : CHAT_AGENT;
+        f.responses.set(route === 'terminal' ? 'terminal.send' : 'agentSession.send', {
+          ok: false,
+          kind: 'timeout',
+          message: 'private',
+        });
+        const intent = await f.service.intent({ agent, text: 'hello' });
+        assert.ok(intent.ok);
+        await f.service.confirm({ ticket: intent.ticket, text: 'hello' });
+        if (runtime === 'different') {
+          f.cap.runtimeId = 'new-runtime';
+          f.responses.set('session.tabs.listAll', ok(inventory(), 'new-runtime'));
+        } else if (runtime === 'unreachable') {
+          f.cap.connection = { state: 'unreachable', reason: 'test' };
+        }
+        const method = route === 'terminal' ? 'orchestration.requestShow' : 'agentSession.sendRecorded';
+        f.responses.set(method, { ok: false, kind: 'orca-error', code: 'method_not_found', message: 'private' });
+        // 新しいサービスで最初に読むのは、永続化した記録と照会だけ。
+        const restarted = new SendService(f.deps);
+        const result = await restarted.check(intent.operationId, { query: true });
+        assert.ok(result.ok && result.state === 'recorded');
+        assert.equal(result.record.outcome, 'unknown');
+        if (runtime === 'unreachable') f.cap.connection = { state: 'connected' };
+        const status = await restarted.status(agent);
+        assert.equal(status.available, runtime !== 'same');
+        const next = await restarted.intent({ agent, text: 'hello' });
+        if (runtime === 'same') {
+          assert.deepEqual(next, { ok: false, error: 'unsupported', missing: [`rpc:${method}`] });
+          assert.equal((await restarted.status(route === 'terminal' ? CHAT_AGENT : TERMINAL_AGENT)).available, true);
+          f.cap.runtimeId = 'next-runtime';
+          f.responses.set('session.tabs.listAll', ok(inventory(), 'next-runtime'));
+          assert.equal((await restarted.status(agent)).available, true);
+        } else assert.ok(next.ok);
+        assert.equal(f.sends().length, 1);
+      });
+    }
+  }
+});
+
+test('再起動後 unknown の照会だけがメモリーにある読み取り失敗は record_unreadable にする', async (t) => {
+  const f = await fixture(t);
+  const dir = await mkdtemp(path.join(tmpdir(), 'orca-web-unknown-check-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const service = new SendService({ ...f.deps, journal: new SendJournal(dir) });
+  f.responses.set('terminal.send', { ok: false, kind: 'timeout', message: 'private' });
+  const intent = await service.intent({ agent: TERMINAL_AGENT, text: 'hello' });
+  assert.ok(intent.ok);
+  await service.confirm({ ticket: intent.ticket, text: 'hello' });
+  const journal = new SendJournal(dir);
+  const restarted = new SendService({ ...f.deps, journal });
+  f.responses.set('orchestration.requestShow', ok({ state: 'pending' }));
+  const pending = await restarted.check(intent.operationId, { query: true });
+  assert.ok(pending.ok && pending.state === 'recorded');
+  assert.equal(pending.record.outcome, 'unknown');
+  assert.equal(pending.record.checks.length, 1);
+  await rm(path.join(dir, 'sends.jsonl'));
+  await mkdir(path.join(dir, 'sends.jsonl'));
+  for (const query of [false, true]) {
+    assert.deepEqual(await restarted.check(intent.operationId, { query }), {
+      ok: false,
+      error: 'record_unreadable',
+    });
+  }
+  await assert.rejects(journal.read(intent.operationId), { code: 'EISDIR' });
+  assert.equal(f.calls.filter((call) => call.method === 'orchestration.requestShow').length, 1);
+  assert.equal(f.sends().length, 1);
 });
