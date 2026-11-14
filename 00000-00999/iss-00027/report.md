@@ -21,6 +21,7 @@ ID: "iss-00027"
   - 合格した文書の sha256：requirement.cue `6e5c8d1da4f812878e47d3e36093d57bf614ed1c1b42702879887b7037ead583`、design.cue `43102a2d5238866a6361511176f531caca28694b660f455dadee29dc4734fa16`、plan.cue `01d996b22d30f2bdcd11cb98d133b1ae98c7a0dab7ab96f810f194d5ce146c54`
   - 結果：`.workbench/spec-review/iss-00027/round-3.json`。照合のコミット `10ab4e9a64223d6b295f56d6f90c8cde5afe1343`
 - 追記の最終品質ゲート：合格（fqg-iss-00027-2、attempt 1、2026-11-14）。合格のコミット `99ba358c80140adc074cf80df71fbce71c630be8`、範囲 `10ab4e9..99ba358`。quality-gate-reviewer（Opus 5.5 / medium）は P0〜P3 すべて 0、coverage 完全。D-08 の表の値は SpecDock の app.css の明暗の値とすべて一致。テスト `npm run lint`・`npm test`（576 pass）・`npm run build` すべて exit 0。closure：`.workbench/final-quality-gate/fqg-iss-00027-2/closure.md`。記録だけのコミットはなし。
+- 追記の PR：https://github.com/chemitaro/orca-web/pull/30（head `99ba358`）。CI：observable_ci PASS、merge_readiness READY（2026-11-14）。
 
 詳細: [Report Guide](../../../docs/authoring/report.md)
 
