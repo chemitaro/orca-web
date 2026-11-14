@@ -58,6 +58,11 @@ ID: "iss-00028"
 - closure：`.workbench/final-quality-gate/fqg-iss-00028-1/closure.md`。記録だけのコミットはなし。P2/P3 なし。
 - 仕様の plan.cue は、合格の後に手順の status を done にした（status の更新だけ）。
 
+### PR と CI
+
+- PR：https://github.com/chemitaro/orca-web/pull/32（head `de9f0c9`、`Refs #28`）。
+- CI（github-pr-checks の observer、--watch）：`OBSERVED_CI_PASS`、merge_readiness `READY`（2026-11-14T02:58Z）。マージは統括が行う。
+
 ## Verification
 
 - テスト：開始のコミットで 576 pass。CP-1 の後（46df4ec）で 593、取り込みの後（9a694fe）で 598、`de9f0c9` で 618 件 pass。`npm run lint` と `npm run build` は exit 0。
