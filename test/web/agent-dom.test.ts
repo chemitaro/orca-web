@@ -8,6 +8,7 @@ class FakeElement {
   readonly tagName: string;
   readonly children: FakeElement[] = [];
   readonly dataset: Record<string, string> = {};
+  readonly attrs: Record<string, string> = {};
   className = '';
   title = '';
   href = '';
@@ -37,6 +38,11 @@ class FakeElement {
     throw new Error('insertAdjacentHTML must not be used');
   }
 
+  setAttribute(name: string, value: string): void {
+    if (name.toLowerCase().startsWith('on')) throw new Error(`event attribute ${name} must not be set`);
+    this.attrs[name] = String(value);
+  }
+
   append(...nodes: FakeElement[]): void {
     this.children.push(...nodes);
   }
@@ -48,6 +54,7 @@ class FakeElement {
 
 const fakeDocument = {
   createElement: (tag: string) => new FakeElement(tag),
+  createElementNS: (_ns: string, tag: string) => new FakeElement(tag),
   write() {
     throw new Error('document.write must not be used');
   },
@@ -113,7 +120,10 @@ test('詳細の値と題名は文字のまま描き、リンクは与えた href
     links.map((a) => a.href),
     ['https://github.com/o/r/pull/1', '/embed/agent?id=a'],
   );
-  assert.equal(links[0]?.rel, 'noopener noreferrer');
+  for (const link of links) {
+    assert.equal(link.target, '_blank');
+    assert.equal(link.rel, 'noopener noreferrer');
+  }
   const missing = nodes.find((n) => n.className === 'missing');
   assert.ok(missing);
   assert.match(
@@ -273,4 +283,53 @@ test('T-17：要約にこのエージェントがない・読めないときは�
   assert.equal(container.children.length, 0);
   renderDetailMark(container, { schema: 'other', worktrees: [] }, 'me', { now: NOW });
   assert.equal(container.children.length, 0);
+});
+
+test('T-01：親・子2つ・PR のすべてを同じ href の新しいタブで開く', () => {
+  const el = renderDetail(fakeDocument, {
+    title: '詳細',
+    rows: [
+      { label: '親', text: DANGER, href: '/embed/agent?id=parent', note: null },
+      {
+        label: '子',
+        text: '2',
+        href: null,
+        note: null,
+        links: [
+          { text: DANGER, href: '/embed/agent?id=child-1' },
+          { text: '子2', href: '/embed/agent?id=child-2' },
+        ],
+      },
+      { label: 'PR', text: '#37', href: 'https://github.com/o/r/pull/37', note: null },
+    ],
+  }) as unknown as FakeElement;
+  const links = el.all().filter((node) => node.tagName === 'A');
+  assert.deepEqual(
+    links.map((link) => link.href),
+    ['/embed/agent?id=parent', '/embed/agent?id=child-1', '/embed/agent?id=child-2', 'https://github.com/o/r/pull/37'],
+  );
+  for (const link of links) {
+    assert.equal(link.target, '_blank');
+    assert.equal(link.rel, 'noopener noreferrer');
+  }
+  for (const link of links) {
+    assert.equal(link.title, '新しいタブで開く');
+    assert.equal(link.className, 'newtab');
+    const hidden = link.children.filter((node) => node.className === 'vh');
+    assert.equal(hidden.length, 1);
+    assert.equal(hidden[0]?.textContent, '（新しいタブで開く）');
+    const icons = link.children.filter((node) => node.tagName === 'SVG');
+    assert.equal(icons.length, 1);
+    assert.equal(icons[0]?.attrs['aria-hidden'], 'true');
+    assert.equal(icons[0]?.attrs.focusable, 'false');
+    assert.equal(icons[0]?.attrs.class, 'newtab-icon');
+    assert.equal(icons[0]?.attrs.viewBox, '0 0 24 24');
+    assert.equal(
+      icons[0]?.children[0]?.attrs.d,
+      'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
+    );
+  }
+  assert.equal(links[0]?.textContent, `${DANGER}（新しいタブで開く）`);
+  assert.equal(links[1]?.textContent, `${DANGER}（新しいタブで開く）`);
+  assert.ok(!el.all().some((node) => node.tagName === 'IMG' || node.tagName === 'SCRIPT'));
 });

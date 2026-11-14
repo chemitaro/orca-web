@@ -1,6 +1,6 @@
 // 詳細と会話の行と、詳細の見出しの印を DOM の要素にする。文字はすべて textContent で入れ、HTML として解かない（innerHTML を使わない）。
 // document を受けるので、テストは小さな偽の document で確かめる。
-import { renderAgentMarks } from './agent-marks.js';
+import { appIcon, LINK_ICONS, renderAgentMarks } from './agent-marks.js';
 import { detailMarkWorktree, MISSING_LABELS } from './agent-view.js';
 import { formatElapsed } from './elapsed.js';
 
@@ -17,6 +17,17 @@ function make(doc, tag, text, className) {
   return node;
 }
 
+function newTabLink(doc, text, href) {
+  const link = make(doc, 'a', text);
+  link.href = href;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.title = '新しいタブで開く';
+  link.className = 'newtab';
+  link.append(make(doc, 'span', '（新しいタブで開く）', 'vh'), appIcon(doc, 'external', 'newtab-icon', LINK_ICONS));
+  return link;
+}
+
 /** 詳細の行の並び（dl）。 */
 export function renderDetail(doc, detail) {
   const list = make(doc, 'dl', null, 'detail');
@@ -24,11 +35,7 @@ export function renderDetail(doc, detail) {
     list.append(make(doc, 'dt', row.label));
     const dd = make(doc, 'dd');
     if (row.href) {
-      const a = make(doc, 'a', row.text);
-      a.href = row.href;
-      a.rel = 'noopener noreferrer';
-      a.target = row.href.startsWith('/') ? '_self' : '_blank';
-      dd.append(a);
+      dd.append(newTabLink(doc, row.text, row.href));
     } else {
       dd.textContent = row.text;
     }
@@ -42,9 +49,7 @@ export function renderDetail(doc, detail) {
       }
     }
     for (const link of row.links ?? []) {
-      const a = make(doc, 'a', link.text);
-      a.href = link.href;
-      dd.append(make(doc, 'br'), a);
+      dd.append(make(doc, 'br'), newTabLink(doc, link.text, link.href));
     }
     list.append(dd);
   }

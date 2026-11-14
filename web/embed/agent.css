@@ -554,3 +554,20 @@ pre {
     max-height: calc(5 * 1.6em + 8px);
   }
 }
+
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+a.newtab .newtab-icon {
+  width: 0.9em;
+  height: 0.9em;
+  margin-left: 2px;
+  vertical-align: -0.1em;
+  flex: none;
+}

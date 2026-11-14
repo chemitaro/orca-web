@@ -4,7 +4,7 @@
 import { AGENT_ICONS, APP_ICONS, STATE_ICONS } from './agent-marks-icons.js';
 import { buildMarks } from './agent-marks-view.js';
 
-export { AGENT_ICONS, APP_ICONS, iconKey, STATE_ICONS } from './agent-marks-icons.js';
+export { AGENT_ICONS, APP_ICONS, iconKey, LINK_ICONS, STATE_ICONS } from './agent-marks-icons.js';
 export { buildMarks, findWorktree, formatElapsed, MARK_LABELS, MARKS } from './agent-marks-view.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
