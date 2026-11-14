@@ -174,10 +174,57 @@ design: {
 			"""
 		satisfies: ["R-07"]
 	}
+	"D-12": {
+		title: "読み取りと状態の文書の2つの事実 `src/orca/read-state.ts`、`src/state/model.ts`、`src/state/normalize.ts`、`src/state/fields.ts`"
+		text: """
+			読み取り（今の読みの結果から拾う項目を足すだけ。命令は増やさない）：
+			- `OrcaAgentStatus` に `workingMode`（`agentStatus.workingMode`）と `mainAgentStateStartedAt`（`agentStatus.mainAgent.stateStartedAt`）。
+			- `OrcaTab` に `chatWorkingMode`（`chatStatus.workingMode`）。主エージェントの始まりは今の `chatStateStartedAt`（`chatStatus.mainAgent.stateStartedAt`）を使う。
+			- `OrcaPsAgent` に `workingMode`（`agents[].workingMode`）と `mainAgentStateStartedAt`（`agents[].mainAgent.stateStartedAt`）。
+			値は文字（`str`）と数（`num`）でそのまま拾い、意味は付けない。
+			状態の文書（`AgentState`）に `workingMode: Fact<string>` と `mainAgentStateStartedAt: Fact<string>`（ISO 8601）を足す。取得元は状態（`state`）と同じ：
+			- 端末のタブ：`agentStatus.state` があれば両方とも tabs の `agentStatus.workingMode`・`agentStatus.mainAgent.stateStartedAt`。なく ps の state を使うなら、ps の `agents.workingMode`・`agents.mainAgent.stateStartedAt`。違う取得元を混ぜない（片方の state と、もう片方の workingMode を組にしない）。
+			- 構造化 Chat：tabs の `chatStatus.workingMode`・`chatStatus.mainAgent.stateStartedAt`。
+			- タブのない ps：ps の2つ。
+			値がなければ今の決まり（`missingFact`、取得元を読めたが値がない `not-provided` など）。`fields.ts` に `agent.workingMode`（「動きの種類」：Orca の workingMode。monitoring は背後の作業の待ち）と `agent.mainAgentStateStartedAt`（「主エージェントの状態の開始時刻」）を足す（既定は選ばない）。状態の文書の版は v1 のまま。
+			"""
+		satisfies: ["R-08", "F-03"]
+	}
+	"D-13": {
+		title: "印の決め方と要約・受け箱・Run の木 `src/inbox/classify.ts`、`src/inbox/model.ts`、`src/summary/*`、`src/runs/tree.ts`"
+		text: """
+			- `AgentMark` に `background` を足す。`agentMark`：`state.value === 'working' && workingMode.value === 'monitoring'` なら `background`（D-12 で取得元は揃っている）。ほかは今のまま。
+			- 経過の起点の関数を1つにする（`src/summary/build.ts` か新しい純粋な関数。要約と Run の木が使う）：background なら `mainAgentStateStartedAt` → basis `wait`、なければ worktree の `lastActivityAt` → `worktree-activity`、どちらもなければ null。ほかの印は今の規則（since → state、スリープと不明は worktree-activity）。
+			- 要約：`counts` に `background`、`elapsedBasis` の型に `'wait'`。`since` は変えない。版 v1 のまま。
+			- 受け箱：`InboxReason` に `background`。段は running・理由 background。`no_output` は今のとおり mark が working のときだけ（background は当たらない）。`terminal_ended` は今のまま（background でも当たる）。並びは今の段の中の並びのまま。
+			- Run の木：節の `state` は、エージェントがあり `agentMark` が background なら `'background'`、ほかは今のまま。`since` は background のとき経過の起点の関数の値（待ちの始まり、なければ worktree の最後の活動）、ほかは今のまま。
+			"""
+		satisfies: ["R-10", "F-03"]
+	}
+	"D-14": {
+		title: "電気の印の SVG と印の部品 `web/embed/agent-marks-icons.js`、`agent-marks-view.js`、`agent-marks.js`、`agent-marks.css`"
+		text: """
+			- `agent-marks-icons.js` に `STATE_ICONS.background`（`AGENT_ICONS` と同じ形の `{ label, viewBox: '0 0 24 24', paths: [{ d, fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }] }`）を足す。d は lucide-react 0.577.0 の `dist/esm/icons/activity.js` の値 `M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2`。表の近くに1行：lucide（ISC、lucide-react 0.577.0。Orca 1.4.258 の AgentStateDot の monitoring の印）から写した。描画の部品が path の stroke の属性（linecap、linejoin）も createElementNS で付けられるようにする。
+			- `agent-marks-view.js`：MARKS に background（working の次）、`MARK_LABELS.background = '背後の作業を監視中'`、並びは要対応 0、working 1、background 2、unknown 3、done 4、sleeping 5。label の経過の文：basis `wait` は「待ちになって <読める形>」（1分未満なら「待ちになったばかり」）。
+			- `agent-marks.js`：background の印は、種類のロゴの前（左）に電気の印の SVG（class `orca-mark-state`、aria-hidden）を置く（Orca の行の並び：状態の印、種類のロゴ）。重ねない。
+			- `agent-marks.css`：`--orca-mark-background*` の4つの変数を working と同じ SpecDock の doing（`var(--sd-doing, …)` など、明暗とも working と同じ既定）にする。電気の印は小で 11px ほど、中で 13px ほど（ロゴと同じ高さの枠に収まり、線が読める）、色は主の色。background には回る弧（`::after`）も animation もない。
+			"""
+		satisfies: ["R-09"]
+	}
+	"D-15": {
+		title: "受け箱・Run の木の画面と試しの画面 `web/inbox-view.js`、`web/runs-view.js`、`web/runs-dom.js`、`web/trial/*`"
+		text: """
+			- 受け箱：`REASON_LABELS.background = '背後の作業を監視中'`。
+			- Run の木：`STATE_LABELS.background = '背後の作業を監視中'`。行の組み立てに状態の鍵（例 `stateKey: 'background'`）を持たせ、`runs-dom.js` は background の節の状態の文の前に、`STATE_ICONS.background` の SVG を createElementNS で描く（aria-hidden。文字は textContent）。色は working の節と同じ系統の緑（`web/` の画面の CSS）。
+			- 試しの画面：数の札の並びに background（working の次）。背後の待ちの実例が手元にないときでも写せるよう、手で作った worktree の見本（working・background・done の3つ、経過は決めた値）を部品で描く小さな節「状態の見本」を足す（見本と分かる見出し。実機の値と混ぜない）。
+			"""
+		satisfies: ["R-09", "R-10"]
+	}
 }
 
-compatibility: "要約の文書は項目を足すだけで、版 v1 のまま。既存の受け手（試しの画面だけ）は描き直す。部品のファイル以外の配りは変わらない。D-08 で CSS のカスタムプロパティの名前を状態ごとの4つ（主・背景・線・文字）に改める（受け手はまだ試しの画面だけなので、古い名前の互換は持たない）。"
+compatibility: "要約の文書は項目を足すだけで、版 v1 のまま（R-10 で counts.background、elapsedBasis の値 wait、印の値 background が増える。部品は知らない印を unknown にするので、古い部品も壊れない）。状態の文書も v1 のまま、エージェントに2つの事実が増える（R-08）。既存の受け手（試しの画面だけ）は描き直す。部品のファイル以外の配りは変わらない。D-08 で CSS のカスタムプロパティの名前を状態ごとの4つ（主・背景・線・文字）に改める（受け手はまだ試しの画面だけなので、古い名前の互換は持たない）。"
 risks: [
+	"Orca の workingMode の意味が後の版で変わると、background の判定がずれる。値がちょうど monitoring で state が working のときだけにし、ほかは今の印に落とす（F-03）",
 	"ロゴは各社の商標。本人の判断（無料で公開する個人の道具）で使う。出どころと商標を書き、表を1か所にして、外すときは小さな直しで済むようにする",
 	"worktree の最後の活動の時刻はエージェントごとでなく worktree ごとなので、同じ worktree の複数のスリープは同じ経過になる。読み上げの名前で起点の違いを示す",
 ]
