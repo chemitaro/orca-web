@@ -151,7 +151,10 @@ async function pollState() {
     if (!res.ok) throw new Error(String(res.status));
     renderDetailArea(await res.json());
   } catch {
-    if (!detail) els.title.textContent = 'orca-web から状態を読めません';
+    if (!detail) {
+      els.title.textContent = 'orca-web から状態を読めません';
+      if (openControl.state !== 'busy') openControl.setState('missing', 'orca-web から状態を読めません');
+    }
   } finally {
     setTimeout(pollState, STATE_POLL_MS);
   }
