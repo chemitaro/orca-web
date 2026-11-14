@@ -15,6 +15,7 @@ ID: "iss-00027"
   - 結果：`.workbench/spec-review/iss-00027/round-2.json`（対応の記録は `review-response.md`）。照合のコミット `68d8c88b880abbdbbe91b8123aa38b7bb51658ea`
 - 区切りのレビュー：なし（計画どおり）。
 - 最終品質ゲート：合格（fqg-iss-00027-1、attempt 1、2026-11-14）。合格のコミット `3c6c24d0052be6aa76ec55a47dfd528afb5768b5`、範囲 `68d8c88..3c6c24d`。quality-gate-reviewer（Opus 5.5 / medium）は P0〜P3 すべて 0、coverage 完全（functional-correctness、requirements-closure、test-adequacy、security-baseline）。テスト `npm run lint`・`npm test`（568 pass）・`npm run build` すべて exit 0。closure：`.workbench/final-quality-gate/fqg-iss-00027-1/closure.md`。記録だけのコミットはなし。
+- PR：https://github.com/chemitaro/orca-web/pull/29（head `3c6c24d`）。CI：observable_ci PASS、merge_readiness READY（2026-11-14）。
 
 詳細: [Report Guide](../../../docs/authoring/report.md)
 
@@ -47,3 +48,9 @@ ID: "iss-00027"
   - 実装担当の確かめ（S-04）：幅 1440px と 390px で箱・行・節それぞれ 55 の印が枠に収まり、横のスクロールなし。印を選ぶと詳細とチャットの iframe が開いた。送信と「Orca で開く」はしていない。
 
 ## Residual Risks / Follow-ups
+
+- 本人の確かめ：試しの画面（`http://127.0.0.1:47900/`、`/phone.html`、`http://127.0.0.1:47901/forbidden.html`）で、アイコン・色・経過の見え方を見てもらう。実物の iPhone の Safari は見ていない（Mac の上の 390px）。
+- 経過の起点 `worktree-activity` は worktree ごとの時刻なので、同じ worktree の複数のスリープは同じ経過になる（読み上げの名前で起点の違いを示す）。
+- ロゴは各社の商標（本人の判断で使う）。外すときは `AGENT_ICONS` の表だけを変える。
+- ロゴの path の完全一致のテストは、`.workbench/orca-icons.tsx` がない CI では先頭と末尾の照合だけ。
+- SpecDock 側の組み込み（epic-00471・epic-00526）は範囲外。
