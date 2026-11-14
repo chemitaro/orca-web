@@ -13,6 +13,8 @@ ID: "iss-00027"
 - 仕様レビュー：合格（round-2、2026-11-14）。レビュアー spec-reviewer（Opus 5.5 / high）。P0/P1 0、P2 0、P3 0。round-1 は P1 1（試しの画面の CSP が部品の CSS を拒む）、P2 1（47901 で import を試す道がない）、P3 1（並びの食い違い）で不合格。直して再レビュー。
   - 合格した文書の sha256：requirement.cue `9a72fc33f0c8acdc1144a37cffa188d485750ad79a49d3e239ac8f83b1bf10bb`、design.cue `2478be7c45c46025ab9df0491b160f88871e88732f7a3ec052adaeecf06773b3`、plan.cue `c8baf1a4251b0db5d8de0bac79f110244108e294b26bd1062a563dd9152e6bd1`
   - 結果：`.workbench/spec-review/iss-00027/round-2.json`（対応の記録は `review-response.md`）。照合のコミット `68d8c88b880abbdbbe91b8123aa38b7bb51658ea`
+- 区切りのレビュー：なし（計画どおり）。
+- 最終品質ゲート：合格（fqg-iss-00027-1、attempt 1、2026-11-14）。合格のコミット `3c6c24d0052be6aa76ec55a47dfd528afb5768b5`、範囲 `68d8c88..3c6c24d`。quality-gate-reviewer（Opus 5.5 / medium）は P0〜P3 すべて 0、coverage 完全（functional-correctness、requirements-closure、test-adequacy、security-baseline）。テスト `npm run lint`・`npm test`（568 pass）・`npm run build` すべて exit 0。closure：`.workbench/final-quality-gate/fqg-iss-00027-1/closure.md`。記録だけのコミットはなし。
 
 詳細: [Report Guide](../../../docs/authoring/report.md)
 
