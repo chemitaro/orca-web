@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { AGENT_ICONS, iconKey } from '../../web/embed/agent-marks-icons.js';
 import { buildMarks, findWorktree, formatElapsed, MARK_LABELS, MARKS } from '../../web/embed/agent-marks-view.js';
+import { formatElapsed as sharedFormatElapsed } from '../../web/embed/elapsed.js';
 
 const NOW = Date.parse('2026-01-02T10:00:00.000Z');
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -58,26 +59,24 @@ test('MARKS と MARK_LABELS は6つの状態とその名前', () => {
   });
 });
 
-test('formatElapsed：境目で今・分・時間・日に切り捨てる', () => {
-  assert.equal(formatElapsed(ago(0), NOW), '今');
-  assert.equal(formatElapsed(ago(59 * SEC), NOW), '今');
-  assert.equal(formatElapsed(ago(60 * SEC), NOW), '1分');
-  assert.equal(formatElapsed(ago(59 * MIN + 59 * SEC), NOW), '59分');
-  assert.equal(formatElapsed(ago(60 * MIN), NOW), '1時間');
-  assert.equal(formatElapsed(ago(23 * HOUR + 59 * MIN), NOW), '23時間');
-  assert.equal(formatElapsed(ago(24 * HOUR), NOW), '1日');
-  assert.equal(formatElapsed(ago(73 * HOUR), NOW), '3日');
+test('formatElapsed は elapsed.js のものを再び export する（既存の import の口を保つ）', () => {
+  assert.equal(formatElapsed, sharedFormatElapsed);
+  assert.equal(formatElapsed(ago(59 * SEC), NOW), 'now');
+  assert.equal(formatElapsed(ago(5 * MIN), NOW), '5m');
 });
 
-test('formatElapsed：未来、解けない文字、文字でない値、now が数でないときは null', () => {
-  assert.equal(formatElapsed(ago(-1 * SEC), NOW), null);
-  assert.equal(formatElapsed('not a time', NOW), null);
-  assert.equal(formatElapsed('', NOW), null);
-  assert.equal(formatElapsed(null, NOW), null);
-  assert.equal(formatElapsed(NOW - MIN, NOW), null);
-  assert.equal(formatElapsed(ago(MIN), String(NOW)), null);
-  assert.equal(formatElapsed(ago(MIN), Number.NaN), null);
-  assert.equal(formatElapsed(ago(MIN), undefined), null);
+test('経過の境目（60_000 など）は web/ の中で elapsed.js にだけある', () => {
+  const walk = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const p = join(dir, name);
+      return statSync(p).isDirectory() ? walk(p) : [p];
+    });
+  // send-view.js の 60_000 は確認の待ち時間で、経過の規則でない（D-11）。
+  const holders = walk('web').filter((p) => {
+    if (p === join('web', 'embed', 'send-view.js')) return false;
+    return /60_000|60000|\/ 60\b|\/ 24\b/.test(readFileSync(p, 'utf8'));
+  });
+  assert.deepEqual(holders, [join('web', 'embed', 'elapsed.js')]);
 });
 
 test('findWorktree：パスを先に、末尾の / の違いは同じとみなし、なければ id で探す', () => {
@@ -216,7 +215,7 @@ test('buildMarks：決めた項目だけを持つ印にする', () => {
       mark: 'working',
       icon: 'claude',
       typeLabel: 'Claude',
-      elapsed: '5分',
+      elapsed: '5m',
       label: 'Claude、作業中、この状態になって 5分',
       detail: '/embed/agent?id=a1',
     },
@@ -238,6 +237,14 @@ test('buildMarks：種類、知らない状態、起点ごとの経過の文、d
       agent({ id: 'f', mark: 'done', agentType: 'claude-agent-teams', elapsedFrom: ago(-MIN), elapsedBasis: 'state' }),
       agent({ id: 'l', mark: 'done', agentType: 'x'.repeat(60), detail: 'https://example.invalid/embed/agent?id=l' }),
       agent({ id: 'now', mark: 'done', agentType: 'codex', elapsedFrom: ago(10 * SEC), elapsedBasis: 'state' }),
+      agent({
+        id: 'act',
+        mark: 'sleeping',
+        agentType: 'claude',
+        elapsedFrom: ago(10 * SEC),
+        elapsedBasis: 'worktree-activity',
+      }),
+      agent({ id: 'other', mark: 'done', agentType: 'codex', elapsedFrom: ago(73 * HOUR), elapsedBasis: 'odd' }),
     ],
   };
   const byId = Object.fromEntries(buildMarks(wt, { now: NOW, max: 10 }).marks.map((m) => [m.id, m]));
@@ -246,7 +253,7 @@ test('buildMarks：種類、知らない状態、起点ごとの経過の文、d
     mark: 'sleeping',
     icon: 'codex',
     typeLabel: 'Codex',
-    elapsed: '2時間',
+    elapsed: '2h',
     label: 'Codex、スリープ、最後の活動から 2時間',
     detail: '/embed/agent?id=s',
   });
@@ -263,8 +270,18 @@ test('buildMarks：種類、知らない状態、起点ごとの経過の文、d
   assert.equal(byId.f.elapsed, null);
   assert.equal(byId.l.typeLabel, 'x'.repeat(40));
   assert.equal(byId.l.detail, null);
-  assert.equal(byId.now.elapsed, '今');
+  assert.equal(byId.now.elapsed, 'now');
   assert.equal(byId.now.label, 'Codex、完了、この状態になったばかり');
+  assert.equal(byId.act.elapsed, 'now');
+  assert.equal(byId.act.label, 'Claude、スリープ、最後の活動は1分未満前');
+  assert.equal(byId.other.elapsed, '3d');
+  assert.equal(byId.other.label, 'Codex、完了、経過 3日');
+  // 読み上げの名前は読める形だけ。『今』も短い形（now・Nm・Nh・Nd）も含まない。
+  for (const m of buildMarks(wt, { now: NOW, max: 10 }).marks) {
+    assert.ok(!m.label.includes('今'), m.label);
+    assert.ok(!/\d+[mhd]\b/.test(m.label), m.label);
+    assert.ok(!/\bnow\b/.test(m.label), m.label);
+  }
 });
 
 test('buildMarks：agents が配列でない、worktree がないときは空', () => {

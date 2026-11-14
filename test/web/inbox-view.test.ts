@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { buildInbox } from '../../src/inbox/classify.ts';
 import type { InboxDocument } from '../../src/inbox/model.ts';
 import {
   buildInboxView as buildView,
-  formatElapsed,
   inboxApiPath,
   projectFromSearch,
   searchForProject,
@@ -78,7 +78,7 @@ test('項目の行は、プロジェクト、Issue、エージェントの種類
   assert.equal(blocked.project, 'プロジェクトA');
   assert.equal(blocked.issue, 'iss-00017');
   assert.equal(blocked.agentType, 'codex');
-  assert.equal(blocked.elapsed, '1時間');
+  assert.equal(blocked.elapsed, '1h');
   assert.equal(blocked.reason, '許可待ち');
   assert.equal(blocked.hint, 'Orca で開いて答える');
   assert.equal(blocked.detailHref, '/embed/agent?id=agent-blocked');
@@ -147,14 +147,26 @@ test('https でない PR の URL と、決めた形でない詳細のリンク�
   }
 });
 
-test('経過の文は 分・時間・日 で示し、未来と読めない時刻を丸める', () => {
-  assert.equal(formatElapsed(new Date(NOW - 30_000).toISOString(), NOW), '1分未満');
-  assert.equal(formatElapsed(new Date(NOW - 12 * MIN).toISOString(), NOW), '12分');
-  assert.equal(formatElapsed(new Date(NOW - 3 * 60 * MIN - 5 * MIN).toISOString(), NOW), '3時間');
-  assert.equal(formatElapsed(new Date(NOW - 50 * 60 * MIN).toISOString(), NOW), '2日');
-  assert.equal(formatElapsed(new Date(NOW + 5 * MIN).toISOString(), NOW), '1分未満');
-  assert.equal(formatElapsed('not-a-date', NOW), null);
-  assert.equal(formatElapsed(null, NOW), null);
+test('経過は elapsed.js の短い形で、未来の時刻（時計のずれ）は now、読めない時刻は null', async () => {
+  const source = await readFile(new URL('../../web/inbox-view.js', import.meta.url), 'utf8');
+  assert.match(source, /from '\.\/embed\/elapsed\.js'/);
+  assert.match(source, /clampFuture: true/);
+  assert.ok(!/export function formatElapsed/.test(source));
+  const at = (ms: number) => new Date(NOW - ms).toISOString();
+  const elapsedFor = (since: unknown) => {
+    const doc = fullDocument();
+    const [item] = doc.stages[0]?.items ?? [];
+    assert.ok(item);
+    item.since = since as string;
+    return buildInboxView(doc, { now: NOW, formatTime: iso }).stages[0].items[0].elapsed;
+  };
+  assert.equal(elapsedFor(at(30_000)), 'now');
+  assert.equal(elapsedFor(at(12 * MIN)), '12m');
+  assert.equal(elapsedFor(at(3 * 60 * MIN + 5 * MIN)), '3h');
+  assert.equal(elapsedFor(at(50 * 60 * MIN)), '2d');
+  assert.equal(elapsedFor(at(-5 * MIN)), 'now');
+  assert.equal(elapsedFor('not-a-date'), null);
+  assert.equal(elapsedFor(null), null);
 });
 
 test('鮮度の文は、接続と最後に読めた時刻を示し、読めない取得元と連絡を示す', () => {

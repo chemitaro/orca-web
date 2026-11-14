@@ -157,6 +157,8 @@ const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?:
       cors: 'read',
     },
     '/embed/agent-marks.css': { file: 'embed/agent-marks.css', type: 'text/css; charset=utf-8', cors: 'read' },
+    // 印の組み立てが import する経過の表記。別のオリジンからも import されるので同じ読み取りの CORS。
+    '/embed/elapsed.js': { file: 'embed/elapsed.js', type: 'text/javascript; charset=utf-8', cors: 'read' },
     '/embed/agent.css': { file: 'embed/agent.css', type: 'text/css; charset=utf-8' },
   };
 

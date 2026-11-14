@@ -1,6 +1,7 @@
 // 木・Run の一覧・プロジェクトの画面の組み立て（純粋な関数）。/api/runs/<id>/tree（orca-web.run-tree/v1）と
 // /api/runs（orca-web.runs/v1）の文書から、木の行、一覧の行、鮮度の文、道と API の URL を作る。DOM、時計、fetch に触らない。
-import { defaultTime, formatElapsed, inboxApiPath, latest, projectOptions } from './inbox-view.js';
+import { formatElapsed } from './embed/elapsed.js';
+import { defaultTime, inboxApiPath, latest, projectOptions } from './inbox-view.js';
 
 /** 取れない値の印。 */
 export const DASH = '—';
@@ -122,7 +123,7 @@ function nodeRow(node, depth, now, coordinatorResolvedBy) {
     model: text(node.model),
     effort: text(node.effort),
     state: typeof node.state === 'string' ? (STATE_LABELS[node.state] ?? node.state) : DASH,
-    elapsed: formatElapsed(node.since, now) ?? DASH,
+    elapsed: formatElapsed(node.since, now, { clampFuture: true }) ?? DASH,
     project: text(projectName),
     badge: node.otherProject === true && projectName ? projectName : null,
     orphan: node.orphan === true ? '親が分からない' : null,

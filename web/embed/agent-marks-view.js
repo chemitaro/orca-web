@@ -2,6 +2,10 @@
 // エージェントごとの小さな印の形を作る。DOM、時計、fetch に触らない。
 // 要約の項目は信頼しないデータ。決めた項目だけを拾い、題名や本文は返さない。
 import { AGENT_ICONS, iconKey } from './agent-marks-icons.js';
+import { describeElapsed, formatElapsed } from './elapsed.js';
+
+// 経過の規則は elapsed.js の1か所。既存の import の口を保つため、ここからも export する。
+export { formatElapsed };
 
 export const MARKS = ['working', 'blocked', 'waiting', 'done', 'sleeping', 'unknown'];
 
@@ -21,26 +25,6 @@ const TYPE_LABEL_MAX = 40;
 const ORDER = { blocked: 0, waiting: 0, working: 1, unknown: 2, done: 3, sleeping: 4 };
 
 const str = (value) => (typeof value === 'string' && value !== '' ? value : null);
-
-/**
- * from（ISO 8601）から now（ミリ秒）までの経過を短い文字にする。'今' | 'N分' | 'N時間' | 'N日' | null。
- * @param {unknown} from
- * @param {unknown} now
- * @returns {string | null}
- */
-export function formatElapsed(from, now) {
-  if (typeof from !== 'string' || typeof now !== 'number' || !Number.isFinite(now)) return null;
-  const at = Date.parse(from);
-  if (Number.isNaN(at)) return null;
-  const diff = now - at;
-  if (diff < 0) return null;
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return '今';
-  if (minutes < 60) return `${minutes}分`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}時間`;
-  return `${Math.floor(hours / 24)}日`;
-}
 
 const trimSlash = (path) => path.replace(/\/+$/, '');
 
@@ -73,11 +57,13 @@ function typeLabelFor(agentType, icon) {
   return AGENT_ICONS[icon].label;
 }
 
-function elapsedText(basis, elapsed) {
-  if (elapsed === null) return null;
-  if (basis === 'state') return elapsed === '今' ? 'この状態になったばかり' : `この状態になって ${elapsed}`;
-  if (basis === 'worktree-activity') return elapsed === '今' ? '最後の活動は今' : `最後の活動から ${elapsed}`;
-  return `経過 ${elapsed}`;
+// 読み上げの経過の文。読める形（describeElapsed）だけを使い、短い形を入れない。
+function elapsedText(basis, spoken) {
+  if (spoken === null) return null;
+  const fresh = spoken === '1分未満';
+  if (basis === 'state') return fresh ? 'この状態になったばかり' : `この状態になって ${spoken}`;
+  if (basis === 'worktree-activity') return fresh ? '最後の活動は1分未満前' : `最後の活動から ${spoken}`;
+  return `経過 ${spoken}`;
 }
 
 function markView(agent, now) {
@@ -85,8 +71,9 @@ function markView(agent, now) {
   const icon = iconKey(agent?.agentType);
   const typeLabel = typeLabelFor(agent?.agentType, icon);
   const elapsed = formatElapsed(agent?.elapsedFrom, now);
+  const spoken = describeElapsed(agent?.elapsedFrom, now);
   const detail = str(agent?.detail);
-  const parts = [typeLabel, MARK_LABELS[mark], elapsedText(agent?.elapsedBasis, elapsed)].filter((p) => p !== null);
+  const parts = [typeLabel, MARK_LABELS[mark], elapsedText(agent?.elapsedBasis, spoken)].filter((p) => p !== null);
   return {
     id: str(agent?.id),
     mark,
