@@ -157,3 +157,41 @@ export async function runOpen(
   }
   return result;
 }
+
+/**
+ * 描き直しで部品が作り直される画面（受け箱）のための、鍵（エージェントの id）ごとの最後の状態の板。
+ * mount で新しい部品に最後の状態を戻し、open で押したときの流れを動かす。結果と done から idle への戻りは、
+ * その鍵の最後の要求のものだけを、今の部品に写す（古い要求の時計が、新しい要求の途中の部品を idle に戻さない）。
+ */
+export function createOpenBoard() {
+  /** @type {Map<string, { seq: number, state: OpenControlState, message: string }>} */
+  const notes = new Map();
+  /** @type {Map<string, OpenControl>} */
+  const controls = new Map();
+  let seq = 0;
+  return {
+    /** @param {string} key @param {OpenControl} control */
+    mount(key, control) {
+      controls.set(key, control);
+      const note = notes.get(key);
+      if (note && note.state !== 'idle') control.setState(note.state, note.message);
+    },
+    /**
+     * @param {string} key
+     * @param {OpenControl} control
+     * @param {() => Promise<{ status: number, body: any }>} send
+     * @param {{ setTimer?: (fn: () => void, ms: number) => any, clearTimer?: (id: any) => void }} [clock]
+     */
+    open(key, control, send, clock = {}) {
+      if (control.state === 'busy' || control.state === 'missing') return Promise.resolve(null);
+      const mine = ++seq;
+      const onState = (/** @type {OpenControlState} */ state, message = '') => {
+        if (notes.get(key)?.seq !== mine && state !== 'busy') return;
+        notes.set(key, { seq: mine, state, message });
+        const current = controls.get(key);
+        if (current && current !== control) current.setState(state, message);
+      };
+      return runOpen(control, send, { ...clock, onState });
+    },
+  };
+}

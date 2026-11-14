@@ -42,6 +42,8 @@ const writer = createWriter();
 // 「Orca で開く」の部品（md、題名の行の右端）。
 const openControl = createOpenControl(document, { size: 'md' });
 els.openSlot.append(openControl.root);
+// 状態を読むまでは開く先が分からないので押せなくする（読めたら renderDetailArea が戻す）。
+openControl.setState('missing', 'エージェントの状態を読んでいます');
 let detail = null;
 let chat = initialChat();
 /** 開いている折り畳みの key。描き直しても開いたままにする。 */
@@ -122,11 +124,17 @@ els.older.addEventListener('click', async () => {
   }
 });
 
+/** 開く先（worktree）が分からなければ押せなくし、理由を title に出す。分かるようになれば戻す。要求の途中は変えない。 */
+function syncOpenTarget() {
+  if (openControl.state === 'busy') return;
+  if (!detail) openControl.setState('missing', 'エージェントが見つかりません');
+  else if (!detail.open) openControl.setState('missing');
+  else if (openControl.state === 'missing') openControl.setState('idle');
+}
+
 function renderDetailArea(state) {
   detail = buildDetail(state, agentId);
-  // 開く先（worktree）が分からなければ押せなくし、理由を title に出す。分かるようになれば戻す。
-  if (!detail?.open) openControl.setState('missing');
-  else if (openControl.state === 'missing') openControl.setState('idle');
+  syncOpenTarget();
   els.detail.replaceChildren();
   if (!detail) {
     els.title.textContent = 'エージェントが見つかりません';
@@ -160,7 +168,8 @@ narrow.addEventListener('change', applyNarrow);
 openControl.button.addEventListener('click', () => {
   const body = detail?.open;
   if (!body) return;
-  void runOpen(openControl, () => writer.send('/api/open', 'POST', body));
+  // 要求の途中に開く先が消えていれば、結果の後に押せない状態へ戻す。
+  void runOpen(openControl, () => writer.send('/api/open', 'POST', body)).then(syncOpenTarget);
 });
 
 const sendFlow = createSendFlow({ agentId, writer, onChange: () => renderSend() });

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { APP_ICONS } from '../../web/embed/agent-marks-icons.js';
-import { createOpenControl, runOpen } from '../../web/embed/open-control.js';
+import { createOpenBoard, createOpenControl, runOpen } from '../../web/embed/open-control.js';
 import { OPEN_DONE_MS, OPEN_MESSAGES } from '../../web/embed/open-control-view.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -334,4 +334,63 @@ test('T-05：missing の部品は押しても send を呼ばない', async () =>
   );
   assert.equal(calls, 0);
   assert.equal(control.state, 'missing');
+});
+
+test('T-05（レビュー P2-1）：描き直しをまたいでも、古い部品の時計が新しい要求の途中の部品を idle に戻さず、二重に送れない', async () => {
+  const board = createOpenBoard();
+  const clock = fakeClock();
+  const a = createOpenControl(doc, {});
+  board.mount('agent-1', a);
+  await board.open('agent-1', a, async () => ({ status: 200, body: { ok: true } }), clock);
+  assert.equal(a.state, 'done');
+  // 描き直し：新しい部品 B に done が戻る。
+  const b = createOpenControl(doc, {});
+  board.mount('agent-1', b);
+  assert.equal(b.state, 'done');
+  // B を押して要求の途中に、A の時計が切れる。
+  const reply = deferred<{ status: number; body: unknown }>();
+  let calls = 0;
+  const pending = board.open(
+    'agent-1',
+    b,
+    () => {
+      calls += 1;
+      return reply.promise;
+    },
+    clock,
+  );
+  assert.equal(b.state, 'busy');
+  clock.advance(OPEN_DONE_MS);
+  assert.equal(b.state, 'busy', '古い要求の時計は新しい要求の部品を変えない');
+  assert.equal((b.button as FakeElement).disabled, true);
+  assert.equal(await board.open('agent-1', b, async () => ({ status: 200, body: { ok: true } }), clock), null);
+  assert.equal(calls, 1);
+  reply.resolve({ status: 503, body: { ok: false, error: 'unavailable' } });
+  await pending;
+  assert.equal(b.state, 'error');
+  // さらに描き直すと error が戻る。
+  const c = createOpenControl(doc, {});
+  board.mount('agent-1', c);
+  assert.equal(c.state, 'error');
+  assert.equal((c.button as FakeElement).title, OPEN_MESSAGES.unavailable);
+});
+
+test('T-05（レビュー P2-1）：要求の途中に描き直した部品にも、その要求の結果と done から idle への戻りが写る', async () => {
+  const board = createOpenBoard();
+  const clock = fakeClock();
+  const a = createOpenControl(doc, {});
+  board.mount('agent-1', a);
+  const reply = deferred<{ status: number; body: unknown }>();
+  const pending = board.open('agent-1', a, () => reply.promise, clock);
+  const b = createOpenControl(doc, {});
+  board.mount('agent-1', b);
+  assert.equal(b.state, 'busy');
+  reply.resolve({ status: 200, body: { ok: true } });
+  await pending;
+  assert.equal(b.state, 'done');
+  clock.advance(OPEN_DONE_MS);
+  assert.equal(b.state, 'idle');
+  const c = createOpenControl(doc, {});
+  board.mount('agent-1', c);
+  assert.equal(c.state, 'idle');
 });

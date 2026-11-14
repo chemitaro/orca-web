@@ -2,8 +2,7 @@
 // プロジェクトの選択は ?project= に残す（history.replaceState）。読めなければ前の内容を残して「更新できない」と示す。
 // 「Orca で開く」は共有の部品（embed/open-control.js）で、write.js の短期のトークンで /api/open を呼ぶ。幅 390px 以下では出さない。
 
-import { runOpen } from './embed/open-control.js';
-import { OPEN_DONE_MS } from './embed/open-control-view.js';
+import { createOpenBoard } from './embed/open-control.js';
 import { renderFreshness, renderStage } from './inbox-dom.js';
 import { buildInboxView, inboxApiPath, projectFromSearch, searchForProject } from './inbox-view.js';
 import { inboxLinks } from './runs-view.js';
@@ -24,34 +23,16 @@ let project = projectFromSearch(location.search);
 let lastDoc = null;
 let lastError = null;
 let timer = null;
-/**
- * 開くボタンの最後の状態（エージェントの id ごと）と、今の画面にある部品。描き直しで部品は作り直されるので、
- * 新しい部品に状態を戻し、送っている途中の結果も今の部品に写す。
- * @type {Map<string, { state: import('./embed/open-control-view.js').OpenControlState, message: string, at: number }>}
- */
-const openNotes = new Map();
-/** @type {Map<string, import('./embed/open-control.js').OpenControl>} */
-const openControls = new Map();
+/** 開くボタンの最後の状態（エージェントの id ごと）。描き直しで作り直した部品に戻し、最後の要求の結果だけを写す。 */
+const openBoard = createOpenBoard();
 
-/** 描き直した部品に、前の状態を戻す。done は時計が切れていれば戻さない（idle のまま）。 */
 function mountOpen(target, control) {
-  openControls.set(target.agentId, control);
-  const note = openNotes.get(target.agentId);
-  if (!note || note.state === 'idle') return;
-  if (note.state === 'done' && Date.now() - note.at >= OPEN_DONE_MS) return;
-  control.setState(note.state, note.message);
+  openBoard.mount(target.agentId, control);
 }
 
 function openInOrca(target, control) {
-  const onState = (state, message = '') => {
-    openNotes.set(target.agentId, { state, message, at: Date.now() });
-    const current = openControls.get(target.agentId);
-    if (current && current !== control) current.setState(state, message);
-  };
-  void runOpen(
-    control,
-    () => writer.send('/api/open', 'POST', { worktree: target.worktreeId, agent: target.agentId }),
-    { onState },
+  void openBoard.open(target.agentId, control, () =>
+    writer.send('/api/open', 'POST', { worktree: target.worktreeId, agent: target.agentId }),
   );
 }
 
@@ -84,7 +65,6 @@ function render() {
 
   const expanded = els.stages.querySelector('section[data-stage="finished"] details')?.open === true;
   const options = { showOpen: !narrow.matches, onOpen: openInOrca, onOpenMount: mountOpen, expanded };
-  openControls.clear();
   els.stages.replaceChildren(...view.stages.map((stage) => renderStage(document, stage, options)));
 }
 

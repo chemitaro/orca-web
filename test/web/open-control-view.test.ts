@@ -71,7 +71,7 @@ test('openControlView は5状態と text・none を D-02 の表示にする', as
     ['busy', '開いています…', 'spinner', true, true, null, '開いています…'],
     ['done', '結果の言葉', 'check', false, false, null, '結果の言葉'],
     ['error', '結果の言葉', 'orca', false, false, 'warn', '結果の言葉'],
-    ['missing', 'worktree の指定がありません', 'orca', true, false, 'warn', 'worktree の指定がありません'],
+    ['missing', '結果の言葉', 'orca', true, false, 'warn', '結果の言葉'],
   ] as const;
   for (const [state, title, icon, disabled, busy, tone, status] of cases) {
     for (const label of ['text', 'none'] as const) {
@@ -92,4 +92,14 @@ test('openControlView は5状態と text・none を D-02 の表示にする', as
     }
   }
   assert.deepEqual(openControlView('idle'), openControlView('idle', { label: 'text' }));
+});
+
+test('missing は言葉を渡せばその言葉を title と status に使い、なければ worktree の指定がないと言う（レビュー P3-2）', async () => {
+  const { openControlView } = await import('../../web/embed/open-control-view.js');
+  assert.equal(openControlView('missing').title, 'worktree の指定がありません');
+  assert.equal(openControlView('missing').status, 'worktree の指定がありません');
+  const view = openControlView('missing', { message: 'エージェントが見つかりません' });
+  assert.equal(view.title, 'エージェントが見つかりません');
+  assert.equal(view.status, 'エージェントが見つかりません');
+  assert.equal(view.disabled, true);
 });

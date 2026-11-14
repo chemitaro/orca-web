@@ -144,7 +144,7 @@ test('T-07：3か所の HTML と JS に、見える「Orca で開く」の文字
     assert.doesNotMatch(js, /innerHTML/, path);
   }
   for (const path of ['embed/open-button-frame.js', 'embed/agent-frame.js', 'inbox.js']) {
-    assert.match(read(path), /runOpen\(/, path);
+    assert.match(read(path), /runOpen\(|openBoard\.open\(/, path);
     assert.match(read(path), /'\/api\/open', 'POST'/, path);
   }
 });

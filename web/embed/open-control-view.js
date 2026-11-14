@@ -53,7 +53,7 @@ export function openControlView(state, { label = 'text', message = '' } = {}) {
   const busy = state === 'busy';
   const missing = state === 'missing';
   const title = missing
-    ? 'worktree の指定がありません'
+    ? message || 'worktree の指定がありません'
     : busy
       ? '開いています…'
       : state === 'idle'
