@@ -18,6 +18,30 @@ ID: "iss-00027"
 
 ## Outcome
 
+- 要約の API（`orca-web.worktree-summary/v1`、版はそのまま）に、エージェントごとの経過の起点 `elapsedFrom` とその種類 `elapsedBasis`（`state`：状態の始まり。スリープと不明で状態の始まりがなければ `worktree-activity`：worktree の最後の活動。どちらもなければ null）を足した。
+- 稼働の印の部品（`web/embed/agent-marks.js`・`agent-marks-view.js`・`agent-marks-icons.js`・`agent-marks.css`）。SpecDock が別のオリジンから import する ES Module。種類はアイコン（Claude・Codex は stablyai/orca のコミット 80a514c から写した実物のロゴ、ほかは中立の丸、種類なしは破線の丸）、状態は色（作業中 緑、許可待ち 赤、入力待ち 琥珀、完了 青、スリープ 灰と月の印、不明 灰の破線）、経過は「今・N分・N時間・N日」。読み上げの名前と title に種類・状態・経過と起点を持つ。要約の読みの輪 `watchWorktreeSummary` で1回読んで多くの箱や行に描ける。アイコンの表は `AGENT_ICONS` の1か所。
+- 部品の4つのファイルにだけ、要約と同じ読み取りの CORS（許さないオリジンは 403）。
+- 試しの画面を部品で描き直した（構造の図の箱の見本、Issue の一覧の行の見本、節の一覧。数の札は色の点と数だけ）。試しの静的なサーバーの CSP の style-src に試しの orca-web を足し、許さないオリジンの画面に部品の import の確かめを足した。
+- コミット：`f0c55cd`（S-01）、`9375f07`（S-02）、`4598562`（S-03）、`7986ef4`（S-04）、`3c6c24d`（S-05 の README・AGENTS）。
+- 実装担当（`launch.effective`）：ui（S-01）claude / claude-opus-5-5 / medium（dispatch ctx_bea19ebb8d3a）、impl（S-02〜S-03）codex / gpt-6.1-sol / medium（ctx_cce222fefa2c）、trial（S-04）claude / claude-opus-5-5 / medium（ctx_37145c363df6）。S-05 はタスク担当（Opus 5.5 / medium）。
+
+### 逸脱と判断
+
+- アイコン：仕様化の途中で統括の答えが案A（自前の図形、msg_8fb42dcb5148）から案B（実物のロゴ、本人の決定、msg_59c9286c72c4）に変わった。仕様は案B で書き、レビューに通した。
+- S-02：型の検査を通すため、統括（タスク担当）の許可で `test/web/trial-view.test.ts` の既存の fixture に2項目を足した（計画の対象の外。期待値は変えない）。
+- 実装の裁量（S-01）：経過が「今」のときの読み上げの文、知らない basis の文、max と size の既定、ロゴの完全一致のテストは `.workbench/orca-icons.tsx` があるときだけ（CI では先頭と末尾の照合）、JSDoc の型。
+- S-04 の画面の確かめは、Chrome の拡張が複数つながって選べなかったので、ヘッドレスの Chrome を CDP で起動して行った（実装担当の報告）。
+
 ## Verification
+
+- テスト：開始のコミット `68d8c88` で `npm test` 534 件 pass、`3c6c24d` で 568 件 pass。`npm run lint` と `npm run build` は成功。
+- 実機（2026-11-14、`orca --version` 1.4.258、一時の port の `npm start`、読むだけ。件数と結論だけ）：
+  - 要約：エージェント 60。スリープ 43 のうち 42 が `worktree-activity`（1 は worktree に時刻がなく null）、不明 3 のうち 2 が `worktree-activity`、1 が null。working 6・done 8 は `state`。`since` のある 14 件はすべて `elapsedFrom` = `since`。`stale: false`。
+  - 部品の CORS：4つのファイルとも `Origin: http://127.0.0.1:47800` で 200 と `Access-Control-Allow-Origin`、`http://127.0.0.1:47801` で 403。
+- 試しの画面（`npm run trial`、ヘッドレスの Chrome、写しは `.workbench/trial-evidence/iss-00027/`、コミットしない）：
+  - `mac.png`（幅 1440px）：構造の図の箱の見本に、印（アイコン、色、経過）が箱の中に1行で収まる。スリープは灰と月、不明は破線、作業中は緑、完了は青。
+  - `phone.png`（幅 390px）：箱が2列になり、印は収まる。
+  - `forbidden.png`（47901）：(1)〜(6) すべて拒まれ、(6) 部品の import も失敗した。
+  - 実装担当の確かめ（S-04）：幅 1440px と 390px で箱・行・節それぞれ 55 の印が枠に収まり、横のスクロールなし。印を選ぶと詳細とチャットの iframe が開いた。送信と「Orca で開く」はしていない。
 
 ## Residual Risks / Follow-ups
