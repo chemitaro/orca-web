@@ -58,8 +58,8 @@ tests: {
 	"T-12": {title: "renderSendPanel が、`<script>` と `<img onerror>` を含む理由・warning・code を文字のまま描き、作る要素は DIV・P・UL・LI・BUTTON・SPAN だけで、innerHTML を使うと偽の要素が投げる", verifies: ["F-06"]}
 	"T-13": {title: "agent.html の詳細の details に open の属性がなく、送るボタン（aria-label 送る）と入力欄があり、agent-frame.js が幅で details を開け閉めしない", verifies: ["R-01", "R-02"]}
 	"T-14": {title: "試しの画面で、幅 1280px と 390px、明暗の写しを撮って SpecDock のダッシュボードと並べ、詳細が畳まれ、送るボタンがあり、横のはみ出しが 0。send-test の Claude と Codex に Enter で1回ずつ送り、届いた結果と記録の行の数を確かめる（タスク担当、実機）", verifies: ["R-08", "R-01", "R-02", "R-03", "R-09"]}
-	"T-16": {title: "agent.css が、色・字体・角丸・線・フォーカスを `var(--ds-…, <既定>)` の形で使い、既定の値が SpecDock の app.css（c050e7bd7）の明るい値と暗い値（prefers-color-scheme と data-theme の両方）に一致し、`--bg` などの古い名前の色の直書きが残らない（CSS を読むテスト。iss-00027 の test/web/agent-marks-css.test.ts と同じ方式）", verifies: ["R-09"]}
-	"T-17": {title: "詳細の見出しの印：要約の中のこのエージェントだけを、renderAgentMarks で max 1 で描き、見つからない・読めないときは置き場を空にし、agent.html が agent-marks.css を読み、summary に置き場がある", verifies: ["R-10"]}
+	"T-16": {title: "agent.css が、色・字体・角丸・線・フォーカスを `var(--ds-…, <既定>)` の形で使い、既定の値が SpecDock の app.css（c050e7bd7）の明るい値と暗い値（prefers-color-scheme と data-theme の両方）に一致し、`--bg` などの古い名前の色の直書きが残らない。agent.css が `--sd-*` の状態の変数を、明るい値と暗い値（prefers-color-scheme と data-theme が dark の両方）で、agent-marks.css の各状態の既定と同じ値で置く（CSS を読むテスト。iss-00027 の test/web/agent-marks-css.test.ts と同じ方式）", verifies: ["R-09", "R-10"]}
+	"T-17": {title: "詳細の見出しの印：要約の中のこのエージェントだけを、elapsedFrom と elapsedBasis を null にした写しで、renderAgentMarks で max 1 で描き（.orca-mark-time がなく aria-label に経過がない）、見つからない・読めないときは置き場を空にし、agent.html が agent-marks.css を読み、summary に置き場がある", verifies: ["R-10"]}
 	"T-18": {title: "formatAgo が 59 秒で now、1〜59 分で Nm、1〜23 時間で Nh、24 時間以上で Nd、未来と読めない値で null を返し、会話の行の time に datetime と title があり、文字に『今』『分』『時間』『日』が入らない", verifies: ["R-11"]}
 	"T-15": {title: "README.md と AGENTS.md に、確認の画面・送る前の「確かめる」・60 秒の期限の説明が残っていない（`rg` で確かめる）", verifies: ["R-08"]}
 }

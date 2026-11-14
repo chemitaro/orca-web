@@ -22,6 +22,10 @@ ID: "iss-00027"
   - 結果：`.workbench/spec-review/iss-00027/round-3.json`。照合のコミット `10ab4e9a64223d6b295f56d6f90c8cde5afe1343`
 - 追記の最終品質ゲート：合格（fqg-iss-00027-2、attempt 1、2026-11-14）。合格のコミット `99ba358c80140adc074cf80df71fbce71c630be8`、範囲 `10ab4e9..99ba358`。quality-gate-reviewer（Opus 5.5 / medium）は P0〜P3 すべて 0、coverage 完全。D-08 の表の値は SpecDock の app.css の明暗の値とすべて一致。テスト `npm run lint`・`npm test`（576 pass）・`npm run build` すべて exit 0。closure：`.workbench/final-quality-gate/fqg-iss-00027-2/closure.md`。記録だけのコミットはなし。
 - 追記の PR：https://github.com/chemitaro/orca-web/pull/30（head `99ba358`）。CI：observable_ci PASS、merge_readiness READY（2026-11-14）。
+- PR #30 は統括がマージした（main `fc654c0`）。
+- 経過の表記の追記（2026-11-14、本人の指摘・統括の決定 task_27eff0d07653：now・5m・3h・2d）の仕様レビュー：合格（round-5）。round-4 は P1 1（受け箱の formatElapsed が同じ規則を持つのに1か所にする作業がない）、P2 1（置き換えた前の約束が残る）、P3 1（計画の状態と exit・rollback）で不合格。直して round-5 は P0/P1 0、P2 0、P3 1（受け箱と Run の木で短い形がそのまま読み上げられる。直さずに記録）。
+  - 合格した文書の sha256：requirement.cue `4eb1dc3fd3d5310f27469e4b6260c8541e8fb8c4854c70d131a9e6330b8ed9bc`、design.cue `4523a6026bef4cfce34c3c4b764f2aea8ef8d0e564372bf0efaa4d88bc700cfb`、plan.cue `effa788929f14814fa6657a7ee3f39cc7805d47065a5126f37c91d5d8cd9d1d2`
+  - 結果：`.workbench/spec-review/iss-00027/round-5.json`（対応は `review-response-4.md`）。照合のコミット `fc654c0f9c2838db2ca7d3b69de14adde1c0f3da`
 
 詳細: [Report Guide](../../../docs/authoring/report.md)
 

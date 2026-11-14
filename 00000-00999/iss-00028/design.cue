@@ -109,6 +109,7 @@ design: {
 			- 利用者の吹き出しと送るボタンの色は SpecDock の ready の組（`var(--sd-ready-bg, …)`・`var(--sd-ready, …)`。値は agent-marks.css の waiting の既定と同じ）。誤りの文字と帯は SpecDock の danger の組（`var(--ds-danger, #c21f4d / 暗い値は app.css から)`、`--ds-danger-bg`、`--ds-danger-line`、`--ds-danger-ink`）。
 			- 字体 `var(--ds-font-sans, "BIZ UDPGothic", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif)`、14px / 1.6。角丸 `var(--ds-radius-s, 4px)`（ボタン、ツール）、`var(--ds-radius, 6px)`（吹き出し）、`var(--ds-radius-l, 8px)`（入力の箱）。フォーカスは `outline: 3px solid var(--ds-focus, …)`。
 			暗い値は `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {…} }` と `:root[data-theme="dark"] {…}` の両方に置く（今の構造と同じ）。`agent.html` は `agent-marks.css` も読む。
+			印の明暗を小窓の明暗（`?theme=` を含む）に合わせるため、`agent.css` の `:root`（明るい）と2つの暗い場所に、印の部品が先に読む SpecDock の状態の変数 `--sd-ready*`・`--sd-doing*`・`--sd-blocked*`・`--sd-unknown*`・`--sd-done*`・`--sd-track` を、`agent-marks.css` の各状態の既定と同じ値（app.css の値）で置く（agent-marks.css の暗い既定は prefers-color-scheme だけを見るので、変数を与えて上書きする）。`agent-marks.css` は変えない。
 			実装担当は app.css の該当の値を `git -C <spec-dock の main のチェックアウト> show main:src/spec_dock/assets/dashboard/app.css` で読む（SpecDock のリポジトリは変えない）。手元に spec-dock のチェックアウトがなければタスク担当に問う。
 			"""
 		satisfies: ["R-09"]
@@ -116,7 +117,7 @@ design: {
 	"D-08": {
 		title: "詳細の見出しの状態の印"
 		text: """
-			`agent-frame.js` は、`web/embed/agent-marks.js` の `watchWorktreeSummary('', {onDocument})`（同じオリジン、10 秒ごと、見えない間は読まない）で要約を読み、`worktrees` の中から `agents[].id` がこのエージェントの id に一致するものを探し、その worktree を、このエージェントだけを持つ写し（`{...worktree, agents: [agent]}`）にして `renderAgentMarks(<summary の中の置き場の span>, copy, {now: Date.now(), size: 'sm', max: 1})` で描く（onSelect は渡さない）。見つからない・読めないときは置き場を空にする。
+			`agent-frame.js` は、`web/embed/agent-marks.js` の `watchWorktreeSummary('', {onDocument})`（同じオリジン、10 秒ごと、見えない間は読まない）で要約を読み、`worktrees` の中から `agents[].id` がこのエージェントの id に一致するものを探し、その worktree を、このエージェントだけを持つ写し（`{...worktree, agents: [agent]}`）にして `renderAgentMarks(<summary の中の置き場の span>, copy, {now: Date.now(), size: 'sm', max: 1})` で描く（onSelect は渡さない）。写しのエージェントは `elapsedFrom: null`、`elapsedBasis: null` にする（部品は経過の文字を作らず、aria-label にも経過を入れない。部品の日本語の経過の表記を小窓に出さないため。R-11）。見つからない・読めないときは置き場を空にする。
 			`agent.html` の `<summary>` は、置き場の span（`#detail-mark`、aria-hidden ではない。印は自分の aria-label を持つ）と『詳細』の文字を持つ。印の部品のファイルとアイコンの表は変えずに import するだけ。
 			"""
 		satisfies: ["R-10"]

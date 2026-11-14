@@ -150,17 +150,20 @@ requirements: {
 		text: """
 			統括の決定（2026-11-14、msg_6a989e74bba2）。状態の色と意味は iss-00027 の対応に固定する（working＝doing の緑と回る弧、blocked＝琥珀、waiting＝ready の青、done＝灰、unknown＝紫、sleeping＝track の灰と月の印）。種類は各社のロゴ（`web/embed/agent-marks-icons.js` の表。二重に持たない）。
 			小窓は同じオリジンの稼働の印の要約（`GET /api/worktrees/summary`）を読み、このエージェントの印1つを、印の部品（`renderAgentMarks`）で、畳んだ詳細の見出し（summary）の中に描く。要約にこのエージェントがなければ印を出さない（『詳細』の文字だけ）。
+			見出しの印には経過の時間を出さない（部品の今の経過の表記は日本語なので、R-11 と食い違わないよう、経過の起点を外して渡す）。明暗は小窓の明暗（`?theme=` を含む）に従う。
 			"""
 		acceptance: [
 			"詳細の見出しに、印の部品が作った印（`.orca-marks` の中の1つ）が出て、状態の色とロゴが iss-00027 の表のとおり",
 			"要約が読めない、またはこのエージェントがないとき、印を出さず、詳細の見出しは出る",
+			"見出しの印に経過の文字（`.orca-mark-time`）がなく、aria-label と title にも経過が入らない",
+			"OS の明暗と違う `?theme=` で開いても、印の色が小窓の明暗の値になる",
 		]
 	}
 	"R-11": {
 		title: "会話の時刻を、英語の短い形（now・5m・3h・2d）で出す"
 		text: """
 			統括の決定（2026-11-14、msg_3a70faf1dfc3）。会話の行の時刻は、経過の短い形（1分未満 now、60分未満 Nm、24時間未満 Nh、ほか Nd）で出し、日本語の『今』『分前』などは使わない。元の時刻は `time` の `datetime` と `title` に持つ。
-			iss-00027 の表記の関数が `web/embed/` に入っていればそれを使い、入っていなければ同じ規則の関数を1か所に書いて、後で寄せる。
+			iss-00027 の英語の短い表記の関数（iss-00027 の decisions の `web/embed/elapsed.js`。fc654c0 にはない。fc654c0 の `formatElapsed` は日本語なので使わない）が、この Issue の PR の前に `origin/main` に入っていればそれを使い、入っていなければ同じ規則の関数を1か所に書いて、後で寄せる。
 			"""
 		acceptance: [
 			"会話の行の時刻が now・Nm・Nh・Nd のどれかで、`datetime` に元の時刻がある",
