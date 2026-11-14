@@ -1,0 +1,173 @@
+/* 「Orca で開く」のボタンの部品（open-control.js）。SpecDock のダッシュボードの .chip の仲間（app.css）に合わせる。
+   色は SpecDock の変数（--ds-*）を先に使い、ないときは app.css と同じ明暗の値に戻る。新しい色を足さない。
+   明暗は prefers-color-scheme と data-theme（?theme=）の両方に従う。埋め込みのボタン、詳細の見出し、受け箱が同じこのファイルを読む。 */
+.orca-open {
+  --orca-open-border: var(--ds-border, #dfe3e9);
+  --orca-open-border-hover: var(--ds-border-2, #848d9c);
+  --orca-open-text: var(--ds-text, #1c2230);
+  --orca-open-warn: var(--ds-warn, #a87400);
+  --orca-open-focus: var(--ds-focus, #1a56c4);
+  --orca-open-height: 24px;
+  --orca-open-icon: 14px;
+  --orca-open-icon-width: 22px;
+  --orca-open-font: 12px;
+  --orca-open-pad: 6px;
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .orca-open {
+    --orca-open-border: var(--ds-border, #2b313c);
+    --orca-open-border-hover: var(--ds-border-2, #6f7889);
+    --orca-open-text: var(--ds-text, #e6e9ef);
+    --orca-open-warn: var(--ds-warn, #e0a83a);
+    --orca-open-focus: var(--ds-focus, #8fb4ff);
+  }
+}
+
+:root[data-theme="dark"] .orca-open {
+  --orca-open-border: var(--ds-border, #2b313c);
+  --orca-open-border-hover: var(--ds-border-2, #6f7889);
+  --orca-open-text: var(--ds-text, #e6e9ef);
+  --orca-open-warn: var(--ds-warn, #e0a83a);
+  --orca-open-focus: var(--ds-focus, #8fb4ff);
+}
+
+.orca-open[data-size="sm"] {
+  --orca-open-height: 24px;
+  --orca-open-icon: 14px;
+  --orca-open-icon-width: 22px;
+  --orca-open-font: 12px;
+  --orca-open-pad: 6px;
+}
+
+.orca-open[data-size="md"] {
+  --orca-open-height: 28px;
+  --orca-open-icon: 16px;
+  --orca-open-icon-width: 25px;
+  --orca-open-font: 13px;
+  --orca-open-pad: 8px;
+}
+
+/* アイコンだけの正方形のボタンでは、ロゴを一回り小さくする（統括の答え 2026-11-14）。 */
+.orca-open[data-size="sm"][data-label="none"] {
+  --orca-open-icon: 12px;
+  --orca-open-icon-width: 19px;
+}
+
+.orca-open[data-size="md"][data-label="none"] {
+  --orca-open-icon: 14px;
+  --orca-open-icon-width: 22px;
+}
+
+.orca-open-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: var(--orca-open-height);
+  margin: 0;
+  padding: 0 var(--orca-open-pad);
+  border: 1px solid var(--orca-open-border);
+  border-radius: var(--ds-radius-s, 4px);
+  background: transparent;
+  color: var(--orca-open-text);
+  font-family: var(
+    --ds-font-sans,
+    "BIZ UDPGothic",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN",
+    "Noto Sans JP",
+    "Yu Gothic UI",
+    Meiryo,
+    sans-serif
+  );
+  font-size: var(--orca-open-font);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.orca-open[data-label="none"] .orca-open-button {
+  width: var(--orca-open-height);
+  padding: 0;
+}
+
+.orca-open-button:hover:not(:disabled) {
+  border-color: var(--orca-open-border-hover);
+}
+
+/* iframe の縁で切れないよう、内側に描く。 */
+.orca-open-button:focus-visible {
+  outline: 2px solid var(--orca-open-focus);
+  outline-offset: -2px;
+}
+
+.orca-open-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* 途中の回る印は薄くしない。 */
+.orca-open-button[aria-busy="true"] {
+  opacity: 1;
+}
+
+.orca-open-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--orca-open-icon-width);
+  height: var(--orca-open-icon);
+}
+
+/* 箱はロゴの比（約 1.57:1）の横長。回る印とチェックは正方形の形なので、箱の中央に高さで収まる（preserveAspectRatio の既定 meet）。 */
+.orca-open-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.orca-open[data-tone="warn"] .orca-open-button {
+  border-color: var(--orca-open-warn);
+}
+
+.orca-open[data-tone="warn"] .orca-open-icon {
+  color: var(--orca-open-warn);
+}
+
+.orca-open-icon [data-icon="spinner"] {
+  animation: orca-open-spin 0.8s linear infinite;
+}
+
+@keyframes orca-open-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orca-open-icon [data-icon="spinner"] {
+    animation: none;
+  }
+}
+
+/* 読み上げの領域。目に見えない形で隠す。 */
+.orca-open-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

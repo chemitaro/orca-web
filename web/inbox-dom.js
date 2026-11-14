@@ -1,6 +1,7 @@
 // 受け箱の段と項目を DOM の要素にする。文字はすべて textContent で入れ、HTML として解かない（innerHTML を使わない）。
 // document を受けるので、テストは小さな偽の document で確かめる。
 import { stateIcon } from './embed/agent-marks.js';
+import { createOpenControl } from './embed/open-control.js';
 
 function make(doc, tag, text, className) {
   const node = doc.createElement(tag);
@@ -26,8 +27,8 @@ export function renderFreshness(doc, lines) {
 }
 
 /**
- * 1つの項目。showOpen のときだけ「Orca で開く」を置き、押すと onOpen(target, status, button) を呼ぶ。
- * 許可の承認、返事、送信の操作は置かない。
+ * 1つの項目。showOpen のときだけ「Orca で開く」の部品（sm）を置く。置いたら onOpenMount(target, control) を呼び
+ * （受け箱が前の結果を戻す）、押すと onOpen(target, control) を呼ぶ。許可の承認、返事、送信の操作は置かない。
  */
 export function renderItem(doc, item, options) {
   const li = make(doc, 'li', null, 'item');
@@ -52,13 +53,12 @@ export function renderItem(doc, item, options) {
   if (item.detailHref) actions.append(link(doc, '詳細とチャット', item.detailHref));
   if (item.prHref) actions.append(link(doc, 'PR', item.prHref));
   if (options.showOpen && item.open) {
-    const button = make(doc, 'button', 'Orca で開く', 'open');
-    button.type = 'button';
-    const status = make(doc, 'span', null, 'open-status');
+    const control = createOpenControl(doc, { size: 'sm' });
     const target = item.open;
     li.dataset.agent = target.agentId;
-    button.addEventListener('click', () => options.onOpen(target, status, button));
-    actions.append(button, status);
+    options.onOpenMount?.(target, control);
+    control.button.addEventListener('click', () => options.onOpen(target, control));
+    actions.append(control.root);
   }
   if (actions.children.length > 0) li.append(actions);
   return li;

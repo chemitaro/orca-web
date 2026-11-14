@@ -1,27 +1,6 @@
+/* 「Orca で開く」の iframe の文書。ボタンの見た目は open-control.css が持つ。ここは背景を透明にし、余白とはみ出しをなくすだけ。 */
 :root {
   color-scheme: light dark;
-  --bg: transparent;
-  --fg: #1f2328;
-  --muted: #59636e;
-  --button-bg: #f6f8fa;
-  --button-fg: #1f2328;
-  --button-border: #d1d9e0;
-  --button-hover: #eef1f4;
-  --error: #cf222e;
-  --font-size: 13px;
-  --pad: 4px 10px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --fg: #e6edf3;
-    --muted: #9198a1;
-    --button-bg: #212830;
-    --button-fg: #e6edf3;
-    --button-border: #3d444d;
-    --button-hover: #2a313c;
-    --error: #ff7b72;
-  }
 }
 
 :root[data-theme="light"] {
@@ -30,66 +9,17 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --fg: #e6edf3;
-  --muted: #9198a1;
-  --button-bg: #212830;
-  --button-fg: #e6edf3;
-  --button-border: #3d444d;
-  --button-hover: #2a313c;
-  --error: #ff7b72;
-}
-
-:root[data-size="sm"] {
-  --font-size: 12px;
-  --pad: 2px 8px;
 }
 
 html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font:
-    var(--font-size) / 1.4 system-ui,
-    -apple-system,
-    "Segoe UI",
-    sans-serif;
+  background: transparent;
   overflow: hidden;
 }
 
 body {
   display: flex;
   align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-button {
-  font: inherit;
-  padding: var(--pad);
-  color: var(--button-fg);
-  background: var(--button-bg);
-  border: 1px solid var(--button-border);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-button:hover:not(:disabled) {
-  background: var(--button-hover);
-}
-
-button:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-#status {
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-#status[data-kind="error"] {
-  color: var(--error);
 }

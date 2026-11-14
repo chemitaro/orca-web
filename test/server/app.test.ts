@@ -387,11 +387,20 @@ test('部品のファイルは固定の対応だけで返り、ほかのパス�
       ['/embed/open-button.js', 'text/javascript; charset=utf-8'],
       ['/embed/open-button-frame.js', 'text/javascript; charset=utf-8'],
       ['/embed/open-button.css', 'text/css; charset=utf-8'],
+      ['/embed/open-control.js', 'text/javascript; charset=utf-8'],
+      ['/embed/open-control-view.js', 'text/javascript; charset=utf-8'],
+      ['/embed/open-control.css', 'text/css; charset=utf-8'],
     ]) {
       const res = await h.send({ path: path as string });
       assert.equal(res.status, 200, path);
       assert.equal(res.headers['content-type'], type);
       assert.equal(res.headers['x-content-type-options'], 'nosniff');
+    }
+    // 開くボタンの部品は同じオリジンの画面と iframe だけが読む（CORS を付けない）。
+    for (const path of ['/embed/open-control.js', '/embed/open-control-view.js', '/embed/open-control.css']) {
+      const res = await h.send({ path, headers: { origin: 'http://127.0.0.1:47800' } });
+      assert.equal(res.status, 200, path);
+      assert.equal(res.headers['access-control-allow-origin'], undefined, path);
     }
     for (const path of [
       '/embed/../package.json',

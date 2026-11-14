@@ -1,10 +1,10 @@
 // エージェントの印の部品。SpecDock が import する入口。
 // 要約（GET /api/worktrees/summary）を1つの輪で読み（watchWorktreeSummary）、worktree ごとの置き場に印を描く（renderAgentMarks）。
 // 文字は textContent、SVG は createElementNS だけで作り、HTML として解かない（innerHTML を使わない）。
-import { AGENT_ICONS, STATE_ICONS } from './agent-marks-icons.js';
+import { AGENT_ICONS, APP_ICONS, STATE_ICONS } from './agent-marks-icons.js';
 import { buildMarks } from './agent-marks-view.js';
 
-export { AGENT_ICONS, iconKey, STATE_ICONS } from './agent-marks-icons.js';
+export { AGENT_ICONS, APP_ICONS, iconKey, STATE_ICONS } from './agent-marks-icons.js';
 export { buildMarks, findWorktree, formatElapsed, MARK_LABELS, MARKS } from './agent-marks-view.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -50,6 +50,18 @@ function svg(doc, shape, className) {
  */
 export function stateIcon(doc, key, className = 'orca-mark-state') {
   return svg(doc, STATE_ICONS[key], className);
+}
+
+/**
+ * アプリのロゴ（APP_ICONS の鍵）の SVG。aria-hidden で、意味はボタンの読み上げの名前が持つ。開くボタンの部品が使う。
+ * shapes に同じ形の表を渡せば、その表から描く（開くボタンの回る印とチェック）。
+ * @param {any} doc document
+ * @param {string} key
+ * @param {string} [className]
+ * @param {Record<string, { viewBox: string, paths: Array<Record<string, string>> }>} [shapes]
+ */
+export function appIcon(doc, key, className, shapes = APP_ICONS) {
+  return svg(doc, shapes[key], className);
 }
 
 function span(doc, className, text) {

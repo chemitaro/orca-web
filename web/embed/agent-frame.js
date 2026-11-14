@@ -7,6 +7,7 @@ import { createWriter } from '../write.js';
 import { refreshTimes, renderChatRow, renderDetail, renderDetailMark } from './agent-dom.js';
 import { watchWorktreeSummary } from './agent-marks.js';
 import { buildChat, buildDetail, errorLabel, initialChat, olderResult, reduceChat } from './agent-view.js';
+import { createOpenControl, runOpen } from './open-control.js';
 import { renderSendPanel } from './send-dom.js';
 import { buildSendView, composerKeyAction, createSendFlow } from './send-view.js';
 
@@ -15,18 +16,6 @@ const STATE_POLL_MS = 5_000;
 const TIME_REFRESH_MS = 30_000;
 /** 送れるかを読み直す間隔。読むのは書く欄か止まった間で、画面が見えているときだけ。 */
 const SEND_STATUS_POLL_MS = 15_000;
-const OPEN_ERRORS = {
-  busy: 'ほかの開く処理が動いています',
-  worktree_not_found: 'Orca にこの worktree がありません',
-  target_gone: 'タブが閉じられていました',
-  unavailable: 'Orca につながりません',
-  runtime_changed: 'Orca が再起動しました。もう一度押してください',
-  unsupported: 'この Orca の版では開けません',
-  unknown_shape: 'Orca の応答を読めません',
-  orca_error: 'Orca が誤りを返しました',
-  unconfirmed: '開いたか確かめられません',
-};
-
 const params = new URLSearchParams(location.search);
 const agentId = params.get('id') ?? '';
 const theme = params.get('theme');
@@ -35,8 +24,7 @@ if (theme === 'light' || theme === 'dark') document.documentElement.dataset.them
 const els = {
   title: document.getElementById('title'),
   detail: document.getElementById('detail'),
-  open: /** @type {HTMLButtonElement} */ (document.getElementById('open')),
-  openStatus: document.getElementById('open-status'),
+  openSlot: document.getElementById('open-slot'),
   chatStatus: document.getElementById('chat-status'),
   session: document.getElementById('session'),
   older: /** @type {HTMLButtonElement} */ (document.getElementById('older')),
@@ -51,6 +39,11 @@ const els = {
 };
 
 const writer = createWriter();
+// 「Orca で開く」の部品（md、題名の行の右端）。
+const openControl = createOpenControl(document, { size: 'md' });
+els.openSlot.append(openControl.root);
+// 状態を読むまでは開く先が分からないので押せなくする（読めたら renderDetailArea が戻す）。
+openControl.setState('missing', 'エージェントの状態を読んでいます');
 let detail = null;
 let chat = initialChat();
 /** 開いている折り畳みの key。描き直しても開いたままにする。 */
@@ -131,10 +124,17 @@ els.older.addEventListener('click', async () => {
   }
 });
 
+/** 開く先（worktree）が分からなければ押せなくし、理由を title に出す。分かるようになれば戻す。要求の途中は変えない。 */
+function syncOpenTarget() {
+  if (openControl.state === 'busy') return;
+  if (!detail) openControl.setState('missing', 'エージェントが見つかりません');
+  else if (!detail.open) openControl.setState('missing');
+  else if (openControl.state === 'missing') openControl.setState('idle');
+}
+
 function renderDetailArea(state) {
   detail = buildDetail(state, agentId);
-  // 開く先（worktree）が分からなければ押せなくする。
-  els.open.disabled = !detail?.open;
+  syncOpenTarget();
   els.detail.replaceChildren();
   if (!detail) {
     els.title.textContent = 'エージェントが見つかりません';
@@ -151,7 +151,10 @@ async function pollState() {
     if (!res.ok) throw new Error(String(res.status));
     renderDetailArea(await res.json());
   } catch {
-    if (!detail) els.title.textContent = 'orca-web から状態を読めません';
+    if (!detail) {
+      els.title.textContent = 'orca-web から状態を読めません';
+      if (openControl.state !== 'busy') openControl.setState('missing', 'orca-web から状態を読めません');
+    }
   } finally {
     setTimeout(pollState, STATE_POLL_MS);
   }
@@ -160,25 +163,16 @@ async function pollState() {
 // 「Orca で開く」は幅 390px 以下では出さない（iPhone の幅）。
 const narrow = window.matchMedia('(max-width: 390px)');
 const applyNarrow = () => {
-  els.open.hidden = narrow.matches || !agentId;
-  els.openStatus.hidden = narrow.matches || !agentId;
+  els.openSlot.hidden = narrow.matches || !agentId;
 };
 applyNarrow();
 narrow.addEventListener('change', applyNarrow);
 
-els.open.addEventListener('click', async () => {
-  if (!detail?.open) return;
-  els.open.disabled = true;
-  els.openStatus.textContent = '開いています…';
-  try {
-    const { status, body } = await writer.send('/api/open', 'POST', detail.open);
-    els.openStatus.textContent =
-      body.ok === true ? '開きました' : (OPEN_ERRORS[body.error] ?? `開けません（${status}）`);
-  } catch {
-    els.openStatus.textContent = 'orca-web につながりません';
-  } finally {
-    els.open.disabled = false;
-  }
+openControl.button.addEventListener('click', () => {
+  const body = detail?.open;
+  if (!body) return;
+  // 要求の途中に開く先が消えていれば、結果の後に押せない状態へ戻す。
+  void runOpen(openControl, () => writer.send('/api/open', 'POST', body)).then(syncOpenTarget);
 });
 
 const sendFlow = createSendFlow({ agentId, writer, onChange: () => renderSend() });
@@ -243,7 +237,7 @@ document.addEventListener('visibilitychange', () => {
 renderSend();
 if (!agentId) {
   els.title.textContent = 'エージェントの指定がありません';
-  els.open.hidden = true;
+  els.openSlot.hidden = true;
   els.send.hidden = true;
 } else {
   void pollState();
