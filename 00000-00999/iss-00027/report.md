@@ -26,6 +26,9 @@ ID: "iss-00027"
 - 経過の表記の追記（2026-11-14、本人の指摘・統括の決定 task_27eff0d07653：now・5m・3h・2d）の仕様レビュー：合格（round-5）。round-4 は P1 1（受け箱の formatElapsed が同じ規則を持つのに1か所にする作業がない）、P2 1（置き換えた前の約束が残る）、P3 1（計画の状態と exit・rollback）で不合格。直して round-5 は P0/P1 0、P2 0、P3 1（受け箱と Run の木で短い形がそのまま読み上げられる。直さずに記録）。
   - 合格した文書の sha256：requirement.cue `4eb1dc3fd3d5310f27469e4b6260c8541e8fb8c4854c70d131a9e6330b8ed9bc`、design.cue `4523a6026bef4cfce34c3c4b764f2aea8ef8d0e564372bf0efaa4d88bc700cfb`、plan.cue `effa788929f14814fa6657a7ee3f39cc7805d47065a5126f37c91d5d8cd9d1d2`
   - 結果：`.workbench/spec-review/iss-00027/round-5.json`（対応は `review-response-4.md`）。照合のコミット `fc654c0f9c2838db2ca7d3b69de14adde1c0f3da`
+- 経過の表記の実装担当（elapsed、S-08）：claude / claude-opus-5-5 / medium（dispatch ctx_00db1c828ac7、`launch.effective` は計画どおり）。コミット `c0fafd9`。S-09（README・AGENTS）はタスク担当、`40e5081`。
+- 経過の表記の最終品質ゲート：合格（fqg-iss-00027-3、attempt 1、2026-11-14）。合格のコミット `40e5081ad9fd059c23f262573c07b200bd743fe4`、範囲 `fc654c0..40e5081`。P0/P1/P2 0、P3 2（文書がチャットの利用を現在形で書く。Run の木の未来の時刻のテストがない）。coverage 完全。テスト `npm run lint`・`npm test`（581 pass）・`npm run build` すべて exit 0。closure：`.workbench/final-quality-gate/fqg-iss-00027-3/closure.md`。記録だけのコミットはなし。
+- 経過の表記の確かめ：試しの画面（tailnet の URL、ヘッドレスの Chrome）で印の経過が `now`・`Nm`・`Nh`・`Nd` に見える（写し `.workbench/trial-evidence/iss-00027/elapsed/`：`trial-light.png`、`trial-dark.png`、`phone-light.png`。コミットしない）。実装担当の確かめで、印 181 個の aria-label に『今』と短い形がない。試しのサーバーは新しい配る表のため起動し直した（tailnet でも待ち受けたまま）。
 
 詳細: [Report Guide](../../../docs/authoring/report.md)
 
