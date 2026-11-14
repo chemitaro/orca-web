@@ -112,6 +112,12 @@ ID: "iss-00028"
   - 本文の吹き出しの線は 14 すべて 1px。発言どうしの間隔は 12px。
   - 横のはみ出しはない。詳細は畳まれている。送るボタンがある。
 - ui2 の確かめ（一時の orca-web とヘッドレスの Chrome）：6つの場合（`?theme=` を逆にした2つを含む）で、入れ子の枠は 0、ツールの線は今までのまま。
+- 最終品質ゲート `fqg-iss-00028-2`：合格のコミットは `7b066fc`、範囲は `3a83547..7b066fc`、attempt 01。
+  - レビュー（Opus 5.5 / high）：P0〜P3 0、coverage は完全。
+  - ChatGPT GPT-6 / Extra High（verified=true）：pass。P2 が1つあり、記録だけにした。ツールの行と知らせの行の前後の間隔も 12px になる点で、D-10 の決めた gap のとおりなので直さない。
+  - テスト：lint 0、644 pass、build 0。
+  - closure：`.workbench/final-quality-gate/fqg-iss-00028-2/closure.md`
+- PR：https://github.com/chemitaro/orca-web/pull/34（head `7b066fc`、`Refs #28`）。CI は `OBSERVED_CI_PASS`（2026-11-14T07:06Z）。マージと work finish は統括が行う。
 
 ## 本人に開いてほしい URL と、見てほしい点
 

@@ -158,7 +158,3 @@ compatibility: """
 	epic-00004 の文書は、統括の了承（2026-11-14、msg_745bb8dec9ff）を受け、requirement.cue の includes の2つ目、R-02、R-04 の text、F-01、decisions と、design.cue の D-02、D-05 を書き直す。F-06・R-03・D-03・D-04 は変えない。
 	"""
 
-risks: [
-	"Orca のソースが手元にないので、(f) の Orca の withdrawn の状態の形は確かめていない。届いたとも送っていないとも言わない unknown にして、送り直しを誘わない",
-	"画面が status を読んでから送るまでの間の宛先の入れ替わりは、意図の指紋の比べと確定の確かめ直しで止まる。確定と Orca の書き込みの間の隙は iss-00013 の risks のまま",
-]

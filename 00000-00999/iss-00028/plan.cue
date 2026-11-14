@@ -46,7 +46,7 @@ steps: {
 		text:     "対象：`web/embed/agent.css`、`test/web/agent-css.test.ts`（必要なら `test/web/agent-dom.test.ts`）。ブランチ chemitaro/iss-00028-bubble、開始のコミット 3a83547（origin/main）。確かめ：T-19。完了：`node --test test/web/*.test.ts`、`npm run lint`、`npm test`、`npm run build` が通り、T-19 のテストがある。描画の確かめは S-03 と同じ方法（一時の orca-web、sendEnabled は偽、ヘッドレスの Chrome）で、1280px と 390px、明暗で、発言の li の線の幅 0・背景が透明・内側の余白 0、本文の div だけが線を持つことを数える（送らない）。画面の実装担当（Claude Opus 5.5 / high）の手順。終えたら止まって HEAD を報告する。区切りのレビュー：なし"
 		realizes: ["R-12"]
 		after:    ["S-04"]
-		status:   "todo"
+		status:   "done"
 		session:  "ui2"
 	}
 	"S-06": {
@@ -54,7 +54,7 @@ steps: {
 		text:     "タスク担当が行う。試しの画面（8793・47910、tailnet でも動かしたまま）で、S-04 と同じ方法（iframe だけを切り出し、本文の文字は透明にして中身を写さない）で、直す前（3a83547）と後の写しを明暗、1280px と 390px で撮り、並べて Scope の artifacts に入れ、report.md に書く。確かめ：T-20。完了：report.md に前後の写しと数の結論がある"
 		realizes: ["R-12"]
 		after:    ["S-05"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }
