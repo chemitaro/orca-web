@@ -70,6 +70,8 @@ test('要約は共有の状態から作り、見る人を記録し stale を保�
         assert.equal(doc.stale, true);
         assert.equal(doc.worktrees[0]?.counts.total, 1);
         assert.equal(doc.worktrees[0]?.agents[0]?.mark, 'working');
+        assert.equal(doc.worktrees[0]?.agents[0]?.elapsedFrom, '2026-01-02T11:00:00.000Z');
+        assert.equal(doc.worktrees[0]?.agents[0]?.elapsedBasis, 'state');
         assert.equal(reply.headers['access-control-allow-origin'], undefined);
       }
       assert.equal(views, 2);

@@ -1,23 +1,12 @@
-// 試しの画面の組み立て（純粋な関数）。GET /api/worktrees/summary（orca-web.worktree-summary/v1）の文書から、
-// worktree の節の並び、節ごとの数、エージェントの丸、上の帯の文を作る。DOM、時計、fetch に触らない。
+// 試しの画面の組み立て（純粋な関数）。GET /api/worktrees/summary（orca-web.worktree-summary/v1）の1つの文書から、
+// 構造の図の箱の見本、Issue の一覧の行の見本、worktree の節の並びと数の札、上の帯の文を作る。DOM、時計、fetch に触らない。
+// 印（種類のアイコン、状態の色、経過）は試しの orca-web の部品（/embed/agent-marks.js）が描くので、ここでは組み立てない。
 // 要約の項目は信頼しないデータ。決めた項目だけを拾い、題名や本文は返さない。
 
-/** mark の並びと、色に頼らない文字の札。 */
-export const MARKS = ['working', 'blocked', 'waiting', 'done', 'sleeping', 'unknown'];
-
-export const MARK_LABELS = {
-  working: '作業中',
-  blocked: '許可待ち',
-  waiting: '入力待ち',
-  done: '完了',
-  sleeping: 'スリープ',
-  unknown: '不明',
-};
-
-export const AGENT_TYPE_LABELS = { claude: 'Claude', codex: 'Codex' };
+/** 数の札の並び（色の点と数だけを出す）。 */
+const COUNT_ORDER = ['working', 'blocked', 'waiting', 'done', 'sleeping', 'unknown'];
 
 const SCHEMA = 'orca-web.worktree-summary/v1';
-const DETAIL_PREFIX = '/embed/agent?id=';
 
 const str = (value) => (typeof value === 'string' && value !== '' ? value : null);
 
@@ -26,18 +15,6 @@ function basename(path) {
   const trimmed = path.replace(/\/+$/, '');
   const last = trimmed.slice(trimmed.lastIndexOf('/') + 1);
   return last === '' ? path : last;
-}
-
-function formatElapsed(since, now) {
-  if (typeof since !== 'string' || typeof now !== 'number') return null;
-  const at = Date.parse(since);
-  if (Number.isNaN(at)) return null;
-  const minutes = Math.floor((now - at) / 60_000);
-  if (minutes < 1) return '1分未満';
-  if (minutes < 60) return `${minutes}分`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}時間`;
-  return `${Math.floor(hours / 24)}日`;
 }
 
 function bannerFor(doc) {
@@ -49,58 +26,47 @@ function bannerFor(doc) {
   return null;
 }
 
-function agentView(agent, now) {
-  const mark = MARKS.includes(agent?.mark) ? agent.mark : 'unknown';
-  const agentType = str(agent?.agentType);
-  const detail = str(agent?.detail);
-  return {
-    id: str(agent?.id),
-    mark,
-    markLabel: MARK_LABELS[mark],
-    agentType,
-    typeLabel: agentType ? (AGENT_TYPE_LABELS[agentType] ?? agentType) : 'エージェント',
-    since: str(agent?.since),
-    elapsed: formatElapsed(agent?.since, now),
-    detail: detail?.startsWith(DETAIL_PREFIX) ? detail : null,
-  };
-}
-
-function sectionView(worktree, highlight, now) {
+function sectionView(worktree, highlight) {
   const id = str(worktree?.id);
   const path = str(worktree?.path);
   const name = path ? basename(path) : (id ?? '—');
-  const counts = MARKS.map((mark) => ({
+  const agentCount = Array.isArray(worktree?.agents) ? worktree.agents.length : 0;
+  const counts = COUNT_ORDER.map((mark) => ({
     mark,
-    label: MARK_LABELS[mark],
     count: Number.isInteger(worktree?.counts?.[mark]) ? worktree.counts[mark] : 0,
   })).filter((c) => c.count > 0);
-  const agents = Array.isArray(worktree?.agents) ? worktree.agents.map((a) => agentView(a, now)) : [];
   return {
     key: id ?? path ?? name,
     name,
     branch: str(worktree?.branch),
     project: str(worktree?.project?.name),
+    issue: str(worktree?.issue),
     highlight: typeof highlight === 'string' && highlight !== '' && name === highlight,
     openTarget: id ?? path,
-    total: Number.isInteger(worktree?.counts?.total) ? worktree.counts.total : agents.length,
+    where: { id, path },
+    agentCount,
+    total: Number.isInteger(worktree?.counts?.total) ? worktree.counts.total : agentCount,
     counts,
-    agents,
   };
 }
 
 /**
  * @param {unknown} summary GET /api/worktrees/summary の文書
- * @param {{ highlight?: string, now?: number }} options highlight はパスの末尾が一致する節を先頭に置く。now は経過の起点（ミリ秒）
- * @returns {{ banner: string | null, sections: any[] }}
+ * @param {{ highlight?: string, now?: number }} options highlight はパスの末尾が一致する節を先頭に置く
+ * @returns {{ banner: string | null, sections: any[], boxes: any[], rows: any[] }}
  */
-export function buildTrialView(summary, { highlight, now } = {}) {
+export function buildTrialView(summary, { highlight } = {}) {
   if (!summary || typeof summary !== 'object' || summary.schema !== SCHEMA || !Array.isArray(summary.worktrees)) {
-    return { banner: '要約の文書の形が違います。', sections: [] };
+    return { banner: '要約の文書の形が違います。', sections: [], boxes: [], rows: [] };
   }
-  const sections = summary.worktrees.map((w) => sectionView(w, highlight, now));
+  const all = summary.worktrees.map((w) => sectionView(w, highlight)).filter((s) => s.agentCount > 0);
+  const ordered = [...all.filter((s) => s.highlight), ...all.filter((s) => !s.highlight)];
+  const sections = ordered.map(({ agentCount, issue, ...section }) => section);
   return {
     banner: bannerFor(summary),
-    sections: [...sections.filter((s) => s.highlight), ...sections.filter((s) => !s.highlight)],
+    sections,
+    boxes: ordered.map((s) => ({ key: s.key, name: s.name, branch: s.branch, where: s.where })),
+    rows: ordered.map((s) => ({ key: s.key, label: s.issue ?? s.name, where: s.where })),
   };
 }
 

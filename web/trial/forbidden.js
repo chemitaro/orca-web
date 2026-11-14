@@ -1,5 +1,5 @@
 // 許さないオリジンの画面。試しの orca-web に対して、要約の読み、詳細とチャットの iframe、開くボタン、
-// トークンと送る意図の書き込みを試し、拒まれたかを textContent で示す。宛先はどれも実在しない仮の値にする。
+// トークンと送る意図の書き込み、印の部品の動的な import を試し、拒まれたかを textContent で示す。宛先はどれも実在しない仮の値にする。
 import { orcaBase } from './trial-view.js';
 
 const PROBE_ID = 'forbidden-probe';
@@ -19,6 +19,16 @@ async function probe(id, url, init) {
     show(id, !res.ok, `HTTP ${res.status}`);
   } catch {
     show(id, true, 'ブラウザーが応答を渡さない（CORS で拒まれたか、届かない）');
+  }
+}
+
+/** 印の部品の動的な import を試す。CORS で拒まれると import が失敗する。 */
+async function probeImport(id, url) {
+  try {
+    await import(url);
+    show(id, false, 'import できた');
+  } catch {
+    show(id, true, 'import が失敗した（CORS で拒まれたか、届かない）');
   }
 }
 
@@ -57,6 +67,7 @@ async function start() {
     probe('r-summary', `${base}/api/worktrees/summary`),
     probe('r-token', `${base}/api/token`, json({})),
     probe('r-intent', `${base}/api/send/intent`, json({})),
+    probeImport('r-marks', `${base}/embed/agent-marks.js`),
   ]);
 }
 

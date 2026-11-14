@@ -105,11 +105,12 @@ const res = await fetch('http://127.0.0.1:8791/api/worktrees/summary');
 const summary = await res.json();
 // summary.worktrees[i]: { id, path, branch, project: {id, name} | null, issue, counts, agents }
 // counts: { working, blocked, waiting, done, sleeping, unknown, total }
-// agents[j]: { id, mark, agentType, since, detail }   detail は /embed/agent?id=… の道
+// agents[j]: { id, mark, agentType, since, detail, elapsedFrom, elapsedBasis }   detail は /embed/agent?id=… の道
 ```
 
 - `mark` は `working`・`blocked`・`waiting`・`done`・`sleeping`（状態がなく、端末が復元待ち）・`unknown`（知らない値や欠け）。受け箱と同じ決め方。
 - `since` はその状態になった時刻（ISO 8601）。作業を終えてからの待ち時間の起点に使える。
+- `elapsedFrom` と `elapsedBasis` は経過の時間の起点。`since` があればそれ（`state`：その状態になってから）。スリープと不明で `since` がなければ、その worktree の最後の活動の時刻（`worktree-activity`）。どちらもなければ null。
 - 会話や連絡の本文、タブの題名、最後の一言は返さない。Orca に届かないときも 200 で、`stale` と `connection.state` で示す。
 
 ### 「Orca で開く」のボタン
@@ -167,6 +168,36 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 
 SpecDock のダッシュボードを Tailscale のアドレスで開くと、状態は `http://<Tailscale の IP>:8791/api/state` から読める。開くボタンは幅 390px 以下では出ない。
 
+### 稼働の印の部品（アイコン・色・経過の時間）
+
+SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に、worktree ごとのエージェントの印を描く ES Module の部品。要約を1回読めば、同じ文書から多くの箱や行に描ける。部品の4つのファイル（`/embed/agent-marks.js`、`agent-marks-view.js`、`agent-marks-icons.js`、`agent-marks.css`）は、要約と同じ読み取りの CORS で配る（`ORCA_WEB_READ_ORIGINS` のオリジンだけ。ほかのオリジンからの import は 403 で失敗する）。
+
+```html
+<link rel="stylesheet" href="http://127.0.0.1:8791/embed/agent-marks.css" />
+<script type="module">
+  import { findWorktree, renderAgentMarks, watchWorktreeSummary } from 'http://127.0.0.1:8791/embed/agent-marks.js';
+  const watch = watchWorktreeSummary('http://127.0.0.1:8791', {
+    onDocument(summary) {
+      for (const box of document.querySelectorAll('[data-worktree]')) {
+        const worktree = findWorktree(summary, { path: box.dataset.worktree });
+        if (worktree) renderAgentMarks(box.querySelector('.marks'), worktree, {
+          size: 'sm',   // 小 16px、'md' は 20px
+          max: 4,       // 超えた分は「+N」にまとめる
+          onSelect: ({ detail }) => openDetail(`http://127.0.0.1:8791${detail}`), // 渡さなければボタンにならない
+        });
+      }
+    },
+    onError() { /* 前の描画は残る。古いことを示す */ },
+  }); // 既定 10 秒ごと。画面が見えない間は読まない。watch.stop() で止める
+</script>
+```
+
+- 種類はアイコン（Claude と Codex は各社のロゴ、ほかの種類は中立の丸、種類がなければ破線の丸）、状態は色（作業中 緑、許可待ち 赤、入力待ち 琥珀、完了 青、スリープ 灰と月の印、不明 灰の破線の縁）、経過の時間は「今」「N分」「N時間」「N日」。印は要対応・作業中・不明・完了・スリープの順に並ぶ。
+- 色だけに頼らないよう、各印は種類、状態、経過とその起点を読み上げの名前（aria-label）と title に持つ。
+- 色と大きさは `.orca-marks` の CSS のカスタムプロパティ（`--orca-mark-working`、`--orca-mark-blocked`、`--orca-mark-waiting`、`--orca-mark-done`、`--orca-mark-sleeping`、`--orca-mark-unknown`、`--orca-mark-fg`、`--orca-mark-icon-bg`、`--orca-mark-icon-fg`）で変えられる。暗い背景向けの値も持つ。
+- アイコンは `web/embed/agent-marks-icons.js` の表 `AGENT_ICONS` の1か所だけで決まる。差し替えるときはこの表の値だけを変える。
+- Claude と Codex（OpenAI）のロゴの SVG は、stablyai/orca（MIT）の `src/renderer/src/components/status-bar/icons.tsx`（コミット `80a514c`）から写した。ロゴは Anthropic・OpenAI の商標。
+
 ### 試しの画面で確かめる
 
 SpecDock に組み込む前に、3つの部品（稼働の印の要約、開くボタン、詳細とチャットの iframe）を、SpecDock とは別のオリジンの試しの画面で確かめる。常駐の orca-web（8791）と本物の SpecDock（47800）は使わず、変えない。
@@ -178,8 +209,8 @@ npm run trial -- --dry-run                           # 組んだ環境変数と 
 
 - 起動するもの：試し用の orca-web（8792）、試しの画面（47900。`web/trial/` を `src/tools/trial-host.ts` が配る）、許していないオリジンの画面（47901）。どれも 127.0.0.1 と、指定したときは Tailscale の IP だけで待ち受ける。ポートは `--orca-port`、`--page-port`、`--forbidden-port` で変えられる（8791 と 47800 は使えない）。
 - 試し用の orca-web が許すのは試しの画面のオリジン（`http://127.0.0.1:47900` と `http://<Tailscale の IP>:47900`）だけ。設定と送信の記録は `--state-dir`（既定 `.workbench/trial`）の `settings.json` と `sends/` に分ける。常駐の置き場は指定できない。
-- 開く URL：`http://127.0.0.1:47900/`（Mac の幅）、`/phone.html`（試しの画面を幅 390px の枠に入れたもの）、`http://127.0.0.1:47901/forbidden.html`（要約の読み、iframe、ボタン、トークン、送る意図が拒まれることを示す）。スマホからは `http://<Tailscale の IP>:47900/`。`localhost` の名前では開けない（421）。
-- 試しの画面：worktree ごとの節に、エージェントの丸と状態ごとの数を描く。worktree `send-test`（試しの送り先）を先頭に置く。丸を押すと、幅 720px より広いときは横の欄、狭いときは節の下に詳細とチャットの iframe が開く。節ごとに開くボタンを置く（幅 390px 以下では出ない）。
+- 開く URL：`http://127.0.0.1:47900/`（Mac の幅）、`/phone.html`（試しの画面を幅 390px の枠に入れたもの）、`http://127.0.0.1:47901/forbidden.html`（要約の読み、iframe、ボタン、トークン、送る意図、部品の import が拒まれることを示す）。スマホからは `http://<Tailscale の IP>:47900/`。`localhost` の名前では開けない（421）。
+- 試しの画面：稼働の印の部品を試しの orca-web から import し、要約を1回読んで、構造の図の箱の見本、Issue の一覧の行の見本、worktree ごとの節（印と、色の点と数の札）を描く。worktree `send-test`（試しの送り先）を先頭に置く。印を押すと、幅 720px より広いときは横の欄、狭いときはその見本や節の下に詳細とチャットの iframe が開く。節ごとに開くボタンを置く（幅 390px 以下では出ない）。
 - 送信：試しの `settings.json` は `sendEnabled: false` で作られる。試すときだけ、試しの `settings.json` に `"sendEnabled": true` を手で書く。試しでは試しの送り先（worktree `send-test`）にだけ送り、確かめ終わったら `false` に戻す。
 - 止める：`kill -TERM $(cat .workbench/trial/trial.pid)`（前面で動かしたときは Ctrl-C）。試し用の orca-web も一緒に止まる。要らなくなったら `.workbench/trial/` を消す。
 

@@ -11,7 +11,7 @@
     <header class="top">
       <span class="sample">許さないオリジン（試しの orca-web はこのオリジンを許していない）</span>
       <h1>拒まれることの確かめ</h1>
-      <p class="lead">5つとも拒まれるのが正しい結果です。(2)(3) は枠の中が描かれないことを見ます。</p>
+      <p class="lead">6つとも拒まれるのが正しい結果です。(2)(3) は枠の中が描かれないことを見ます。</p>
       <p id="banner" class="banner" role="status" aria-live="polite" hidden></p>
     </header>
     <main class="checks">
@@ -36,6 +36,10 @@
       <section class="check">
         <h2>(5) 送る意図（POST /api/send/intent）</h2>
         <p id="r-intent" class="result">確かめています…</p>
+      </section>
+      <section class="check">
+        <h2>(6) 印の部品の import（/embed/agent-marks.js）</h2>
+        <p id="r-marks" class="result">確かめています…</p>
       </section>
     </main>
     <script type="module" src="./forbidden.js"></script>

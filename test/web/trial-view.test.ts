@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import type { WorktreeSummary, WorktreeSummaryDocument } from '../../src/summary/model.ts';
 import { buildTrialView as build, detailUrl, orcaBase } from '../../web/trial/trial-view.js';
@@ -28,6 +29,8 @@ function worktree(overrides: Partial<WorktreeSummary> = {}): WorktreeSummary {
         mark: 'working',
         agentType: 'claude',
         since: '2026-11-14T09:48:00.000Z',
+        elapsedFrom: '2026-11-14T09:48:00.000Z',
+        elapsedBasis: 'state',
         detail: '/embed/agent?id=tab-1%3Aleaf-1',
       },
     ],
@@ -85,7 +88,8 @@ test('節の名前はパスの末尾、ブランチ、プロジェクト名、�
       ['sleeping', 1],
     ],
   );
-  assert.ok(section.counts.every((c: { label: string }) => typeof c.label === 'string' && c.label !== ''));
+  // 数の札は色の点と数だけ。文字の状態の名前を持たない。
+  assert.ok(section.counts.every((c: object) => Object.keys(c).sort().join() === 'count,mark'));
 });
 
 test('パスがなければ名前は id、ブランチとプロジェクトがなければ null', () => {
@@ -94,47 +98,6 @@ test('パスがなければ名前は id、ブランチとプロジェクトが�
   assert.equal(section.name, 'repo-a::/work/repo-a/iss-1');
   assert.equal(section.branch, null);
   assert.equal(section.project, null);
-});
-
-test('丸は id・mark・種類・経過・detail を持ち、知らない mark は unknown', () => {
-  const doc = summary([
-    worktree({
-      agents: [
-        {
-          id: 'tab-1:leaf-1',
-          mark: 'working',
-          agentType: 'codex',
-          since: '2026-11-14T09:48:00.000Z',
-          detail: '/embed/agent?id=tab-1%3Aleaf-1',
-        },
-        // biome-ignore lint/suspicious/noExplicitAny: an unknown mark from a newer server
-        { id: 'chat:t2', mark: 'flying' as any, agentType: null, since: null, detail: '/embed/agent?id=chat%3At2' },
-      ],
-    }),
-  ]);
-  const [section] = buildTrialView(doc, { highlight: 'send-test', now: NOW }).sections;
-  const [first, second] = section.agents;
-  assert.equal(first.id, 'tab-1:leaf-1');
-  assert.equal(first.mark, 'working');
-  assert.equal(first.agentType, 'codex');
-  assert.equal(first.elapsed, '12分');
-  assert.equal(first.detail, '/embed/agent?id=tab-1%3Aleaf-1');
-  assert.ok(first.markLabel);
-  assert.equal(second.mark, 'unknown');
-  assert.equal(second.elapsed, null);
-  assert.equal(second.agentType, null);
-});
-
-test('detail が /embed/agent?id= で始まらなければ丸の detail は null', () => {
-  const doc = summary([
-    worktree({
-      agents: [
-        { id: 'x', mark: 'done', agentType: null, since: null, detail: 'https://evil.example/embed/agent?id=x' },
-      ],
-    }),
-  ]);
-  const [section] = buildTrialView(doc, { highlight: 'send-test', now: NOW }).sections;
-  assert.equal(section.agents[0].detail, null);
 });
 
 test('開くボタンには worktree の id、なければパスを使う', () => {
@@ -209,4 +172,57 @@ test('detailUrl は基の URL に detail と theme を付ける', () => {
     detailUrl('http://127.0.0.1:8792', '/embed/agent?id=a', 'other'),
     'http://127.0.0.1:8792/embed/agent?id=a',
   );
+});
+
+test('節は印を描く worktree の探し方（id とパス）を持ち、丸の文字の組み立てを持たない', () => {
+  const [section] = buildTrialView(summary([worktree()]), { highlight: 'send-test', now: NOW }).sections;
+  assert.deepEqual(section.where, { id: 'repo-a::/work/repo-a/iss-1', path: '/work/repo-a/iss-1' });
+  assert.equal(section.agents, undefined);
+});
+
+test('構造の図の箱と Issue の一覧の行の見本を、節と同じ文書から同じ並びで組む', () => {
+  const doc = summary([
+    worktree({ id: 'a', path: '/work/x/alpha', branch: 'alpha', issue: 'iss-7' }),
+    worktree({ id: 'b', path: '/work/x/send-test', branch: null, issue: null }),
+  ]);
+  const view = buildTrialView(doc, { highlight: 'send-test', now: NOW });
+  assert.deepEqual(view.boxes, [
+    { key: 'b', name: 'send-test', branch: null, where: { id: 'b', path: '/work/x/send-test' } },
+    { key: 'a', name: 'alpha', branch: 'alpha', where: { id: 'a', path: '/work/x/alpha' } },
+  ]);
+  assert.deepEqual(view.rows, [
+    { key: 'b', label: 'send-test', where: { id: 'b', path: '/work/x/send-test' } },
+    { key: 'a', label: 'iss-7', where: { id: 'a', path: '/work/x/alpha' } },
+  ]);
+});
+
+test('エージェントのいない worktree は箱、行、節に出さない', () => {
+  const doc = summary([worktree({ id: 'a', agents: [], counts: counts() }), worktree({ id: 'b' })]);
+  const view = buildTrialView(doc, { highlight: 'send-test', now: NOW });
+  assert.deepEqual(
+    [view.sections, view.boxes, view.rows].map((list: { key: string }[]) => list.map((x) => x.key)),
+    [['b'], ['b'], ['b']],
+  );
+});
+
+test('形の違う文書では箱と行も空', () => {
+  const view = buildTrialView({ schema: 'other' }, { highlight: 'send-test', now: NOW });
+  assert.deepEqual(view.boxes, []);
+  assert.deepEqual(view.rows, []);
+});
+
+test('経過と種類と状態の文字の組み立ては trial-view.js に残らない（部品を使う）', async () => {
+  const source = await readFile(new URL('../../web/trial/trial-view.js', import.meta.url), 'utf8');
+  for (const word of ['formatElapsed', 'MARK_LABELS', 'AGENT_TYPE_LABELS', '作業中', 'Claude', '分`'])
+    assert.ok(!source.includes(word), word);
+});
+
+test('試しの画面は部品の JS と CSS を試しの orca-web から読み、許さないオリジンの画面は import を試す', async () => {
+  const trial = await readFile(new URL('../../web/trial/trial.js', import.meta.url), 'utf8');
+  assert.match(trial, /import\(`\$\{base\}\/embed\/agent-marks\.js`\)/);
+  assert.match(trial, /\$\{base\}\/embed\/agent-marks\.css/);
+  assert.match(trial, /watchWorktreeSummary\(/);
+  const forbidden = await readFile(new URL('../../web/trial/forbidden.js', import.meta.url), 'utf8');
+  assert.match(forbidden, /\bimport\(url\)/);
+  assert.match(forbidden, /probeImport\([^)]*`\$\{base\}\/embed\/agent-marks\.js`\)/);
 });

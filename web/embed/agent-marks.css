@@ -1,0 +1,140 @@
+/* エージェントの印の部品（agent-marks.js）の見た目。
+   色は :root でなく .orca-marks に置くカスタムプロパティで、受け手のページが上書きできる。 */
+.orca-marks {
+  --orca-mark-working: #1f9d55;
+  --orca-mark-blocked: #d64545;
+  --orca-mark-waiting: #d69e2e;
+  --orca-mark-done: #3b6fd4;
+  --orca-mark-sleeping: #8a919c;
+  --orca-mark-unknown: #8a919c;
+  --orca-mark-fg: #ffffff;
+  --orca-mark-icon-bg: #ffffff;
+  --orca-mark-icon-fg: #1f2328;
+  --orca-mark-h: 16px;
+  --orca-mark-font: 10px;
+
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .orca-marks {
+    --orca-mark-working: #2fb36b;
+    --orca-mark-blocked: #e5534b;
+    --orca-mark-waiting: #d4a72c;
+    --orca-mark-done: #4f8ff0;
+    --orca-mark-sleeping: #5f6773;
+    --orca-mark-unknown: #5f6773;
+    --orca-mark-fg: #ffffff;
+    --orca-mark-icon-bg: #f6f8fa;
+    --orca-mark-icon-fg: #1f2328;
+  }
+}
+
+.orca-marks--md {
+  --orca-mark-h: 20px;
+  --orca-mark-font: 12px;
+}
+
+.orca-mark {
+  --orca-mark-bg: var(--orca-mark-unknown);
+
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: var(--orca-mark-h);
+  min-width: var(--orca-mark-h);
+  margin: 0;
+  padding: 1px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--orca-mark-h) / 2);
+  background: var(--orca-mark-bg);
+  color: var(--orca-mark-fg);
+  font:
+    600 var(--orca-mark-font) / 1 system-ui,
+    -apple-system,
+    sans-serif;
+  white-space: nowrap;
+}
+
+.orca-mark--working {
+  --orca-mark-bg: var(--orca-mark-working);
+}
+.orca-mark--blocked {
+  --orca-mark-bg: var(--orca-mark-blocked);
+}
+.orca-mark--waiting {
+  --orca-mark-bg: var(--orca-mark-waiting);
+}
+.orca-mark--done {
+  --orca-mark-bg: var(--orca-mark-done);
+}
+.orca-mark--sleeping {
+  --orca-mark-bg: var(--orca-mark-sleeping);
+}
+.orca-mark--unknown {
+  --orca-mark-bg: var(--orca-mark-unknown);
+  border: 1px dashed var(--orca-mark-fg);
+}
+.orca-mark--more {
+  --orca-mark-bg: var(--orca-mark-sleeping);
+  justify-content: center;
+  padding: 0 4px;
+}
+
+/* ロゴが状態の色の上でも読めるよう、白い小さな丸の台に載せる。 */
+.orca-mark-icon {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--orca-mark-h) - 4px);
+  height: calc(var(--orca-mark-h) - 4px);
+  padding: 1px;
+  border-radius: 50%;
+  background: var(--orca-mark-icon-bg);
+  color: var(--orca-mark-icon-fg);
+}
+
+.orca-mark-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.orca-mark-moon {
+  display: block;
+  flex: none;
+  width: calc(var(--orca-mark-h) - 6px);
+  height: calc(var(--orca-mark-h) - 6px);
+  color: var(--orca-mark-fg);
+}
+
+.orca-mark-time {
+  padding: 0 3px 0 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+button.orca-mark {
+  cursor: pointer;
+  appearance: none;
+}
+
+button.orca-mark:focus-visible {
+  outline: 2px solid var(--orca-mark-icon-fg);
+  outline-offset: 1px;
+}
+
+@media (prefers-color-scheme: dark) {
+  button.orca-mark:focus-visible {
+    outline-color: var(--orca-mark-icon-bg);
+  }
+}

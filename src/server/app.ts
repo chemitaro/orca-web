@@ -116,36 +116,49 @@ export const OPEN_ERROR_STATUS: Record<OpenErrorCode, number> = {
 };
 
 /** 配るファイル（道 → web/ の中の固定のファイルと型）。利用者のパスを受けない。page は CSP を付ける画面。 */
-const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?: 'index' | 'embed' }>> = {
-  '/': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
-  '/index.html': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
-  '/inbox.js': { file: 'inbox.js', type: 'text/javascript; charset=utf-8' },
-  '/inbox-view.js': { file: 'inbox-view.js', type: 'text/javascript; charset=utf-8' },
-  '/inbox-dom.js': { file: 'inbox-dom.js', type: 'text/javascript; charset=utf-8' },
-  '/runs': { file: 'runs.html', type: 'text/html; charset=utf-8', page: 'index' },
-  '/runs.js': { file: 'runs.js', type: 'text/javascript; charset=utf-8' },
-  '/run.js': { file: 'run.js', type: 'text/javascript; charset=utf-8' },
-  '/project.js': { file: 'project.js', type: 'text/javascript; charset=utf-8' },
-  '/runs-view.js': { file: 'runs-view.js', type: 'text/javascript; charset=utf-8' },
-  '/runs-dom.js': { file: 'runs-dom.js', type: 'text/javascript; charset=utf-8' },
-  '/poll-loop.js': { file: 'poll-loop.js', type: 'text/javascript; charset=utf-8' },
-  '/settings': { file: 'settings.html', type: 'text/html; charset=utf-8', page: 'index' },
-  '/main.js': { file: 'main.js', type: 'text/javascript; charset=utf-8' },
-  '/view.js': { file: 'view.js', type: 'text/javascript; charset=utf-8' },
-  '/write.js': { file: 'write.js', type: 'text/javascript; charset=utf-8' },
-  '/style.css': { file: 'style.css', type: 'text/css; charset=utf-8' },
-  '/embed/open-button': { file: 'embed/open-button.html', type: 'text/html; charset=utf-8', page: 'embed' },
-  '/embed/open-button.js': { file: 'embed/open-button.js', type: 'text/javascript; charset=utf-8' },
-  '/embed/open-button-frame.js': { file: 'embed/open-button-frame.js', type: 'text/javascript; charset=utf-8' },
-  '/embed/open-button.css': { file: 'embed/open-button.css', type: 'text/css; charset=utf-8' },
-  '/embed/agent': { file: 'embed/agent.html', type: 'text/html; charset=utf-8', page: 'embed' },
-  '/embed/agent-frame.js': { file: 'embed/agent-frame.js', type: 'text/javascript; charset=utf-8' },
-  '/embed/agent-view.js': { file: 'embed/agent-view.js', type: 'text/javascript; charset=utf-8' },
-  '/embed/agent-dom.js': { file: 'embed/agent-dom.js', type: 'text/javascript; charset=utf-8' },
-  '/embed/send-view.js': { file: 'embed/send-view.js', type: 'text/javascript; charset=utf-8' },
-  '/embed/send-dom.js': { file: 'embed/send-dom.js', type: 'text/javascript; charset=utf-8' },
-  '/embed/agent.css': { file: 'embed/agent.css', type: 'text/css; charset=utf-8' },
-};
+const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?: 'index' | 'embed'; cors?: 'read' }>> =
+  {
+    '/': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
+    '/index.html': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
+    '/inbox.js': { file: 'inbox.js', type: 'text/javascript; charset=utf-8' },
+    '/inbox-view.js': { file: 'inbox-view.js', type: 'text/javascript; charset=utf-8' },
+    '/inbox-dom.js': { file: 'inbox-dom.js', type: 'text/javascript; charset=utf-8' },
+    '/runs': { file: 'runs.html', type: 'text/html; charset=utf-8', page: 'index' },
+    '/runs.js': { file: 'runs.js', type: 'text/javascript; charset=utf-8' },
+    '/run.js': { file: 'run.js', type: 'text/javascript; charset=utf-8' },
+    '/project.js': { file: 'project.js', type: 'text/javascript; charset=utf-8' },
+    '/runs-view.js': { file: 'runs-view.js', type: 'text/javascript; charset=utf-8' },
+    '/runs-dom.js': { file: 'runs-dom.js', type: 'text/javascript; charset=utf-8' },
+    '/poll-loop.js': { file: 'poll-loop.js', type: 'text/javascript; charset=utf-8' },
+    '/settings': { file: 'settings.html', type: 'text/html; charset=utf-8', page: 'index' },
+    '/main.js': { file: 'main.js', type: 'text/javascript; charset=utf-8' },
+    '/view.js': { file: 'view.js', type: 'text/javascript; charset=utf-8' },
+    '/write.js': { file: 'write.js', type: 'text/javascript; charset=utf-8' },
+    '/style.css': { file: 'style.css', type: 'text/css; charset=utf-8' },
+    '/embed/open-button': { file: 'embed/open-button.html', type: 'text/html; charset=utf-8', page: 'embed' },
+    '/embed/open-button.js': { file: 'embed/open-button.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/open-button-frame.js': { file: 'embed/open-button-frame.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/open-button.css': { file: 'embed/open-button.css', type: 'text/css; charset=utf-8' },
+    '/embed/agent': { file: 'embed/agent.html', type: 'text/html; charset=utf-8', page: 'embed' },
+    '/embed/agent-frame.js': { file: 'embed/agent-frame.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/agent-view.js': { file: 'embed/agent-view.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/agent-dom.js': { file: 'embed/agent-dom.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/send-view.js': { file: 'embed/send-view.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/send-dom.js': { file: 'embed/send-dom.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/agent-marks.js': { file: 'embed/agent-marks.js', type: 'text/javascript; charset=utf-8', cors: 'read' },
+    '/embed/agent-marks-view.js': {
+      file: 'embed/agent-marks-view.js',
+      type: 'text/javascript; charset=utf-8',
+      cors: 'read',
+    },
+    '/embed/agent-marks-icons.js': {
+      file: 'embed/agent-marks-icons.js',
+      type: 'text/javascript; charset=utf-8',
+      cors: 'read',
+    },
+    '/embed/agent-marks.css': { file: 'embed/agent-marks.css', type: 'text/css; charset=utf-8', cors: 'read' },
+    '/embed/agent.css': { file: 'embed/agent.css', type: 'text/css; charset=utf-8' },
+  };
 
 type Headers = Record<string, string>;
 
@@ -625,12 +638,33 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
       sendError(res, 404, 'not_found');
       return;
     }
+    let access: Headers = {};
+    if (asset.cors === 'read') {
+      const allowed = readAccess(req);
+      if (allowed === null) {
+        sendError(res, 403, 'forbidden_origin');
+        return;
+      }
+      access = allowed;
+      if (method === 'OPTIONS') {
+        res.writeHead(
+          204,
+          baseHeaders({
+            ...access,
+            'access-control-allow-methods': 'GET, HEAD',
+            'access-control-max-age': '600',
+          }),
+        );
+        res.end();
+        return;
+      }
+    }
     if (method !== 'GET' && method !== 'HEAD') {
-      sendError(res, 405, 'method_not_allowed');
+      sendError(res, 405, 'method_not_allowed', access);
       return;
     }
     const content = await readFile(path.join(webDir, asset.file));
-    const headers = baseHeaders({ 'content-type': asset.type, 'content-length': String(content.length) });
+    const headers = baseHeaders({ ...access, 'content-type': asset.type, 'content-length': String(content.length) });
     if (asset.page) {
       headers['content-security-policy'] = pagePolicy(asset.page, frameAncestors);
       // no-referrer だと、Fetch の仕様では同じオリジンの POST の Origin が null になりうる（守りが拒む）。
