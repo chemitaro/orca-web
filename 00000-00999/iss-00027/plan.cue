@@ -85,7 +85,7 @@ steps: {
 		text:     "2026-11-14 の追記（本人の要望、統括の決定 task_17e9d7936edf）。開始は main の `4e1995b`、ブランチ `chemitaro/iss-00027-background`。対象：`src/orca/read-state.ts`、`src/state/model.ts`、`src/state/normalize.ts`、`src/state/fields.ts`、`src/inbox/classify.ts`、`src/inbox/model.ts`、`src/summary/build.ts`、`src/summary/model.ts`、`src/runs/tree.ts`、`src/runs/model.ts`、`test/state/`（手書きの読みの結果。fixture は `test/state/fixture.ts` に足す）、`test/inbox/`、`test/summary/`、`test/runs/`、（期待値が変わる）`test/server/` と fields の一覧のテスト。web/ は変えない。確かめ：T-18、T-19、T-20、T-21。完了：`npm run lint`、`npm test`、`npm run build` が通る。区切りのレビュー：なし。止まって HEAD を報告する"
 		realizes: ["R-08", "R-10", "F-03"]
 		after:    ["S-09"]
-		status:   "todo"
+		status:   "done"
 		session:  "background-impl"
 	}
 	"S-11": {
@@ -93,7 +93,7 @@ steps: {
 		text:     "対象：`web/embed/agent-marks-icons.js`、`agent-marks-view.js`、`agent-marks.js`、`agent-marks.css`、`web/inbox-view.js`、`web/inbox-dom.js`、`web/runs-view.js`、`web/runs-dom.js`、（印の大きさ）`web/*.css` の受け箱と Run の木の分、`web/trial/trial-view.js`・`trial.js`・`index.html`・`trial.css`、`test/web/` の該当のテスト。lucide の d は `.workbench/lucide/package/dist/esm/icons/activity.js`（lucide-react 0.577.0）から写す。確かめ：T-22、T-23。完了：`npm run lint`、`npm test`、`npm run build` が通る。試しの画面で working・monitoring・done の見本が見えることを見る（試しのサーバーは止めない。止まっていたら同じ形で起動し直す。送信と「Orca で開く」はしない）。区切りのレビュー：なし。止まって HEAD を報告する"
 		realizes: ["R-09", "R-10"]
 		after:    ["S-10"]
-		status:   "todo"
+		status:   "done"
 		session:  "background-ui"
 	}
 	"S-12": {
@@ -101,7 +101,7 @@ steps: {
 		text:     "タスク担当が行う。Orca の working・monitoring の件数と orca-web の monitoring の件数を比べ（件数と結論だけ。会話の中身を写さない）、試しの画面（tailnet でも）で working・monitoring・done を並べた写しを report.md に残す。README の印の状態の説明・要約の項目・CSS の変数と、AGENTS.md の `src/summary/`・`src/inbox/`・`src/runs/`・`web/embed/` の説明を改める。確かめ：T-24。完了：文書が出来上がったものと合う"
 		realizes: ["R-08", "R-09", "R-10"]
 		after:    ["S-11"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }

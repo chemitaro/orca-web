@@ -101,6 +101,46 @@ SpecDock の中では、印の色の変数が SpecDock の `--sd-*`・`--ds-*` �
 - 実データに blocked・waiting・+N の印はなかった（CSS のテストで値を確かめた）。
 - 試しの画面は tailnet の IP でも待ち受けたまま（スマホ用）。
 
+## 追記：working の中の monitoring（バックグラウンドタスクを監視中）（2026-11-14、R-08〜R-10）
+
+依頼 task_17e9d7936edf（ctx_64badd5d3909）。ブランチ `chemitaro/iss-00027-background`（開始 `4e1995b`）。
+
+### 根拠（Orca に合わせたところ）
+
+stablyai/orca タグ v1.4.258（コミット `c91a7a6e`）。手元の Orca も 1.4.258。
+
+| 合わせたこと | Orca のファイル | orca-web |
+|---|---|---|
+| 意味とタイミング：主エージェントの番が done で、生きている子がエージェントでないもの（シェルのコマンド、Monitor、workflow）だけのとき `state: working`・`workingMode: monitoring` | `src/shared/agent-status/lifecycle/agent-lead-status-fold.ts`（`foldAgentLeadStatus`）、`src/shared/agent-status/child-work/agent-status-child-work-liveness.ts` | 判定をしない。状態と同じ取得元の `workingMode` を読み、`agentWorkingMode` で state working かつ値 monitoring のときだけ |
+| `orca orchestration check --wait` の待ちは monitoring でない（エージェントの作業） | `src/shared/orca-cli-invocations.ts`、liveness の `isAgentChildWork` | ただの working（回る印） |
+| 値の場所 | `src/shared/agent-status/contracts/agent-status-types.ts`、`src/shared/runtime-worktree-contracts.ts`（ps）、`src/shared/runtime-mobile-session-tab-contracts.ts`（chatStatus） | タブの agentStatus・chatStatus、ps の agents |
+| 印の絵：lucide の `Activity`（lucide-react 0.577.0、ISC）、回る印は出さない | `src/renderer/src/components/AgentStateDot.tsx` | `STATE_ICONS.monitoring`、作業中の輪を出さない |
+| 置き場：状態の印を種類のロゴの左に並べ、重ねない | `src/renderer/src/components/sidebar/workspace-card/activity/worktree-card-compact-agent-row.tsx` | ロゴの左 |
+| ラベル：ja「バックグラウンドタスクを監視中」（en `Monitoring background tasks`） | `src/renderer/src/i18n/locales/ja.json` | 同じ言葉 |
+| 経過：この印だけの時計はない（行の時刻はどの状態でも同じ `getCompactAgentTime`） | 上の compact row | 足さない。working と同じ規則 |
+| 数：working の一つの形 | `src/shared/worktree-status-rollup.ts` | mark working・counts.working、種類として `workingMode` |
+| 色：Orca は黄（`--agent-working`） | `src/renderer/src/assets/main.css` | 統括の決定で SpecDock の doing の緑（ここだけ Orca と違う） |
+
+方針の経緯：はじめの依頼は「新しい状態（例 background）、経過は待ちの始まりから」。統括の答え（msg_1ca07b651357）と本人の確認（msg_92bbf57b6a40）で「Orca 本体に合わせ、working の一つの形、Orca が出さないものは足さない」に改めた。仕様はその形で書いた。
+
+### 実機（読むだけ、2026-11-14 05:31Z）
+
+- Orca のタブの agentStatus：working・monitoring 3件、working 1件、done 7件（ps では working・monitoring 2件。ps はタブのある端末の一部しか持たない）。
+- orca-web（試しの orca-web、要約）：working・monitoring 3件、working 1件。Orca と一致。3件とも worker の端末が背後の Bash を待つもの。統括は構造化 Chat で、そのときは done。
+- 写しは項目と値だけ（`.workbench/monitoring-probe-1.json`、`-2.json`。会話・プロンプトなし、コミットしない）。
+
+### 試しの画面（tailnet）
+
+- `http://<tailnet の IP>:47900/` をヘッドレスの Chrome で開いて写した（`.workbench/trial-evidence/iss-00027/monitoring/`）：`tailnet-states-light.png`、`tailnet-states-dark.png`（状態の見本：working は回る輪、monitoring は緑の脈の線がロゴの左で回らない、done は灰）、`tailnet-full-{light,dark}.png`（実機の値の印。監視中の印 9 個＝3人×3つの置き場）。
+- 監視中の印の弧：`::after` の content none、animation none、印の色 rgb(61,220,132)（暗い背景の doing）、幅 11px。
+
+### 実装
+
+- S-10（codex / gpt-6.1-sol / medium、ctx_884b6dce03ad）：`f36598c`。618 → 627 件。
+- S-11（claude / claude-opus-5-5 / medium、ctx_ac6b586ad5c0）：`6199f60`。627 → 640 件。
+- S-12（タスク担当）：README・AGENTS.md `231c30c`、この節。
+- 仕様のレビュー：round-6b pass（P2 2・P3 1。輪の `::before` が残る、受け箱の stalled の見せ方、`src/runs/model.ts` の対象漏れを直した）、round-7 pass（0件）。
+
 ## Residual Risks / Follow-ups
 
 - 本人の確かめ：試しの画面（`http://127.0.0.1:47900/`、`/phone.html`、`http://127.0.0.1:47901/forbidden.html`）で、アイコン・色・経過の見え方を見てもらう。実物の iPhone の Safari は見ていない（Mac の上の 390px）。
@@ -108,3 +148,5 @@ SpecDock の中では、印の色の変数が SpecDock の `--sd-*`・`--ds-*` �
 - ロゴは各社の商標（本人の判断で使う）。外すときは `AGENT_ICONS` の表だけを変える。
 - ロゴの path の完全一致のテストは、`.workbench/orca-icons.tsx` がない CI では先頭と末尾の照合だけ。
 - SpecDock 側の組み込み（epic-00471・epic-00526）は範囲外。
+- 監視中の経過は Orca の時刻の規則（最後に終えた時刻かセッションの始まり）と違い、orca-web の今の working の規則（状態の始まり）のまま。Orca に合わせるなら全状態の経過の規則を変える別の判断になる。
+- 監視中の印は ps にないタブ（タブの agentStatus）でも読むので、Orca の ps の数とは違いうる（画面の印はタブに合う）。
