@@ -22,7 +22,7 @@ steps: {
 		text:     "対象：`web/embed/agent-marks.js`（appIcon を出すだけ）、新しい `web/embed/open-control.js`・`open-control.css`、`web/embed/open-button.js`・`open-button.html`・`open-button-frame.js`・`open-button.css`、`web/embed/agent.html`・`agent-frame.js`・`agent.css`（古い #open の規則の削除と置き場）、`web/index.html`・`inbox.js`・`inbox-dom.js`・`style.css`（古い .open-status の削除）、`src/server/app.ts`（STATIC_FILES だけ）と、`test/web/` と `test/server/` のテスト。確かめ：T-04〜T-08。完了：`npm run lint`、`npm test`、`npm run build` が通る。描画の確かめは、実装担当が自分で起動した orca-web（一時の port、`npm run trial` か一時の settings）とヘッドレスの Chrome（`--disable-features=MacAppCodeSignClone`、CDP の Browser.close で閉じる）で、幅 1280px と 390px、明暗で、3か所の部品の高さ・アイコンの大きさ・切れ・横のはみ出しを数える。ボタンは押さない（状態は setState を直に呼んで見てよい）。iframe の既定の幅は、ここで測って定数にする。終えたらコミットして止まり HEAD を報告する"
 		realizes: ["R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "F-01", "F-02"]
 		after:    ["S-01"]
-		status:   "doing"
+		status:   "done"
 		session:  "ui"
 	}
 	"S-03": {
