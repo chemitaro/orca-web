@@ -20,6 +20,7 @@ ID: "iss-00027"
 - 追記（2026-11-14、本人の要望：色とスタイルを SpecDock に合わせる、作業中に回る動き。統括の依頼 task_719d89144ea2）の仕様レビュー：合格（round-3）。レビュアー spec-reviewer（Opus 5.5 / high、同じレビュアー）。P0/P1 0、P2 0、P3 2（R-02・D-04 に改める前の見た目の記述が残る。計画の手順の status と exit・rollback が追記と済んだ手順を映していない。直さずに記録。今の約束は R-05・R-06・D-08・D-09 と decisions が優先する）。
   - 合格した文書の sha256：requirement.cue `6e5c8d1da4f812878e47d3e36093d57bf614ed1c1b42702879887b7037ead583`、design.cue `43102a2d5238866a6361511176f531caca28694b660f455dadee29dc4734fa16`、plan.cue `01d996b22d30f2bdcd11cb98d133b1ae98c7a0dab7ab96f810f194d5ce146c54`
   - 結果：`.workbench/spec-review/iss-00027/round-3.json`。照合のコミット `10ab4e9a64223d6b295f56d6f90c8cde5afe1343`
+- 追記の最終品質ゲート：合格（fqg-iss-00027-2、attempt 1、2026-11-14）。合格のコミット `99ba358c80140adc074cf80df71fbce71c630be8`、範囲 `10ab4e9..99ba358`。quality-gate-reviewer（Opus 5.5 / medium）は P0〜P3 すべて 0、coverage 完全。D-08 の表の値は SpecDock の app.css の明暗の値とすべて一致。テスト `npm run lint`・`npm test`（576 pass）・`npm run build` すべて exit 0。closure：`.workbench/final-quality-gate/fqg-iss-00027-2/closure.md`。記録だけのコミットはなし。
 
 詳細: [Report Guide](../../../docs/authoring/report.md)
 
