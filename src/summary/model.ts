@@ -8,7 +8,15 @@ export interface WorktreeSummary {
   project: { id: string; name: string } | null;
   issue: string | null;
   counts: Record<AgentMark, number> & { total: number };
-  agents: { id: string; mark: AgentMark; agentType: string | null; since: string | null; detail: string }[];
+  agents: {
+    id: string;
+    mark: AgentMark;
+    agentType: string | null;
+    since: string | null;
+    detail: string;
+    elapsedFrom: string | null;
+    elapsedBasis: 'state' | 'worktree-activity' | null;
+  }[];
 }
 
 export interface WorktreeSummaryDocument {

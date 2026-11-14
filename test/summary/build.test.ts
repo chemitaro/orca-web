@@ -52,10 +52,42 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
         issue: 'iss-00017',
         counts: { working: 1, blocked: 1, waiting: 1, done: 1, sleeping: 0, unknown: 0, total: 4 },
         agents: [
-          { id: 'a /?', mark: 'blocked', agentType: 'codex', since: STARTED, detail: '/embed/agent?id=a%20%2F%3F' },
-          { id: 'waiting', mark: 'waiting', agentType: 'codex', since: STARTED, detail: '/embed/agent?id=waiting' },
-          { id: 'working', mark: 'working', agentType: 'codex', since: STARTED, detail: '/embed/agent?id=working' },
-          { id: 'z', mark: 'done', agentType: 'codex', since: STARTED, detail: '/embed/agent?id=z' },
+          {
+            id: 'a /?',
+            mark: 'blocked',
+            agentType: 'codex',
+            since: STARTED,
+            elapsedFrom: STARTED,
+            elapsedBasis: 'state',
+            detail: '/embed/agent?id=a%20%2F%3F',
+          },
+          {
+            id: 'waiting',
+            mark: 'waiting',
+            agentType: 'codex',
+            since: STARTED,
+            elapsedFrom: STARTED,
+            elapsedBasis: 'state',
+            detail: '/embed/agent?id=waiting',
+          },
+          {
+            id: 'working',
+            mark: 'working',
+            agentType: 'codex',
+            since: STARTED,
+            elapsedFrom: STARTED,
+            elapsedBasis: 'state',
+            detail: '/embed/agent?id=working',
+          },
+          {
+            id: 'z',
+            mark: 'done',
+            agentType: 'codex',
+            since: STARTED,
+            elapsedFrom: STARTED,
+            elapsedBasis: 'state',
+            detail: '/embed/agent?id=z',
+          },
         ],
       },
       {
@@ -66,7 +98,15 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
         issue: null,
         counts: { working: 0, blocked: 0, waiting: 0, done: 0, sleeping: 1, unknown: 0, total: 1 },
         agents: [
-          { id: 'sleep', mark: 'sleeping', agentType: 'codex', since: STARTED, detail: '/embed/agent?id=sleep' },
+          {
+            id: 'sleep',
+            mark: 'sleeping',
+            agentType: 'codex',
+            since: STARTED,
+            elapsedFrom: STARTED,
+            elapsedBasis: 'state',
+            detail: '/embed/agent?id=sleep',
+          },
         ],
       },
       {
@@ -76,7 +116,17 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
         project: null,
         issue: null,
         counts: { working: 0, blocked: 0, waiting: 0, done: 0, sleeping: 0, unknown: 1, total: 1 },
-        agents: [{ id: 'lost', mark: 'unknown', agentType: null, since: null, detail: '/embed/agent?id=lost' }],
+        agents: [
+          {
+            id: 'lost',
+            mark: 'unknown',
+            agentType: null,
+            since: null,
+            elapsedFrom: null,
+            elapsedBasis: null,
+            detail: '/embed/agent?id=lost',
+          },
+        ],
       },
     ],
   });
@@ -104,4 +154,52 @@ test('同じ path と null は id 順、Issue は branch、表示名の順で ta
     ],
   );
   assert.deepEqual(buildWorktreeSummary(input().state).worktrees, []);
+});
+
+test('状態の開始時刻を経過の起点にし、既存の since を保つ', () => {
+  const state = input({
+    worktrees: [worktree({ lastActivityAt: fact('2026-01-01T00:00:00.000Z') })],
+    agents: [agent(), agent('sleep', { state: fact(null), terminal: fact('awaiting-restore') })],
+  }).state;
+  const summary = buildWorktreeSummary(state).worktrees[0];
+  assert.ok(summary);
+  assert.equal(summary.agents.length, 2);
+  for (const entry of summary.agents) {
+    assert.equal(entry.since, STARTED);
+    assert.equal(entry.elapsedFrom, STARTED);
+    assert.equal(entry.elapsedBasis, 'state');
+  }
+});
+
+test('開始時刻のないスリープと不明だけ worktree の活動時刻を使う', () => {
+  const activity = '2026-01-01T00:00:00.000Z';
+  const state = input({
+    worktrees: [worktree({ lastActivityAt: fact(activity) }), worktree({ id: 'no-time' })],
+    agents: [
+      agent('sleep', { state: fact(null), terminal: fact('awaiting-restore'), stateStartedAt: fact(null) }),
+      agent('unknown', { state: fact(null), stateStartedAt: fact(null) }),
+      ...['working', 'blocked', 'waiting', 'done'].map((mark) =>
+        agent(mark, { state: fact(mark), stateStartedAt: fact(null) }),
+      ),
+      agent('no-time', { worktreeId: 'no-time', state: fact(null), stateStartedAt: fact(null) }),
+      agent('missing', { worktreeId: 'missing', state: fact(null), stateStartedAt: fact(null) }),
+    ],
+  }).state;
+  const before = structuredClone(state);
+  const entries = buildWorktreeSummary(state).worktrees.flatMap((entry) => entry.agents);
+  for (const id of ['sleep', 'unknown']) {
+    const entry = entries.find((entry) => entry.id === id);
+    assert.ok(entry);
+    assert.equal(entry.since, null);
+    assert.equal(entry.elapsedFrom, activity);
+    assert.equal(entry.elapsedBasis, 'worktree-activity');
+  }
+  for (const id of ['working', 'blocked', 'waiting', 'done', 'no-time', 'missing']) {
+    const entry = entries.find((entry) => entry.id === id);
+    assert.ok(entry);
+    assert.equal(entry.since, null);
+    assert.equal(entry.elapsedFrom, null);
+    assert.equal(entry.elapsedBasis, null);
+  }
+  assert.deepEqual(state, before);
 });

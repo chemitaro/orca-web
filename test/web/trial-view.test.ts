@@ -28,6 +28,8 @@ function worktree(overrides: Partial<WorktreeSummary> = {}): WorktreeSummary {
         mark: 'working',
         agentType: 'claude',
         since: '2026-11-14T09:48:00.000Z',
+        elapsedFrom: '2026-11-14T09:48:00.000Z',
+        elapsedBasis: 'state',
         detail: '/embed/agent?id=tab-1%3Aleaf-1',
       },
     ],
@@ -105,10 +107,20 @@ test('丸は id・mark・種類・経過・detail を持ち、知らない mark 
           mark: 'working',
           agentType: 'codex',
           since: '2026-11-14T09:48:00.000Z',
+          elapsedFrom: '2026-11-14T09:48:00.000Z',
+          elapsedBasis: 'state',
           detail: '/embed/agent?id=tab-1%3Aleaf-1',
         },
-        // biome-ignore lint/suspicious/noExplicitAny: an unknown mark from a newer server
-        { id: 'chat:t2', mark: 'flying' as any, agentType: null, since: null, detail: '/embed/agent?id=chat%3At2' },
+        {
+          id: 'chat:t2',
+          // biome-ignore lint/suspicious/noExplicitAny: an unknown mark from a newer server
+          mark: 'flying' as any,
+          agentType: null,
+          since: null,
+          elapsedFrom: null,
+          elapsedBasis: null,
+          detail: '/embed/agent?id=chat%3At2',
+        },
       ],
     }),
   ]);
@@ -129,7 +141,15 @@ test('detail が /embed/agent?id= で始まらなければ丸の detail は null
   const doc = summary([
     worktree({
       agents: [
-        { id: 'x', mark: 'done', agentType: null, since: null, detail: 'https://evil.example/embed/agent?id=x' },
+        {
+          id: 'x',
+          mark: 'done',
+          agentType: null,
+          since: null,
+          elapsedFrom: null,
+          elapsedBasis: null,
+          detail: 'https://evil.example/embed/agent?id=x',
+        },
       ],
     }),
   ]);

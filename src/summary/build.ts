@@ -27,12 +27,19 @@ export function buildWorktreeSummary(state: StateDocument): WorktreeSummaryDocum
     const mark = agentMark(agent);
     summary.counts[mark]++;
     summary.counts.total++;
+    const since = agent.stateStartedAt.value;
+    const activity =
+      mark === 'sleeping' || mark === 'unknown'
+        ? (state.worktrees.find((entry) => entry.id === agent.worktreeId)?.lastActivityAt.value ?? null)
+        : null;
     summary.agents.push({
       id: agent.id,
       mark,
       agentType: agent.agentType.value,
       since: agent.stateStartedAt.value,
       detail: `/embed/agent?id=${encodeURIComponent(agent.id)}`,
+      elapsedFrom: since ?? activity,
+      elapsedBasis: since !== null ? 'state' : activity !== null ? 'worktree-activity' : null,
     });
   }
   for (const summary of worktrees.values()) summary.agents.sort((a, b) => compareText(a.id, b.id));
