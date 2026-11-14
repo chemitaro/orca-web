@@ -14,7 +14,7 @@ steps: {
 		title:    "宛先の指紋と、送れるかの口・送る意図の追加の項目（D-01）"
 		text:     "対象：`src/send/target.ts`（targetFingerprint）、`src/send/service.ts`（status の target・agentType、intent の target の比べ）、`src/server/app.ts`（意図の物の鍵 target の検査）と、`test/send/target.test.ts`、`test/send/service.test.ts`、`test/server/send-api.test.ts`。確かめ：T-01、T-02。完了：`node --test test/send/*.test.ts test/server/send-api.test.ts` と `npm run lint` が通り、指紋が決まった値になり各項目の違いで変わり識別子そのものを含まないこと、status の新しい2つの項目（通らないときは null）、指紋の違う意図が送る RPC を0回で 409 target_changed（changed_since_shown）になること、指紋のない意図と同じ指紋の意図が今と同じに票を返すこと、HTTP の target の形の誤りが 400 で、ほかの鍵が今と同じに 400 のテストがある。区切りのレビュー：なし"
 		realizes: ["R-04", "R-06", "F-04"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -22,7 +22,7 @@ steps: {
 		text:     "対象：`src/send/journal.ts`（(b)、(d)）、`src/send/service.ts`（(c)、(d)、(e)）、`src/server/app.ts`（record_unreadable の 503）、`src/orca/send.ts`（(f) の checkChat だけ）と、それぞれのテスト。確かめ：T-03、T-04、T-05、T-06、T-07。完了：`node --test test/send/*.test.ts test/orca/send.test.ts test/server/send-api.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、T-03〜T-07 のテストがある。実装担当 impl の最後の手順で、区切りのレビュー CP-1 の最後の手順。止まって HEAD を報告する"
 		realizes: ["R-07", "F-05"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-03": {
@@ -30,7 +30,7 @@ steps: {
 		text:     "対象：`web/embed/agent.html`、`web/embed/agent.css`、`web/embed/agent-frame.js`、`web/embed/send-view.js`、`web/embed/send-dom.js`、`web/embed/agent-view.js`（formatAgo）、`web/embed/agent-dom.js`（時刻）と、`test/web/agent-view.test.ts`、`test/web/agent-dom.test.ts`、`test/web/send-view.test.ts`、`test/web/send-dom.test.ts`、画面の静的な形のテスト（`test/web/` に足す。`agent.html` を読む）。`src/server/app.ts` の STATIC_FILES はファイルを足すときだけ変える。`web/embed/agent-marks*.js` と `agent-marks.css` は変えない。確かめ：T-08、T-09、T-10、T-11、T-12、T-13、T-16、T-17、T-18。完了：`node --test test/web/*.test.ts` と `npm run lint`、`npm test`、`npm run build` が通り、T-08〜T-13 と T-16〜T-18 のテストがある。描画の確かめは、実装担当が自分で起動した orca-web（一時の port、一時の settings で sendEnabled は偽のまま）とヘッドレスの Chrome（`--disable-features=MacAppCodeSignClone`、CDP の Browser.close で閉じる）で、幅 1280px と 390px、明暗の両方で、詳細が畳まれ、見出しに印が出て、送るボタンが出て、横のはみ出しがないことを見る（送らない）。画面の実装担当の手順。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-01", "R-02", "R-03", "R-04", "R-05", "R-07", "R-09", "R-10", "R-11", "F-01", "F-02", "F-03", "F-04", "F-06"]
 		after:    ["S-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "ui"
 	}
 	"S-04": {
@@ -38,7 +38,7 @@ steps: {
 		text:     "タスク担当が行う（文書と、実物の Orca に送る手順）。D-06 のとおり、`npm run trial` で幅 1280px と 390px、明暗の写し（会話の欄をぼかし、SpecDock のダッシュボードと並べる）を Scope の `artifacts/` に置き、send-test の Claude と Codex の2つにだけ Enter で1回ずつ送り、outcome と試しの記録の行の数を report.md に書く（会話と送った文の中身は写さない）。README.md と AGENTS.md の送信の説明を直す。確かめ：T-14、T-15。完了：report.md の Verification に写しと送信の結論があり、`npm run lint`、`npm test`、`npm run build` が通る。試しのサーバーは本人が見られるように動かしたまま報告する"
 		realizes: ["R-08", "R-01", "R-02", "R-03", "R-09"]
 		after:    ["S-03"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }
