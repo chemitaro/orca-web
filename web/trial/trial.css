@@ -1,4 +1,4 @@
-/* 試しの画面。画面案 A の色（working 緑、waiting 黄、blocked 赤、done 灰、sleeping 紫）と明暗。 */
+/* 試しの画面。印は試しの orca-web の部品（agent-marks.css）が描く。ここは画面の枠と見本と明暗。 */
 :root {
   --bg: #f3f5f7;
   --surface: #ffffff;
@@ -12,7 +12,6 @@
   --wait: #a87600;
   --stop: #c0392b;
   --done: #6b7785;
-  --sleep: #7a5cc4;
   --sans: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
   --mono: ui-monospace, Menlo, monospace;
   color-scheme: light;
@@ -32,7 +31,6 @@
     --wait: #e5b23a;
     --stop: #ef6b5d;
     --done: #8d99a6;
-    --sleep: #a68cf0;
     color-scheme: dark;
   }
 }
@@ -178,80 +176,157 @@ p {
   min-width: 0;
 }
 
-.counts,
-.dots {
+.counts {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
 }
 
 .count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 11px;
   padding: 0 6px;
   border-radius: 4px;
   background: var(--chip);
 }
 
-.dot {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font: inherit;
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid currentColor;
-  background: transparent;
-  cursor: pointer;
-  max-width: 100%;
-}
-
-.dot::before {
-  content: "";
+/* 数の札の色の点。色は部品の CSS のカスタムプロパティと同じ値（部品が読めないときの値も置く）。 */
+.count-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--dot, var(--done));
   flex: none;
 }
 
-.dot[aria-pressed="true"] {
-  background: var(--chip);
+.count--working {
+  --dot: var(--work);
+}
+
+.count--waiting {
+  --dot: var(--wait);
+}
+
+.count--blocked {
+  --dot: var(--stop);
+}
+
+.count--done {
+  --dot: var(--accent);
+}
+
+.count--sleeping,
+.count--unknown {
+  --dot: var(--done);
+}
+
+.count--unknown .count-dot {
+  background: transparent;
+  border: 1px dashed var(--done);
+}
+
+/* 見本の並び。 */
+.samples {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.sample-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sample-slot:empty {
+  display: none;
+}
+
+/* 構造の図の箱の見本：幅 180px ほどの箱。 */
+.boxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.box {
+  width: 180px;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.box.sel,
+.row.sel {
+  outline: 2px solid var(--accent);
+}
+
+.box-name {
+  font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.dot:disabled {
-  cursor: default;
-  opacity: 0.6;
+.box-branch {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.dot-type {
-  color: var(--ink);
+.box-marks {
+  margin-top: 2px;
+  min-height: 16px;
 }
 
-.dot-time {
-  color: var(--muted);
+/* Issue の一覧の行の見本：1行。 */
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
 }
 
-.mark-working {
-  color: var(--work);
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  min-height: 28px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
 }
 
-.mark-waiting {
-  color: var(--wait);
+.row:first-child {
+  border-top: 0;
 }
 
-.mark-blocked {
-  color: var(--stop);
+.row-label {
+  font-size: 13px;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.mark-done,
-.mark-unknown {
-  color: var(--done);
-}
-
-.mark-sleeping {
-  color: var(--sleep);
+.row-marks {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .node-open:empty {

@@ -54,7 +54,7 @@ export function createTrialHostHandler(options: {
           ].join(' ');
           res.setHeader(
             'Content-Security-Policy',
-            `default-src 'none'; script-src 'self' ${bases}; style-src 'self'; connect-src 'self' ${bases}; frame-src 'self' ${bases}; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`,
+            `default-src 'none'; script-src 'self' ${bases}; style-src 'self' ${bases}; connect-src 'self' ${bases}; frame-src 'self' ${bases}; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`,
           );
         }
         res.end(req.method === 'HEAD' ? undefined : body);

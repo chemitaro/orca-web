@@ -11,12 +11,27 @@
     <header class="top">
       <span class="sample">試しの画面（SpecDock とは別のオリジン）</span>
       <h1>稼働の印</h1>
-      <p class="lead">worktree ごとのエージェントの印。丸を選ぶと詳細とチャットが開きます。</p>
+      <p class="lead">worktree ごとのエージェントの印（種類はアイコン、状態は色、経過は短い文字）。印を選ぶと詳細とチャットが開きます。</p>
       <p id="banner" class="banner" role="status" aria-live="polite" hidden></p>
       <p id="status" class="note"></p>
     </header>
     <main class="layout">
-      <section id="sections" class="sections" aria-label="worktree"></section>
+      <div class="samples">
+        <section class="sample-block" aria-labelledby="boxes-title">
+          <h2 id="boxes-title">構造の図の箱の見本</h2>
+          <div id="boxes" class="boxes"></div>
+          <div id="boxes-slot" class="slot sample-slot"></div>
+        </section>
+        <section class="sample-block" aria-labelledby="rows-title">
+          <h2 id="rows-title">Issue の一覧の行の見本</h2>
+          <ul id="rows" class="rows"></ul>
+          <div id="rows-slot" class="slot sample-slot"></div>
+        </section>
+        <section class="sample-block" aria-labelledby="sections-title">
+          <h2 id="sections-title">worktree の節</h2>
+          <div id="sections" class="sections"></div>
+        </section>
+      </div>
       <aside id="panel" class="panel" aria-label="詳細とチャット" hidden>
         <h2 id="panel-title">詳細とチャット</h2>
         <div id="panel-slot" class="slot"></div>

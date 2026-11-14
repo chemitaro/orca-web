@@ -41,7 +41,7 @@ test('静的なホストは表・Host・method を制限し、専用の CSP と�
     assert.equal(reply.headers['cache-control'], 'no-store');
     assert.equal(
       reply.headers['content-security-policy'],
-      "default-src 'none'; script-src 'self' http://100.64.0.1:8792 http://127.0.0.1:8792; style-src 'self'; connect-src 'self' http://100.64.0.1:8792 http://127.0.0.1:8792; frame-src 'self' http://100.64.0.1:8792 http://127.0.0.1:8792; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+      "default-src 'none'; script-src 'self' http://100.64.0.1:8792 http://127.0.0.1:8792; style-src 'self' http://100.64.0.1:8792 http://127.0.0.1:8792; connect-src 'self' http://100.64.0.1:8792 http://127.0.0.1:8792; frame-src 'self' http://100.64.0.1:8792 http://127.0.0.1:8792; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
     );
     assert.deepEqual(JSON.parse((await send('/config.json')).body), { orcaPort: 8792, highlight: 'send-test' });
     assert.equal((await send('/index.html', 'HEAD')).body, '');
