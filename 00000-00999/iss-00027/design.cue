@@ -149,6 +149,29 @@ design: {
 		text: "タスク担当が、D-08 の表を report.md に写し（形・太さ・角丸・字体の行を足す）、SpecDock にない状態（waiting、スリープ、+N）の色の理由を書く。試しの画面（tailnet でも）と SpecDock のダッシュボード（127.0.0.1:47800）を明暗の両方で並べて写し、report.md に残す（写しは `.workbench/trial-evidence/iss-00027/`、コミットしない）。動きを減らす設定は、ヘッドレスの Chrome の `Emulation.setEmulatedMedia`（prefers-reduced-motion: reduce）で working の弧の animation-name が none になることを確かめる。"
 		satisfies: ["R-05", "R-06"]
 	}
+	"D-11": {
+		title: "経過の表記の関数 `web/embed/elapsed.js`（1か所）"
+		text: """
+			純粋な ES Module。DOM、時計、fetch に触らない。iss-00028 のチャットや SpecDock からも import できる。
+
+			```js
+			/** from（ISO 8601 の文字列、またはミリ秒の数）から now（ミリ秒）までの経過のミリ秒。未来・解けない値・数でない now は null。 */
+			export function elapsedMs(from, now)
+			/** 短い形：'now' | '<N>m' | '<N>h' | '<N>d' | null（1分未満 now、60分未満 m、24時間未満 h、ほか d。切り捨て。週・月に上げない） */
+			export function formatElapsed(from, now)
+			/** 読める形（日本語）：'1分未満' | '<N>分' | '<N>時間' | '<N>日' | null。aria-label と title の文に使う */
+			export function describeElapsed(from, now)
+			```
+
+			- 境目（60_000、60、24）はこのファイルにだけ置く。
+			- `web/embed/agent-marks-view.js` は `formatElapsed` をここから import して再び export し（既存の import の口を保つ）、MarkView の `elapsed` に短い形を入れる。label の経過の文は `describeElapsed` で作る：basis が state なら「この状態になって <読める形>」（1分未満なら「この状態になったばかり」）、worktree-activity なら「最後の活動から <読める形>」（1分未満なら「最後の活動は1分未満前」）、ほかは「経過 <読める形>」。短い形（now・m・h・d）を label に入れない。
+			- `web/embed/agent-marks.js` が DOM に `title` と `aria-label` として label を入れるのは今のまま。
+			- `src/server/app.ts` の配る表に `/embed/elapsed.js` を足し、印の部品と同じ `cors: 'read'` を付ける（別のオリジンから import される agent-marks-view.js が import するため）。
+			- 試しの画面（`web/trial/`）に経過の文字の組み立てがあれば、この関数に替える。
+			- README の印の説明の経過の表記と、部品のファイルの一覧（5つになる）を改める。AGENTS.md の `web/embed/` の説明に `elapsed.js` を足す。
+			"""
+		satisfies: ["R-07"]
+	}
 }
 
 compatibility: "要約の文書は項目を足すだけで、版 v1 のまま。既存の受け手（試しの画面だけ）は描き直す。部品のファイル以外の配りは変わらない。D-08 で CSS のカスタムプロパティの名前を状態ごとの4つ（主・背景・線・文字）に改める（受け手はまだ試しの画面だけなので、古い名前の互換は持たない）。"

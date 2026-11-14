@@ -64,6 +64,22 @@ steps: {
 		status:   "todo"
 		session:  "doc"
 	}
+	"S-08": {
+		title:    "経過の表記の関数（D-11）を1か所にし、印の部品と配りを替える"
+		text:     "2026-11-14 の追記（本人の指摘、統括の決定 task_27eff0d07653）。開始は main の `fc654c0`（PR #30 のマージ）、ブランチ `chemitaro/iss-00027-elapsed`。対象：`web/embed/elapsed.js`（新規）、`web/embed/agent-marks-view.js`、（必要なら）`web/embed/agent-marks.js`、`web/trial/` の経過の組み立て（あれば）、`src/server/app.ts`（配る表と CORS）、`test/web/elapsed.test.ts`（新規）、`test/web/agent-marks-view.test.ts`、`test/web/agent-marks-dom.test.ts`、`test/server/marks-assets.test.ts`、（期待値が変わる）`test/web/trial-view.test.ts`。確かめ：T-14、T-15、T-16。完了：`npm run lint`、`npm test`、`npm run build` が通る。試しの画面で経過が now・Nm・Nh・Nd で見えることを見る（試しのサーバーは止めない）。区切りのレビュー：なし。止まって HEAD を報告する"
+		realizes: ["R-07"]
+		after:    ["S-07"]
+		status:   "todo"
+		session:  "elapsed"
+	}
+	"S-09": {
+		title:    "README.md・AGENTS.md、写し、report.md（D-11 の文書）"
+		text:     "タスク担当が行う。README の経過の表記と部品のファイルの一覧、AGENTS.md の `web/embed/` の説明を改め、試しの画面（tailnet でも）の写しを report.md に残す。確かめ：T-17。完了：文書が出来上がったものと合う"
+		realizes: ["R-07"]
+		after:    ["S-08"]
+		status:   "todo"
+		session:  "doc"
+	}
 }
 
 tests: {
@@ -80,6 +96,10 @@ tests: {
 	"T-11": {title: "CSS：`.orca-marks` の各状態の主・背景・線・文字の変数が SpecDock の変数（`--sd-doing` など、スリープは `--sd-track` と `--ds-muted`）を先に使い、既定の値が D-08 の表の明るい値と同じ。`prefers-color-scheme: dark` の既定が表の暗い値と同じ。`.orca-mark` の角丸 4px、線 1px、太さ 700、字体が `--ds-font-sans` を先に使う。不明に破線がない", verifies: ["R-05"]}
 	"T-12": {title: "CSS：回る keyframes が transform だけを動かし、animation を持つ規則が working の印の中の要素だけ。`prefers-reduced-motion: reduce` の中で、その要素の animation が none", verifies: ["R-06"]}
 	"T-13": {title: "記録：report.md に突き合わせの表と、waiting・スリープ・+N の色の理由がある。試しの画面と SpecDock のダッシュボードを明暗で並べた写しがあり、working が回り、動きを減らす設定で止まる（animation-name が none）", verifies: ["R-05", "R-06"]}
+	"T-14": {title: "`formatElapsed`：59 秒 now、60 秒 1m、59 分 59m、60 分 1h、23 時間 59 分 23h、24 時間 1d、30 日 30d、400 日 400d。ミリ秒の数の from も受ける。未来、解けない文字、文字でも数でもない値、now が数でないときは null。`describeElapsed` は同じ境目で 1分未満・N分・N時間・N日。`elapsedMs` の null の条件が同じ", verifies: ["R-07"]}
+	"T-15": {title: "`buildMarks`：elapsed が短い形、label が読める形（basis ごとの文）で、label に『今』も短い形（/\\d+[mhd]\\b/ と now）も含まない。agent-marks-view.js から formatElapsed を今までどおり import できる。経過の境目（60_000 など）が web/ の中で elapsed.js にだけある", verifies: ["R-07"]}
+	"T-16": {title: "`/embed/elapsed.js` が印の部品と同じ読み取りの CORS で配られる（許したオリジンで Access-Control-Allow-Origin、ほかは 403、Origin なしは 200）", verifies: ["R-07"]}
+	"T-17": {title: "記録：試しの画面（tailnet でも）で経過が now・Nm・Nh・Nd に見える写しが report.md にある。README と AGENTS.md が elapsed.js と短い形を書く", verifies: ["R-07"]}
 }
 
 verification: """
@@ -91,6 +111,7 @@ verification: """
 	- test_commands：`npm run lint`、`npm test`、`npm run build`（結合のテストは `npm test` の中の `test/server/*.test.ts`）
 	- record_paths：なし（report.md は Git の外で、SpecDock が保存する）
 	追記（2026-11-14、S-06〜S-07）の関門：新しいブランチ `chemitaro/iss-00027-style`、新しい PR。区切りのレビュー：なし。最終品質ゲート：範囲 `10ab4e9..HEAD`（`web/`、`test/`、`README.md`、`AGENTS.md`）、観点は既定（functional-correctness、requirements-closure、test-adequacy）に security-baseline（DOM と CSS の変更が受けた文字を HTML として解かない、秘密や個人のパスや IP を出さない）を足す。second_opinion：none。test_commands：`npm run lint`、`npm test`、`npm run build`。merge：agent（統括がマージする）
+	経過の表記の追記（2026-11-14、S-08〜S-09）の関門：新しいブランチ `chemitaro/iss-00027-elapsed`、新しい PR。区切りのレビュー：なし。最終品質ゲート：範囲 `fc654c0..HEAD`（`src/`、`web/`、`test/`、`README.md`、`AGENTS.md`）、観点は既定に security-baseline（新しく配るファイルの CORS が印の部品と同じだけ、秘密や個人のパスや IP を出さない）を足す。second_opinion：none。test_commands：`npm run lint`、`npm test`、`npm run build`。merge：agent（統括がマージする）
 	"""
 rollback: "PR を戻せば、要約の2つの項目と部品のファイルがなくなり、試しの画面は前の文字の丸に戻る。状態の API、受け箱、ほかの配るファイルは元のまま。"
 exit:     "最終品質ゲートが `68d8c88..HEAD`（origin/main を取り込んだ後は、その取り込みを含む最終のコミット）で合格し、実機の確かめと写しが report.md にあり、PR の CI が通ってマージできる状態になっている。"
@@ -102,11 +123,13 @@ execution: {
 		impl: {task: "要約の項目と部品の配りの CORS（S-02〜S-03。Codex の実装担当、Orca の worker）", model: "gpt-6.1-sol", effort: "medium", rationale: "本人の指示（2026-11-13、統括の依頼書）：テストで確かめられるコード（API、サーバー、データの形）は Codex GPT-6.1 Sol / medium をなるべく使う。provider: codex"}
 		trial: {task: "試しの画面の描き直し（S-04。Claude の実装担当、Orca の worker）", model: "claude-opus-5-5", effort: "medium", rationale: "本人の指示（2026-11-13）：画面は Claude Opus 5.5 / medium。S-03 の配りの後でないと別のオリジンから部品を読めないので、ui と別のセッションにする。provider: claude"}
 		style: {task: "色とスタイルと回る動き（S-06。Claude の実装担当、Orca の worker。2026-11-14 の追記）", model: "claude-opus-5-5", effort: "medium", rationale: "統括の依頼（task_719d89144ea2、2026-11-14）：画面なので Claude Opus 5.5 / medium。provider: claude"}
-		doc: {task: "実機の確かめ、写し、文書（S-05、S-07。タスク担当が自分で行う）", model: "opus", effort: "medium", rationale: "統括の依頼書：要件・設計・計画と文書はタスク担当が書く。実機の確かめは読むだけで、コードを変えない"}
+		elapsed: {task: "経過の表記（S-08。Claude の実装担当、Orca の worker。2026-11-14 の追記）", model: "claude-opus-5-5", effort: "medium", rationale: "統括の依頼（task_27eff0d07653）：画面と一体なので Claude Opus 5.5 / medium（印の部品と試しの画面と配りを同じ手順で替えるため、純粋な関数だけの Codex に分けない）。provider: claude"}
+		doc: {task: "実機の確かめ、写し、文書（S-05、S-07、S-09。タスク担当が自分で行う）", model: "opus", effort: "medium", rationale: "統括の依頼書：要件・設計・計画と文書はタスク担当が書く。実機の確かめは読むだけで、コードを変えない"}
 	}
 	reviews: {
 		spec: {role: "仕様のレビュー（spec-reviewer）", model: "opus", effort: "high"}
 		gate: {role: "最終品質ゲート（quality-gate-reviewer）", after: "S-05", model: "opus", effort: "medium"}
 		gate2: {role: "追記分の最終品質ゲート（quality-gate-reviewer）", after: "S-07", model: "opus", effort: "medium"}
+		gate3: {role: "経過の表記の追記の最終品質ゲート（quality-gate-reviewer）", after: "S-09", model: "opus", effort: "medium"}
 	}
 }
