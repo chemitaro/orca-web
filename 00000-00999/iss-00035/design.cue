@@ -50,7 +50,7 @@ design: {
 		title: "見た目 open-control.css"
 		text: """
 			`web/embed/open-control.css`。変数は SpecDock の変数を先に使い、ないときは app.css と同じ既定に戻る：線 `var(--ds-border, #dfe3e9)`、hover の線 `var(--ds-border-2, #848d9c)`、字 `var(--ds-text, #1c2230)`、琥珀 `var(--ds-warn, #a87400)`、フォーカス `var(--ds-focus, #1a56c4)`、角丸 `var(--ds-radius-s, 4px)`、字体 `var(--ds-font-sans, <app.css の並び>)`。暗い値（`#2b313c`、`#6f7889`、`#e6e9ef`、`#e0a83a`、`#8fb4ff`）を prefers-color-scheme（`:root:not([data-theme="light"])`）と `:root[data-theme="dark"]` の両方で置く。新しい色を足さない。
-			ボタン：inline-flex、中央そろえ、gap 4px、背景 transparent、1px の線、字の太さ 700、行の高さ 1、white-space nowrap、cursor pointer。sm：高さ 24px、アイコン 14px、字 12px、左右の余白 6px。md：高さ 28px、アイコン 16px、字 13px、左右の余白 8px。アイコンだけ（data-label=none）：幅＝高さの正方形、余白 0。ロゴは 14px（16px）の正方形の箱に preserveAspectRatio meet で収める。
+			ボタン：inline-flex、中央そろえ、gap 4px、背景 transparent、1px の線、字の太さ 700、行の高さ 1、white-space nowrap、cursor pointer。sm：高さ 24px、アイコン 14px、字 12px、左右の余白 6px。md：高さ 28px、アイコン 16px、字 13px、左右の余白 8px。アイコンだけ（data-label=none）：幅＝高さの正方形、余白 0。ロゴの箱はロゴの比の横長：sm 高さ 14px・幅 22px、md 16px・25px、アイコンだけの形は正方形のボタンの中で sm 12px・19px、md 14px・22px（統括の答え 2026-11-14 の C。正方形の 14px の箱では高さ約 9px で読めなかった）。回る印とチェックは箱の中央に高さで収める。
 			hover：線を border-2 に。focus-visible：`outline: 2px solid var(--ds-focus)` を `outline-offset: -2px`（iframe で切れないよう内側に描く）。disabled：cursor default、不透明度 0.6（busy の間の回る印は不透明度を下げない）。data-tone=warn：線とアイコンの色を琥珀に。回る印は 0.8s の回転、`prefers-reduced-motion: reduce` では回さない。見えない status は clip の型の視覚的に隠す CSS。
 			部品の CSS はこの1つで、3か所が同じファイルを読む（agent.html と open-button.html と index.html の link）。古い `#open` `.open` `.open-status` `#open-status` の見た目の規則と open-button.css の中のボタンの規則は消す（open-button.css は iframe の文書の背景透明・余白 0・はみ出しを隠すだけに減らすか、open-control.css に寄せて消す）。
 			"""
@@ -59,7 +59,7 @@ design: {
 	"D-05": {
 		title: "3か所の置き換えと iframe の大きさ"
 		text: """
-			- 埋め込み：open-button.html の body は空の置き場と module の読み込みだけ。open-button-frame.js が `?size=`・`?label=`・`?theme=` を読み、`createOpenControl` を置き、worktree がなければ missing。押すと `runOpen`。`/embed/open-button.js` は `data-label="none"` を `label=none` として渡し、iframe の既定の大きさを形と大きさで決める：高さは sm 24・md 28、幅は文字ありで sm 64・md 76 を目安に、描画で測ってボタンが切れない最小の整数にした定数、アイコンだけは高さと同じ。`data-width` の上書きは残す。iframe の title は『Orca で開く』のまま。390px 以下で隠して読み込まないのは今のまま。
+			- 埋め込み：open-button.html の body は空の置き場と module の読み込みだけ。open-button-frame.js が `?size=`・`?label=`・`?theme=` を読み、`createOpenControl` を置き、worktree がなければ missing。押すと `runOpen`。`/embed/open-button.js` は `data-label="none"` を `label=none` として渡し、iframe の既定の大きさを形と大きさで決める：高さは sm 24・md 28、幅は文字ありで sm 72・md 82（描画で測ったボタンの幅 71.95・81.31 の切り上げ。統括の答え）、アイコンだけは高さと同じ。`data-width` の上書きは残す。iframe の title は『Orca で開く』のまま。390px 以下で隠して読み込まないのは今のまま。
 			- 詳細の見出し：agent.html の `#open` と `#open-status` を置き場 `#open-slot` に替え、agent-frame.js が md で部品を置く（大きさは見出しに合わせて md、題名の行の右端）。390px 以下と agentId がないときに隠すのは今のまま（置き場ごと）。
 			- 受け箱：inbox-dom.js の renderItem が、showOpen と item.open のときだけ sm の部品を置く（`options.onOpen(target, control)` に替える）。inbox.js が runOpen で送る。390px 以下で出さないのは今のまま。
 			- 試しの画面：変えない（埋め込みのボタンを使うので新しい形になる）。forbidden.html の(3)は今のまま。
@@ -75,5 +75,5 @@ design: {
 
 compatibility: "埋め込みの1行のスクリプトの属性（data-worktree、data-agent、data-theme、data-size、data-width）は今のまま読み、data-label を足すだけ。既定の幅が狭くなるので、260 を前提にした置き場は data-width で戻せる。"
 risks: [
-	"Orca のロゴは横長（約 1.57:1）なので、14px の正方形の箱では高さが 9px ほどになる。試しの画面の写しで見て、小さすぎれば統括に問う",
+	"Orca のロゴは横長（約 1.57:1）の細い形で、小さな大きさでは形が読みにくい。ロゴの比の箱にして和らげた（統括の答え）",
 ]
