@@ -6,8 +6,12 @@ import { buildInboxView } from '../../web/inbox-view.js';
 import { agent, ci, fact, input, mail, message, NOW, repo, worktree } from '../inbox/fixture.ts';
 
 /** 小さな偽の要素。textContent だけを文字として持ち、HTML を解く口を使うと失敗する。 */
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
 class FakeElement {
   readonly tagName: string;
+  readonly namespaceURI: string | null;
+  readonly attrs: Record<string, string> = {};
   readonly children: FakeElement[] = [];
   readonly dataset: Record<string, string> = {};
   readonly listeners: Record<string, (() => void)[]> = {};
@@ -21,8 +25,9 @@ class FakeElement {
   disabled = false;
   #text = '';
 
-  constructor(tag: string) {
-    this.tagName = tag.toUpperCase();
+  constructor(tag: string, ns: string | null = null) {
+    this.namespaceURI = ns;
+    this.tagName = ns === SVG_NS ? tag : tag.toUpperCase();
   }
 
   set textContent(value: string) {
@@ -46,8 +51,15 @@ class FakeElement {
     throw new Error('insertAdjacentHTML must not be used');
   }
 
-  setAttribute(): void {
-    throw new Error('setAttribute is not expected');
+  /** 属性は SVG の要素にだけ付ける（HTML の要素には付けない）。 */
+  setAttribute(name: string, value: string): void {
+    if (this.namespaceURI !== SVG_NS) throw new Error('setAttribute is not expected');
+    if (name.toLowerCase().startsWith('on')) throw new Error(`event attribute ${name} must not be set`);
+    this.attrs[name] = String(value);
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attrs[name] ?? null;
   }
 
   addEventListener(name: string, fn: () => void): void {
@@ -69,6 +81,7 @@ class FakeElement {
 
 const fakeDocument = {
   createElement: (tag: string) => new FakeElement(tag),
+  createElementNS: (ns: string, tag: string) => new FakeElement(tag, ns),
   write() {
     throw new Error('document.write must not be used');
   },
@@ -183,4 +196,27 @@ test('連絡が読めていない要対応の段は、空の段でも「なし�
   assert.ok(!needs.textContent.includes('なし'));
   const running = renderStage(fakeDocument, view.stages[2], { showOpen: true, onOpen: () => {} }) as FakeElement;
   assert.ok(running.textContent.endsWith('なし'));
+});
+
+test('T-23：monitoring の項目は理由の文の前に電気の印（createElementNS の SVG、aria-hidden）を描き、ほかの項目には描かない', () => {
+  const base = input({
+    agents: [agent('agent-m', { workingMode: fact('monitoring') }), agent('agent-w')],
+  });
+  const view = buildInboxView(buildInbox(base), { now: NOW, formatTime: (s: string) => s });
+  const running = view.stages.find((s: { stage: string }) => s.stage === 'running');
+  const node = renderStage(fakeDocument, running, { showOpen: false, onOpen: () => {} }) as FakeElement;
+  const [m, w] = node.all().filter((e) => e.className === 'item') as [FakeElement, FakeElement];
+  const reason = m.all().find((e) => e.className === 'reason') as FakeElement;
+  const [icon, text] = reason.children as [FakeElement, FakeElement];
+  assert.equal(icon.tagName, 'svg');
+  assert.equal(icon.namespaceURI, SVG_NS);
+  assert.equal(icon.getAttribute('aria-hidden'), 'true');
+  assert.equal(icon.getAttribute('class'), 'state-icon');
+  assert.equal(icon.children[0]?.namespaceURI, SVG_NS);
+  assert.match(icon.children[0]?.getAttribute('d') ?? '', /^M22 12h-2\.48/);
+  assert.equal(text.textContent, 'バックグラウンドタスクを監視中');
+  assert.equal(
+    w.all().some((e) => e.tagName === 'svg'),
+    false,
+  );
 });

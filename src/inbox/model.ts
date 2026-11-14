@@ -81,6 +81,7 @@ export interface InboxItem {
   worktreeId: string | null;
   issue: string | null;
   agentType: string | null;
+  workingMode: 'monitoring' | null;
   since: string | null;
   lastWords: string | null;
   links: {

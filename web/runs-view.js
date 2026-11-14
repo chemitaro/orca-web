@@ -1,5 +1,6 @@
 // 木・Run の一覧・プロジェクトの画面の組み立て（純粋な関数）。/api/runs/<id>/tree（orca-web.run-tree/v1）と
 // /api/runs（orca-web.runs/v1）の文書から、木の行、一覧の行、鮮度の文、道と API の URL を作る。DOM、時計、fetch に触らない。
+import { STATE_ICONS } from './embed/agent-marks-icons.js';
 import { formatElapsed } from './embed/elapsed.js';
 import { defaultTime, inboxApiPath, latest, projectOptions } from './inbox-view.js';
 
@@ -109,8 +110,15 @@ function detailHref(value) {
   return typeof value === 'string' && value.startsWith(DETAIL_PREFIX) ? value : null;
 }
 
+function stateText(state, monitoring) {
+  if (monitoring) return STATE_ICONS.monitoring.label;
+  return typeof state === 'string' ? (STATE_LABELS[state] ?? state) : DASH;
+}
+
 function nodeRow(node, depth, now, coordinatorResolvedBy) {
   const projectName = node.project?.name ?? null;
+  // Orca の working の中の monitoring。state が working で値がちょうど monitoring のときだけ。
+  const monitoring = node.state === 'working' && node.workingMode === 'monitoring';
   return {
     key: String(node.id),
     depth,
@@ -122,7 +130,8 @@ function nodeRow(node, depth, now, coordinatorResolvedBy) {
     agentType: text(node.agentType),
     model: text(node.model),
     effort: text(node.effort),
-    state: typeof node.state === 'string' ? (STATE_LABELS[node.state] ?? node.state) : DASH,
+    state: stateText(node.state, monitoring),
+    monitoring,
     elapsed: formatElapsed(node.since, now, { clampFuture: true }) ?? DASH,
     project: text(projectName),
     badge: node.otherProject === true && projectName ? projectName : null,

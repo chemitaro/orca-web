@@ -1,5 +1,6 @@
 // 受け箱の段と項目を DOM の要素にする。文字はすべて textContent で入れ、HTML として解かない（innerHTML を使わない）。
 // document を受けるので、テストは小さな偽の document で確かめる。
+import { stateIcon } from './embed/agent-marks.js';
 
 function make(doc, tag, text, className) {
   const node = doc.createElement(tag);
@@ -40,6 +41,8 @@ export function renderItem(doc, item, options) {
   li.append(meta);
   if (item.lastWords) li.append(make(doc, 'p', item.lastWords, 'words'));
   const why = make(doc, 'p', null, 'reason');
+  // monitoring の電気の印（SVG は createElementNS、aria-hidden。意味は続く文字が持つ）。
+  if (item.monitoring) why.append(stateIcon(doc, 'monitoring', 'state-icon'));
   if (item.reason) why.append(make(doc, 'span', item.reason));
   if (item.missing) why.append(make(doc, 'span', `欠けた根拠：${item.missing}`, 'missing'));
   if (item.hint) why.append(make(doc, 'span', item.hint, 'hint'));

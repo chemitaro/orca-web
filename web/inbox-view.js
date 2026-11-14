@@ -1,6 +1,7 @@
 // 受け箱の画面の組み立て（純粋な関数）。/api/inbox の文書（orca-web.inbox/v1）から、段の見出し、件数、
 // 項目の行、理由と経過の文、鮮度と読めない部分の文を作る。DOM、時計、fetch に触らない。
 
+import { STATE_ICONS } from './embed/agent-marks-icons.js';
 import { formatElapsed } from './embed/elapsed.js';
 
 /** 画面の段の順。 */
@@ -63,8 +64,18 @@ function detailHref(value) {
   return typeof value === 'string' && value.startsWith(DETAIL_PREFIX) ? value : null;
 }
 
+/**
+ * 理由の文。Orca が monitoring とするエージェントは、段によらず先頭に「バックグラウンドタスクを監視中」を足す。
+ * running の『動いている』は同じ意味なので置き換え、ほかの理由（端末が終わった、許可待ちなど）は残す。
+ */
+function reasonText(reasons, monitoring) {
+  const labels = reasons.filter((r) => !(monitoring && r === 'working')).map((r) => REASON_LABELS[r] ?? String(r));
+  return (monitoring ? [STATE_ICONS.monitoring.label, ...labels] : labels).join('・');
+}
+
 function itemRow(item, now) {
   const reasons = Array.isArray(item.reasons) ? item.reasons : [];
+  const monitoring = item.kind === 'agent' && item.workingMode === 'monitoring';
   const missing = Array.isArray(item.missing) ? item.missing : [];
   const open = item.links?.open;
   return {
@@ -75,7 +86,8 @@ function itemRow(item, now) {
     agentType: item.agentType ?? null,
     elapsed: formatElapsed(item.since, now, { clampFuture: true }),
     lastWords: item.lastWords ?? null,
-    reason: reasons.map((r) => REASON_LABELS[r] ?? String(r)).join('・'),
+    reason: reasonText(reasons, monitoring),
+    monitoring,
     missing: missing.map((m) => MISSING_LABELS[m] ?? String(m)).join('・'),
     hint: reasons.some((r) => ANSWER_IN_ORCA.has(r)) ? 'Orca で開いて答える' : null,
     detailHref: detailHref(item.links?.detail),

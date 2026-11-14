@@ -11,6 +11,7 @@ export interface WorktreeSummary {
   agents: {
     id: string;
     mark: AgentMark;
+    workingMode: 'monitoring' | null;
     agentType: string | null;
     since: string | null;
     detail: string;

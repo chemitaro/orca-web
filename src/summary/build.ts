@@ -1,4 +1,4 @@
-import { agentMark, findIssue } from '../inbox/classify.ts';
+import { agentMark, agentWorkingMode, findIssue } from '../inbox/classify.ts';
 import type { StateDocument } from '../state/model.ts';
 import type { WorktreeSummary, WorktreeSummaryDocument } from './model.ts';
 
@@ -35,6 +35,7 @@ export function buildWorktreeSummary(state: StateDocument): WorktreeSummaryDocum
     summary.agents.push({
       id: agent.id,
       mark,
+      workingMode: agentWorkingMode(agent),
       agentType: agent.agentType.value,
       since: agent.stateStartedAt.value,
       detail: `/embed/agent?id=${encodeURIComponent(agent.id)}`,

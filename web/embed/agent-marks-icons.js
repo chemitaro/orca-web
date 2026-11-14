@@ -1,6 +1,6 @@
 // 種類のアイコンの表。印の中のアイコンはこの表の値だけで決まる。実物のロゴを差し替えるときは、この表の値だけを変える。
 // 表の値は SVG の文字列でなく、viewBox と path の決めた項目だけ（DOM は createElementNS で作り、innerHTML を使わない）。
-// 鍵 → { label: 読み上げの名前, viewBox, paths: [{ d, fill?, fillRule?, stroke?, strokeWidth?, strokeDasharray? }] }
+// 鍵 → { label: 読み上げの名前, viewBox, paths: [{ d, fill?, fillRule?, stroke?, strokeWidth?, strokeDasharray?, strokeLinecap?, strokeLinejoin? }] }
 // claude・codex の viewBox・d・fill・fillRule は stablyai/orca（MIT）の src/renderer/src/components/status-bar/icons.tsx（コミット 80a514cfb6ac169ef311e70ea2b8a07b961416d8）の ClaudeIcon・OpenAIIcon から写した。ロゴは Anthropic・OpenAI の商標。
 export const AGENT_ICONS = {
   claude: {
@@ -45,6 +45,25 @@ export const AGENT_ICONS = {
         stroke: 'currentColor',
         strokeWidth: '1.5',
         strokeDasharray: '2 2',
+      },
+    ],
+  },
+};
+
+// 状態の印の表。種類の表と同じ形で、線の属性（strokeLinecap、strokeLinejoin）も持つ。
+// monitoring は lucide（ISC、lucide-react 0.577.0 の dist/esm/icons/activity.js と defaultAttributes）の Activity から写した。Orca 1.4.258 の AgentStateDot の monitoring の印。
+export const STATE_ICONS = {
+  monitoring: {
+    label: 'バックグラウンドタスクを監視中',
+    viewBox: '0 0 24 24',
+    paths: [
+      {
+        d: 'M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: '2',
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
       },
     ],
   },

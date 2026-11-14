@@ -1,5 +1,6 @@
 // 木の行と Run の一覧の行を DOM の要素にする。文字はすべて textContent で入れ、HTML として解かない（innerHTML を使わない）。
 // リンクの href は runs-view.js が組んだ /runs/<id> と、決めた形の /embed/agent?id=… だけ。
+import { stateIcon } from './embed/agent-marks.js';
 
 function make(doc, tag, text, className) {
   const node = doc.createElement(tag);
@@ -12,6 +13,16 @@ function make(doc, tag, text, className) {
 function fact(doc, label, value) {
   const span = make(doc, 'span', null, 'fact');
   span.append(make(doc, 'span', label, 'label'), make(doc, 'span', value, 'value'));
+  return span;
+}
+
+/** 状態の欄。monitoring なら文字の前に電気の印（SVG は createElementNS、aria-hidden）。 */
+function stateFact(doc, row) {
+  if (!row.monitoring) return fact(doc, '状態', row.state);
+  const span = make(doc, 'span', null, 'fact');
+  const value = make(doc, 'span', null, 'value');
+  value.append(stateIcon(doc, 'monitoring', 'state-icon'), make(doc, 'span', row.state));
+  span.append(make(doc, 'span', '状態', 'label'), value);
   return span;
 }
 
@@ -38,7 +49,7 @@ export function renderTreeRow(doc, row) {
     fact(doc, '種類', row.agentType),
     fact(doc, 'モデル', row.model),
     fact(doc, '推論', row.effort),
-    fact(doc, '状態', row.state),
+    stateFact(doc, row),
     fact(doc, '経過', row.elapsed),
   );
   li.append(facts);

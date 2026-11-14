@@ -362,6 +362,10 @@ export function normalizeState(input: NormalizeInput): StateDocument {
       : agentType.value === 'claude'
         ? missingFact<string>('tabs', 'agentStatus.providerSession.effort', 'not-provided')
         : missingFact<string>(null, null, 'no-source');
+    const state = first([
+      [as?.state, 'tabs', 'agentStatus.state'],
+      [ps?.state, 'worktreePs', 'agents.state'],
+    ]);
     const terminalValue =
       tab.status === 'ready' ? 'attached' : tab.status === 'pending-handle' ? 'awaiting-restore' : tab.status;
     return {
@@ -372,10 +376,11 @@ export function normalizeState(input: NormalizeInput): StateDocument {
       tabId: tab.parentTabId ?? tab.id,
       terminalHandle: tab.terminal,
       agentType,
-      state: first([
-        [as?.state, 'tabs', 'agentStatus.state'],
-        [ps?.state, 'worktreePs', 'agents.state'],
-      ]),
+      state,
+      workingMode:
+        state.source === 'worktreePs'
+          ? first([[ps?.workingMode, 'worktreePs', 'agents.workingMode']])
+          : first([[as?.workingMode, 'tabs', 'agentStatus.workingMode']]),
       stateStartedAt: time([
         [as?.stateStartedAt, 'tabs', 'agentStatus.stateStartedAt'],
         [ps?.stateStartedAt, 'worktreePs', 'agents.stateStartedAt'],
@@ -415,6 +420,7 @@ export function normalizeState(input: NormalizeInput): StateDocument {
       terminalHandle: null,
       agentType: first([[tab.agent, 'tabs', 'agent']]),
       state: first([[tab.chatState, 'tabs', 'chatStatus.state']]),
+      workingMode: first([[tab.chatWorkingMode, 'tabs', 'chatStatus.workingMode']]),
       stateStartedAt: time([[tab.chatStateStartedAt, 'tabs', 'chatStatus.mainAgent.stateStartedAt']]),
       lastOutputAt: missingFact(null, null, 'no-source'),
       title: first([
@@ -462,6 +468,7 @@ export function normalizeState(input: NormalizeInput): StateDocument {
       terminalHandle: null,
       agentType: first([[ps.agentType, 'worktreePs', 'agents.agentType']]),
       state: first([[ps.state, 'worktreePs', 'agents.state']]),
+      workingMode: first([[ps.workingMode, 'worktreePs', 'agents.workingMode']]),
       stateStartedAt: time([[ps.stateStartedAt, 'worktreePs', 'agents.stateStartedAt']]),
       lastOutputAt: missingFact('terminals', 'lastOutputAt', 'not-linked'),
       title: first([[clipTitle(ps.taskTitle), 'worktreePs', 'agents.taskTitle']]),

@@ -172,6 +172,7 @@ test('節は統括の現在値と作業者の起動値を区別し、Issue の�
     model: 'root-model',
     effort: 'medium',
     state: 'working',
+    workingMode: null,
     since: '2026-01-02T11:00:00.000Z',
     project: { id: 'repo-a', name: '仮のプロジェクト' },
     worktreeId: 'wt-a',
@@ -191,6 +192,7 @@ test('節は統括の現在値と作業者の起動値を区別し、Issue の�
         model: 'launch-model',
         effort: 'high',
         state: 'blocked',
+        workingMode: null,
         since: '2026-01-02T11:00:00.000Z',
         project: { id: 'repo-a', name: '仮のプロジェクト' },
         worktreeId: 'wt-a',
@@ -305,6 +307,7 @@ test('統括を結べなくても根を返し、null の端末を持つ別エー
     model: null,
     effort: null,
     state: null,
+    workingMode: null,
     since: null,
     project: null,
     worktreeId: null,
@@ -447,4 +450,32 @@ test('木と一覧は取得元6種類の鮮度だけを写し、状態の時刻�
   assert.deepEqual(source, before);
   assert.deepEqual(buildRunList(source, null), list);
   assert.deepEqual(buildRunList(state({ runs: [] }), null).runs, []);
+});
+
+test('Run の木は monitoring の state と since を保ち、エージェントがない節の mode は null', () => {
+  const source = state({
+    agents: [
+      agent('root', { terminalHandle: 'term-root', workingMode: fact('monitoring') }),
+      agent('child', {
+        worker: { dispatchId: 'dispatch-a', taskId: 'task-a', runId: 'run-a' },
+        workingMode: fact('monitoring'),
+      }),
+    ],
+  });
+  const before = buildRunList(source, null);
+  const tree = buildRunTree(source, 'run-a');
+  assert.ok(tree);
+  assert.equal(tree.root.state, 'working');
+  assert.equal(tree.root.workingMode, 'monitoring');
+  assert.equal(tree.root.since, '2026-01-02T11:00:00.000Z');
+  assert.equal(tree.root.children[0]?.state, 'working');
+  assert.equal(tree.root.children[0]?.workingMode, 'monitoring');
+  source.agents.forEach((a) => {
+    a.workingMode = fact(null);
+  });
+  assert.deepEqual(buildRunList(source, null), before);
+  source.agents = [];
+  const missing = buildRunTree(source, 'run-a');
+  assert.equal(missing?.root.workingMode, null);
+  assert.equal(missing?.root.children[0]?.workingMode, null);
 });
