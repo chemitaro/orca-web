@@ -3,7 +3,7 @@
 Orca（stablyai/orca のデスクトップアプリ）の状態を読み、既存のタブを前面に出す、この Mac の小さな Web サービス。
 SpecDock のダッシュボードに部品として埋め込む。
 
-- 要対応の受け箱（`/`）：全プロジェクトのエージェントと統括あての連絡を、要対応（許可待ち・入力待ち、統括あての未読の質問と判断の依頼、マージ待ちの PR）、止まっている（CI の失敗、長く出力のない作業中、終了した端末）、動いている、不明、終わった（畳む）の段に分ける。プロジェクトで絞り込め（`?project=<repo の id>`）、各項目から詳細とチャット、Orca で開く（Mac だけ）、PR へ進める。許可の承認や返事はしない（Orca で開いて答える）。
+- 要対応の受け箱（`/`）：全プロジェクトのエージェントと統括あての連絡を、要対応（許可待ち・入力待ち、統括あての未読の質問と判断の依頼、マージ待ちの PR）、止まっている（CI の失敗、長く出力のない作業中（バックグラウンドタスクの監視中は除く）、終了した端末）、動いている、不明、終わった（畳む）の段に分ける。プロジェクトで絞り込め（`?project=<repo の id>`）、各項目から詳細とチャット、Orca で開く（Mac だけ）、PR へ進める。許可の承認や返事はしない（Orca で開いて答える）。
 - オーケストレーションの木（`/runs/<id>`）と Run の一覧（`/runs`）：Run ごとに、統括を根に作業者の親子（task の親子）を1本の木で出す。各節に役割、Issue、題名、種類、モデル（作業者は起動時の値）、推論、状態、経過、プロジェクトを出し、取れない値は「—」。作業者の worktree が統括と別のプロジェクトなら札を付ける。オーケストレーションで起動していないエージェントは入れない。統括は、Run の `coordinator_handle` が閉じた端末なら、親のない task を最近作った今ある端末から決める。
 - プロジェクトの画面（`/projects/<repo の id>`）：そのプロジェクトの受け箱と、そこに節が1つでもある Run。統括が別のプロジェクトにいる Run に「<プロジェクト> の統括から」の札を付ける。
 - 状態の API と画面（`/settings`）：repo・worktree・エージェント・オーケストレーションの状態（種類、状態、時刻、親子、PR と CI、取れるときのモデルと推論）。表示する項目を選べる。
@@ -105,10 +105,11 @@ const res = await fetch('http://127.0.0.1:8791/api/worktrees/summary');
 const summary = await res.json();
 // summary.worktrees[i]: { id, path, branch, project: {id, name} | null, issue, counts, agents }
 // counts: { working, blocked, waiting, done, sleeping, unknown, total }
-// agents[j]: { id, mark, agentType, since, detail, elapsedFrom, elapsedBasis }   detail は /embed/agent?id=… の道
+// agents[j]: { id, mark, workingMode, agentType, since, detail, elapsedFrom, elapsedBasis }   detail は /embed/agent?id=… の道
 ```
 
 - `mark` は `working`・`blocked`・`waiting`・`done`・`sleeping`（状態がなく、端末が復元待ち）・`unknown`（知らない値や欠け）。受け箱と同じ決め方。
+- `workingMode` は Orca の working の中の形。Orca が `state: working` かつ `workingMode: monitoring`（主エージェントの番は終わり、自分で起こしたシェルのコマンドや Monitor だけを待っている。Orca の画面では「バックグラウンドタスクを監視中」の脈の線の印）とするときだけ `"monitoring"`、ほかは null。`mark` は `working` のままで、`counts.working` に入る。`orca orchestration check --wait` で worker を待つ間は、Orca と同じくただの working。
 - `since` はその状態になった時刻（ISO 8601）。作業を終えてからの待ち時間の起点に使える。
 - `elapsedFrom` と `elapsedBasis` は経過の時間の起点。`since` があればそれ（`state`：その状態になってから）。スリープと不明で `since` がなければ、その worktree の最後の活動の時刻（`worktree-activity`）。どちらもなければ null。
 - 会話や連絡の本文、タブの題名、最後の一言は返さない。Orca に届かないときも 200 で、`stale` と `connection.state` で示す。
@@ -197,6 +198,7 @@ SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に、workt
 ```
 
 - 種類はアイコン（Claude と Codex は各社のロゴ、ほかの種類は中立の丸、種類がなければ破線の丸）、状態は SpecDock のダッシュボードと同じ色（作業中 緑で、アイコンのまわりの弧が回る、許可待ち 琥珀、入力待ち 青（SpecDock の「着手できる」）、完了 灰、スリープ 薄い灰の線と月の印、不明 紫）、経過の時間は英語の短い形（1分未満 `now`、`5m`、`3h`、`2d`。週や月には上げない）。読み上げの名前と title は読める日本語の文（例「Claude、作業中、この状態になって 3時間」）。印は要対応・作業中・不明・完了・スリープの順に並ぶ。
+- バックグラウンドタスクを監視中（`workingMode: monitoring`）の印は、Orca と同じく種類のロゴの左に脈の線の印（lucide の `Activity`）を置き、作業中の輪は出さない（回らない）。色は作業中と同じ緑、読み上げの名前と title の状態の言葉は Orca の日本語の画面と同じ「バックグラウンドタスクを監視中」、経過は作業中と同じ規則。受け箱と Run の木の行にも同じ印と言葉を出す。
 - 色だけに頼らないよう、各印は種類、状態、経過とその起点を読み上げの名前（aria-label）と title に持つ。
 - 形は SpecDock の `.chip` に合わせる（角丸 4px、1px の線、薄い背景、濃い文字、太さ 700、字体 `--ds-font-sans`）。
 - 色は `.orca-marks` の CSS のカスタムプロパティで、状態（`working`・`blocked`・`waiting`・`done`・`sleeping`・`unknown`）ごとに4つ：主 `--orca-mark-<状態>`、背景 `-bg`、線 `-line`、文字 `-ink`（ほかにフォーカスの `--orca-mark-focus`、高さ `--orca-mark-h`）。値は SpecDock の変数（`--sd-doing` など）を先に使うので、SpecDock の中では SpecDock の明暗にそのまま従う。外では同じ値の明暗の既定を使う。
@@ -204,6 +206,7 @@ SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に、workt
 - 経過の表記は `web/embed/elapsed.js` の1か所（`formatElapsed`：短い形、`describeElapsed`：読める形、`elapsedMs`）。受け箱、Run の木、チャットからも同じ関数を import する（`{ clampFuture: true }` で未来の時刻を now にする）。
 - アイコンは `web/embed/agent-marks-icons.js` の表 `AGENT_ICONS` の1か所だけで決まる。差し替えるときはこの表の値だけを変える。
 - Claude と Codex（OpenAI）のロゴの SVG は、stablyai/orca（MIT）の `src/renderer/src/components/status-bar/icons.tsx`（コミット `80a514c`）から写した。ロゴは Anthropic・OpenAI の商標。
+- 状態の印は同じファイルの表 `STATE_ICONS` の1か所。監視中の脈の線は lucide（ISC、lucide-react 0.577.0 の `Activity`。Orca 1.4.258 の `AgentStateDot` の monitoring の印）から写した。
 
 ### 試しの画面で確かめる
 
