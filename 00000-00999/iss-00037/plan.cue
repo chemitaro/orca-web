@@ -13,7 +13,7 @@ steps: {
 		title:    "新しいタブのリンクの関数、印の表、CSS、テスト（D-01〜D-04）"
 		text:     "対象：`web/embed/agent-dom.js`、`web/embed/agent-marks-icons.js`（LINK_ICONS と出どころの1行だけを足す）、`web/embed/agent-marks.js`（再輸出に LINK_ICONS を足すだけ）、`web/embed/agent.css`（.vh と a.newtab .newtab-icon だけ）、`test/web/` のテスト。確かめ：T-01、T-02、T-03、T-04。完了：`npm run lint`、`npm test`、`npm run build` が通る。ほかのファイルは触らない。終えたらコミットして止まり HEAD を報告する"
 		realizes: ["R-01", "R-02", "R-03", "F-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -21,7 +21,7 @@ steps: {
 		text:     "タスク担当が行う。この worktree の orca-web を一時の port（`npm run trial` か一時の起動）で読むだけで動かし、ヘッドレスの Chrome（`--disable-features=MacAppCodeSignClone`、CDP の Browser.close で閉じる）で、試しの画面の iframe の中の `/embed/agent` の詳細を開き、親か子のリンクの target・rel・印を数え、押して新しい target が開き元の iframe の URL が変わらないことを確かめ、明暗の写しを Scope の artifacts に置き report.md に書く。送らない、Orca で開くを押さない。README.md の『エージェントの詳細とチャット』の節と AGENTS.md の web/embed/agent の説明に1行足す。確かめ：T-05、T-06。完了：report.md に写しと結論があり、`npm run lint`、`npm test`、`npm run build` が通る"
 		realizes: ["R-01", "R-02"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }
