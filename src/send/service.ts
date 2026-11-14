@@ -5,7 +5,7 @@ import type { SendRpc } from '../orca/send-gates.ts';
 import type { StateDocument } from '../state/model.ts';
 import type { SendJournal, SendRecord } from './journal.ts';
 import type { SendPreview, SendTarget } from './model.ts';
-import { buildPreview, compareTargets, resolveTarget } from './target.ts';
+import { buildPreview, compareTargets, resolveTarget, targetFingerprint } from './target.ts';
 import { checkText, digestText, newOperationId, TicketStore } from './ticket.ts';
 
 export interface SendFailure {
@@ -125,14 +125,33 @@ export class SendService {
     methods.add(method);
     this.#blocked.set(target.route, methods);
   }
-  async status(
-    agentId: string,
-  ): Promise<{ enabled: boolean; available: boolean; route: SendTarget['route'] | null; reason: string | null }> {
+  async status(agentId: string): Promise<{
+    enabled: boolean;
+    available: boolean;
+    route: SendTarget['route'] | null;
+    reason: string | null;
+    target: string | null;
+    agentType: string | null;
+  }> {
     const enabled = await this.#deps.readSendEnabled();
     const checked = await this.#preflight(agentId);
     return checked.ok
-      ? { enabled, available: true, route: checked.target.route, reason: null }
-      : { enabled, available: false, route: null, reason: checked.reason ?? checked.error };
+      ? {
+          enabled,
+          available: true,
+          route: checked.target.route,
+          reason: null,
+          target: targetFingerprint(checked.target),
+          agentType: checked.target.agentType,
+        }
+      : {
+          enabled,
+          available: false,
+          route: null,
+          reason: checked.reason ?? checked.error,
+          target: null,
+          agentType: null,
+        };
   }
   async confirm({
     ticket,
@@ -258,12 +277,22 @@ export class SendService {
     }
     return record ? { ok: true, operationId, state: 'recorded', record } : { ok: true, operationId, state: 'not_sent' };
   }
-  async intent({ agent, text }: { agent: string; text: string }): Promise<SendAnswer<IntentResult>> {
+  async intent({
+    agent,
+    text,
+    target,
+  }: {
+    agent: string;
+    text: string;
+    target?: string;
+  }): Promise<SendAnswer<IntentResult>> {
     if (!(await this.#deps.readSendEnabled())) return { ok: false, error: 'send_disabled' };
     const valid = checkText(text);
     if (!valid.ok) return valid;
     const checked = await this.#preflight(agent);
     if (!checked.ok) return checked;
+    if (target !== undefined && target !== targetFingerprint(checked.target))
+      return { ok: false, error: 'target_changed', reason: 'changed_since_shown' };
     const operationId = this.#operationId();
     const digest = digestText(text);
     const ticket = this.#tickets.issue({ target: checked.target, digest, operationId });

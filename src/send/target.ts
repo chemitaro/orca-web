@@ -1,4 +1,5 @@
 // 送信先の解決。Orca を読まず、session.tabs.listAll の写しだけを扱う。
+import { createHash } from 'node:crypto';
 import type { StateDocument } from '../state/model.ts';
 import type { SendPreview, SendTarget, TargetChange, TargetResolution } from './model.ts';
 
@@ -116,4 +117,23 @@ export function buildPreview(state: StateDocument, target: SendTarget): SendPrev
     route: target.route,
     sessionShortId: (target.route === 'terminal' ? target.providerSessionId : target.sessionId).slice(0, 8),
   };
+}
+
+export function targetFingerprint(target: SendTarget): string {
+  const fields =
+    target.route === 'terminal'
+      ? [
+          'terminal',
+          target.runtimeId,
+          target.worktreeId,
+          target.tabId,
+          target.leafId ?? '',
+          target.handle,
+          target.ptyId,
+          target.incarnationId,
+          target.agentType,
+          target.providerSessionId,
+        ]
+      : ['chat', target.runtimeId, target.worktreeId, target.tabId, target.agentType, target.sessionId];
+  return createHash('sha256').update(JSON.stringify(fields)).digest('hex').slice(0, 32);
 }

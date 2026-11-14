@@ -9,9 +9,19 @@ import { createSendAdapter } from '../../src/orca/send.ts';
 import { SendRpc } from '../../src/orca/send-gates.ts';
 import { SendJournal } from '../../src/send/journal.ts';
 import { SendService } from '../../src/send/service.ts';
+import { targetFingerprint } from '../../src/send/target.ts';
 import { digestText, TicketStore } from '../../src/send/ticket.ts';
 import { agent, fact, repo, state, worktree } from '../runs/fixture.ts';
-import { CHAT_AGENT, chatTab, inventory, RUNTIME, TERMINAL_AGENT, terminalTab } from './fixture.ts';
+import {
+  CHAT_AGENT,
+  chatTab,
+  chatTarget,
+  inventory,
+  RUNTIME,
+  TERMINAL_AGENT,
+  terminalTab,
+  terminalTarget,
+} from './fixture.ts';
 
 const ok = (result: unknown, runtimeId: string | null = RUNTIME): RpcOutcome => ({ ok: true, result, runtimeId });
 async function fixture(t: import('node:test').TestContext, agentType: 'claude' | 'codex' = 'codex') {
@@ -299,7 +309,14 @@ test('preflight は untabbed と前面のシェルと読めない状態を送ら
 
 test('status は送信せず Chat の fence と利用可能性を確かめる', async (t) => {
   const f = await fixture(t);
-  assert.deepEqual(await f.service.status(CHAT_AGENT), { enabled: true, available: true, route: 'chat', reason: null });
+  assert.deepEqual(await f.service.status(CHAT_AGENT), {
+    enabled: true,
+    available: true,
+    route: 'chat',
+    reason: null,
+    target: targetFingerprint(chatTarget()),
+    agentType: 'claude',
+  });
   assert.ok(f.calls.some((c) => c.method === 'agentSession.history'));
   f.responses.set('agentSession.history', ok({ ok: true, page: { sessionId: 'other', fence: 4 } }));
   assert.deepEqual(await f.service.intent({ agent: CHAT_AGENT, text: 'hello' }), { ok: false, error: 'unknown_shape' });
@@ -309,6 +326,8 @@ test('status は送信せず Chat の fence と利用可能性を確かめる', 
     available: false,
     route: null,
     reason: 'unknown_shape',
+    target: null,
+    agentType: null,
   });
   assert.equal(f.sends().length, 0);
 });
@@ -829,4 +848,45 @@ test('無効な票の拒否を記録している間も次の確定を busy に�
   await invalid;
   assert.deepEqual(second, { ok: false, error: 'busy' });
   assert.equal(f.sends().length, 0);
+});
+
+test('status は端末の指紋と種類を返し、preflight が通らなければ null にする', async (t) => {
+  const f = await fixture(t);
+  assert.deepEqual(await f.service.status(TERMINAL_AGENT), {
+    enabled: true,
+    available: true,
+    route: 'terminal',
+    reason: null,
+    target: targetFingerprint(terminalTarget()),
+    agentType: 'codex',
+  });
+  f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: '/bin/zsh' } }));
+  assert.deepEqual(await f.service.status(TERMINAL_AGENT), {
+    enabled: true,
+    available: false,
+    route: null,
+    reason: 'shell_foreground',
+    target: null,
+    agentType: null,
+  });
+  assert.equal(f.sends().length, 0);
+});
+
+test('意図の違う指紋では票も送信も記録も作らず、同じ指紋と省略は票を返す', async (t) => {
+  const f = await fixture(t);
+  for (const agent of [TERMINAL_AGENT, CHAT_AGENT]) {
+    const status = await f.service.status(agent);
+    assert.ok(status.target);
+    assert.deepEqual(await f.service.intent({ agent, text: 'hello', target: '0'.repeat(32) }), {
+      ok: false,
+      error: 'target_changed',
+      reason: 'changed_since_shown',
+    });
+    const matched = await f.service.intent({ agent, text: 'hello', target: status.target });
+    const legacy = await f.service.intent({ agent, text: 'hello' });
+    assert.ok(matched.ok && matched.ticket);
+    assert.ok(legacy.ok && legacy.ticket);
+  }
+  assert.equal(f.sends().length, 0);
+  assert.equal(await f.journal.read('1234567890123-00000000000000000000000000000005'), null);
 });

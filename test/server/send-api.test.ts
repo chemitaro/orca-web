@@ -78,7 +78,14 @@ test('送信の4つの道はサービスの結果をD-09の形にして返し、
       send: {
         async status(agent) {
           calls.push(agent);
-          return { enabled: true, available: true, route: 'terminal', reason: null };
+          return {
+            enabled: true,
+            available: true,
+            route: 'terminal',
+            reason: null,
+            target: 'a'.repeat(32),
+            agentType: 'codex',
+          };
         },
         async intent(value) {
           calls.push(value);
@@ -117,6 +124,8 @@ test('送信の4つの道はサービスの結果をD-09の形にして返し、
         available: true,
         route: 'terminal',
         reason: null,
+        target: 'a'.repeat(32),
+        agentType: 'codex',
       });
       const intent = await send('/api/send/intent', 'POST', JSON.stringify({ agent: 'agent', text: 'test' }));
       assert.equal(intent.status, 200);
@@ -145,7 +154,7 @@ test('守りはHost→方法→Content-Type→Origin→トークン→大きさ�
   const service: NonNullable<AppOptions['send']> = {
     async status() {
       calls++;
-      return { enabled: false, available: false, route: null, reason: 'send_disabled' };
+      return { enabled: false, available: false, route: null, reason: 'send_disabled', target: null, agentType: null };
     },
     async intent() {
       calls++;
@@ -207,7 +216,7 @@ test('サービスの誤りはD-09のHTTP状態とreason/missingを返し、GET�
   let failure: import('../../src/send/service.ts').SendFailure = { ok: false, error: 'busy' };
   const service: NonNullable<AppOptions['send']> = {
     async status() {
-      return { enabled: false, available: false, route: null, reason: 'unreachable' };
+      return { enabled: false, available: false, route: null, reason: 'unreachable', target: null, agentType: null };
     },
     async intent() {
       return failure;
@@ -301,4 +310,48 @@ test('設定を毎回読み、停止中の意図と確定は403、照会は200�
     assert.equal(checked.status, 200);
     assert.equal(checked.body.state, 'recorded');
   });
+});
+
+test('意図だけが32文字の小文字16進の target を受けてサービスに渡す', async () => {
+  const calls: unknown[] = [];
+  await withApp(
+    {
+      send: {
+        async status() {
+          return { enabled: true, available: false, route: null, reason: 'unreachable', target: null, agentType: null };
+        },
+        async intent(value) {
+          calls.push(value);
+          return { ok: false, error: 'target_changed', reason: 'changed_since_shown' };
+        },
+        async confirm() {
+          assert.fail('confirm must not run');
+        },
+        async check(operationId) {
+          return { ok: true, operationId, state: 'not_sent' };
+        },
+      },
+    },
+    async (send) => {
+      for (const target of [null, 1, {}, [], '', 'a'.repeat(31), 'a'.repeat(33), 'A'.repeat(32), 'g'.repeat(32)]) {
+        assert.equal(
+          (await send('/api/send/intent', 'POST', JSON.stringify({ agent: 'a', text: 'hello', target }))).status,
+          400,
+        );
+      }
+      for (const body of [
+        { agent: 'a', text: 'hello', target: 'a'.repeat(32), extra: true },
+        { ticket: 't', text: 'hello', target: 'a'.repeat(32) },
+      ]) {
+        const route = 'ticket' in body ? 'confirm' : 'intent';
+        assert.equal((await send(`/api/send/${route}`, 'POST', JSON.stringify(body))).status, 400);
+      }
+      assert.equal(calls.length, 0);
+      const body = { agent: 'a', text: 'hello', target: '0123456789abcdef0123456789abcdef' };
+      const response = await send('/api/send/intent', 'POST', JSON.stringify(body));
+      assert.equal(response.status, 409);
+      assert.deepEqual(response.body, { ok: false, error: 'target_changed', reason: 'changed_since_shown' });
+      assert.deepEqual(calls, [body]);
+    },
+  );
 });
