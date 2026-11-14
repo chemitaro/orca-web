@@ -41,6 +41,22 @@ steps: {
 		status:   "done"
 		session:  "doc"
 	}
+	"S-05": {
+		title:    "吹き出しを1重にする（D-10、R-12。PR #32 の後の続き）"
+		text:     "対象：`web/embed/agent.css`、`test/web/agent-css.test.ts`（必要なら `test/web/agent-dom.test.ts`）。ブランチ chemitaro/iss-00028-bubble、開始のコミット 3a83547（origin/main）。確かめ：T-19。完了：`node --test test/web/*.test.ts`、`npm run lint`、`npm test`、`npm run build` が通り、T-19 のテストがある。描画の確かめは S-03 と同じ方法（一時の orca-web、sendEnabled は偽、ヘッドレスの Chrome）で、1280px と 390px、明暗で、発言の li の線の幅 0・背景が透明・内側の余白 0、本文の div だけが線を持つことを数える（送らない）。画面の実装担当（Claude Opus 5.5 / high）の手順。終えたら止まって HEAD を報告する。区切りのレビュー：なし"
+		realizes: ["R-12"]
+		after:    ["S-04"]
+		status:   "todo"
+		session:  "ui2"
+	}
+	"S-06": {
+		title:    "直す前と後の写しと記録（R-12）"
+		text:     "タスク担当が行う。試しの画面（8793・47910、tailnet でも動かしたまま）で、S-04 と同じ方法（iframe だけを切り出し、本文の文字は透明にして中身を写さない）で、直す前（3a83547）と後の写しを明暗、1280px と 390px で撮り、並べて Scope の artifacts に入れ、report.md に書く。確かめ：T-20。完了：report.md に前後の写しと数の結論がある"
+		realizes: ["R-12"]
+		after:    ["S-05"]
+		status:   "todo"
+		session:  "doc"
+	}
 }
 
 tests: {
@@ -61,6 +77,8 @@ tests: {
 	"T-16": {title: "agent.css が、色・字体・角丸・線・フォーカスを `var(--ds-…, <既定>)` の形で使い、既定の値が SpecDock の app.css（c050e7bd7）の明るい値と暗い値（prefers-color-scheme と data-theme の両方）に一致し、`--bg` などの古い名前の色の直書きが残らない。agent.css が `--sd-*` の状態の変数を、明るい値と暗い値（prefers-color-scheme と data-theme が dark の両方）で、agent-marks.css の各状態の既定と同じ値で置く（CSS を読むテスト。iss-00027 の test/web/agent-marks-css.test.ts と同じ方式）", verifies: ["R-09", "R-10"]}
 	"T-17": {title: "詳細の見出しの印：要約の中のこのエージェントだけを、elapsedFrom と elapsedBasis を null にした写しで、renderAgentMarks で max 1 で描き（.orca-mark-time がなく aria-label に経過がない）、見つからない・読めないときは置き場を空にし、agent.html が agent-marks.css を読み、summary に置き場がある", verifies: ["R-10"]}
 	"T-18": {title: "formatAgo が 59 秒で now、1〜59 分で Nm、1〜23 時間で Nh、24 時間以上で Nd、未来と読めない値で null を返し、会話の行の time に datetime と title があり、文字に『今』『分』『時間』『日』が入らない", verifies: ["R-11"]}
+	"T-19": {title: "agent.css の吹き出しの規則が本文の要素（li.row の子）だけに当たり、li.row に線・背景・内側の余白の規則がないことを CSS を読んで確かめ、吹き出しの色の変数（ready の組、surface）が R-09 のまま", verifies: ["R-12"]}
+	"T-20": {title: "試しの画面で、直す前と後の写し（明暗、1280px と 390px）を撮り、発言の li の線の幅 0・背景が透明、本文の div だけが線を持つことを DOM で数える（タスク担当、実機）", verifies: ["R-12"]}
 	"T-15": {title: "README.md と AGENTS.md に、確認の画面・送る前の「確かめる」・60 秒の期限の説明が残っていない（`rg` で確かめる）", verifies: ["R-08"]}
 }
 
@@ -71,6 +89,7 @@ verification: """
 	- 区切りのレビュー CP-1：最後の手順 S-02、範囲 `fc654c0..<S-02 の後の HEAD>`、レビュアー Claude `code-reviewer`（Opus 5.5 / medium）を1人（standards と spec を1人で）。理由：画面（S-03）が依る HTTP の口の形（指紋、record_unreadable、checkWarning）と、照会が not_sent を誤って示さない契約が S-02 までで決まる
 	- 最終品質ゲート：範囲 `fc654c0..HEAD` の全体（`src/`、`web/`、`test/`、`README.md`、`AGENTS.md`）。PR の直前に `origin/main` を取り込み直したときは、取り込んだ後のコミットでやり直す。観点は functional-correctness、requirements-closure、test-adequacy に、security-baseline（同じオリジン、トークン、識別子と秘密を出さない、textContent）と、concurrency-idempotency（二重送信、結果不明の後に送らないこと、照会が not_sent を誤って示さないこと）と、ui-interaction（Enter・Shift+Enter・変換中・タッチが主の端末、詳細の畳み、390px、SpecDock のデザインシステムとの一致、明暗）を足す。second_opinion：chatgpt（strict。取れなければ GPT-6 Astra / high）
 	- test_commands：`npm run lint`、`npm test`、`npm run build`（結合のテストは `npm test` の中の `test/server/*.test.ts`）
+	- 続き（R-12、2026-11-14）：新しいブランチ chemitaro/iss-00028-bubble、開始のコミット 3a83547（PR #32 のマージを含む origin/main）。区切りのレビューなし。最終品質ゲートは範囲 `3a83547..HEAD`、観点は functional-correctness、requirements-closure、test-adequacy、e2e-user-flow、second_opinion：chatgpt。PR は新しく作る
 	- record_paths：なし（記録の report.md は Git の外で、SpecDock が保存する。合格の後に Git の記録だけのコミットは作らない）
 	"""
 rollback: "settings.json の `sendEnabled` を偽にするか消せば、再起動なしで送信の口がすべて拒み、画面は読むだけになる。PR を戻せば、確認の画面つきの iss-00013 の画面とサーバーに戻る（HTTP の口の形は互換なので、戻しても記録は読める）。"
@@ -81,11 +100,13 @@ execution: {
 		spec: {task: "仕様化（タスク担当。統括が選んだ値の記録）", model: "opus", effort: "high", rationale: "統括の依頼書（2026-11-14）：Opus 5.5 / high（方針の「タスク担当 × strict」から統括が選んだ）"}
 		impl: {task: "実装（S-01〜S-02。指紋と送れるかの口、残りの P2 の直し。Codex の実装担当、Orca の worker）", model: "gpt-6.1-sol", effort: "medium", rationale: "本人の指示（2026-11-13、統括の依頼書）：テストで確かめられるコード（API、サーバー、データの形）は Codex GPT-6.1 Sol / medium（方針の「実装担当 × strict」）。Sol で失敗や見落としが記録されたときだけ GPT-6 Astra / high に上げる。provider: codex"}
 		ui: {task: "画面の実装（S-03。Claude の実装担当、Orca の worker）", model: "claude-opus-5-5", effort: "high", rationale: "本人の指示（2026-11-13、統括の依頼書）：画面と一体の部分は Claude Opus 5.5、strict なので high（方針の「実装担当（フロントエンド）× strict」）。provider: claude"}
-		doc: {task: "試しの画面の写し、検証用の宛先への送信、文書（S-04。タスク担当が自分で行う）", model: "opus", effort: "high", rationale: "方針の §2 注記：文書を書く手順はタスク担当が書く。実物の Orca に送る確かめは、統括が許した宛先だけを、タスク担当が自分で行う"}
+		ui2: {task: "吹き出しを1重にする（S-05。Claude の実装担当、Orca の worker）", model: "claude-opus-5-5", effort: "high", rationale: "統括の依頼書（2026-11-14）：画面なので Claude Opus 5.5 / high（方針の「実装担当（フロントエンド）× strict」）。provider: claude"}
+		doc: {task: "試しの画面の写し、検証用の宛先への送信、文書（S-04、S-06。タスク担当が自分で行う）", model: "opus", effort: "high", rationale: "方針の §2 注記：文書を書く手順はタスク担当が書く。実物の Orca に送る確かめは、統括が許した宛先だけを、タスク担当が自分で行う"}
 	}
 	reviews: {
 		spec: {role: "仕様のレビュー（spec-reviewer。strict なので ChatGPT GPT-6 / Extra High の2人目を並べる）", model: "opus", effort: "high"}
 		cp1: {role: "区切りのレビュー CP-1（code-reviewer ×1：standards と spec）", after: "S-02", model: "opus", effort: "medium"}
 		gate: {role: "最終品質ゲート（quality-gate-reviewer。2人目は ChatGPT GPT-6 / Extra High、取れなければ GPT-6 Astra / high）", after: "S-04", model: "opus", effort: "high"}
+		gate2: {role: "続きの最終品質ゲート（範囲 3a83547..HEAD。quality-gate-reviewer と ChatGPT GPT-6 / Extra High）", after: "S-06", model: "opus", effort: "high"}
 	}
 }

@@ -130,6 +130,15 @@ design: {
 			"""
 		satisfies: ["R-11"]
 	}
+	"D-10": {
+		title: "吹き出しを1重にする（agent.css の規則の当てる先）"
+		text: """
+			原因：`agent-dom.js` の renderChatRow は、発言の行を `li.row.bubble.<role>` にし、その中に本文の `div.bubble` を置く。`agent.css` の `.bubble` と `li.user .bubble` が li と div の両方に当たり、二重の枠になる。
+			直し：吹き出しの規則を本文の要素だけに当てる（例 `li.row > .bubble`、`li.row.user > .bubble`）。li の class 名と DOM の形は変えない（ほかのテストと画面の読み手を壊さないため）。li.row は線・背景・内側の余白を持たない。
+			間隔：`ol#log` の発言どうしの gap は 12px、吹き出しと時刻の間は 2px（SpecDock の app.css で使う値）。話し手が同じ発言が続くときも同じ間隔でよい。ツールの折り畳みと知らせの行の見た目は変えない。
+			"""
+		satisfies: ["R-12"]
+	}
 	"D-06": {
 		title: "試しの画面での写しと、検証用の宛先への送信と、文書"
 		text: """
