@@ -45,6 +45,19 @@ ID: "iss-00028"
 - P2/P3 の残り：P2 1（スリープの文字の色とフォーカスの輪が `?theme=` に従わない。画面の実装担当に、agent.css に `--ds-muted`・`--ds-focus` も明暗ごとに置くよう伝える）
 - ChatGPT の2人目：得られなかった。共有の `spec-dock/canonical` がほかの Issue の自動保存で動き、Strict の前置き（ブランチの先端の一致）を満たせなかった（round 1 は途中で先端が動いて中止、round 2 は古い版のまま 50 分を超えたので止めた）。2人のレビューとは呼ばない
 
+### 区切りのレビュー CP-1：合格
+
+- 範囲 fc654c0..46df4ec（S-01・S-02）。code-reviewer（Opus 5.5 / medium、standards と spec を1人）。round 1 fail（P1 1：メモリーに unknown の照会しかないのに not_sent を返す。直した 46df4ec）、round 2 pass（P0〜P3 0）。`.workbench/code-review/iss-00028-cp1/`
+
+### 最終品質ゲート：合格（de9f0c9）
+
+- campaign `fqg-iss-00028-1`、attempt 01。範囲 `1bcca57..de9f0c9`（取り込んだ main の先端を基にした正味の変更）。
+- レビュー（quality-gate-reviewer、Opus 5.5 / high）：pass（P0〜P3 0、coverage 完全）。
+- 2人目（ChatGPT GPT-6 / Extra High、chatgpt-code-review-strict。選択の証拠 verified=true）：pass（指摘なし）。
+- テスト：`npm run lint`、`npm test`（618 pass）、`npm run build` がすべて exit 0。
+- closure：`.workbench/final-quality-gate/fqg-iss-00028-1/closure.md`。記録だけのコミットはなし。P2/P3 なし。
+- 仕様の plan.cue は、合格の後に手順の status を done にした（status の更新だけ）。
+
 ## Verification
 
 - テスト：開始のコミットで 576 pass。CP-1 の後（46df4ec）で 593、取り込みの後（9a694fe）で 598、`de9f0c9` で 618 件 pass。`npm run lint` と `npm run build` は exit 0。
@@ -69,4 +82,20 @@ ID: "iss-00028"
     - 試しの `sends.jsonl` は 0 行から 4 行になった（送る前と後が2組）。どちらの会話にも、送った時刻の利用者の行と、その後の返事の行がある（中身は写していない）。業務中のエージェントには送っていない。
   - 常駐の orca-web（8791）と、その設定と登録には触れていない。
 
+## 本人に開いてほしい URL と、見てほしい点
+
+試しのサーバーは動いたままにしてある（iss-00027 の試しとは別の port）。試し用の orca-web の送信は有効（試し専用の設定だけ）。
+
+- Mac：`http://127.0.0.1:47910/`（send-test の丸を押すと横の欄に詳細とチャット）、`http://127.0.0.1:47910/phone.html`（幅 390px の枠）
+- スマホ（tailnet）：`http://<Tailscale の IP>:47910/`（実際の IP は統括への報告に書く）
+- 見てほしい点：詳細が畳まれていること。入力欄と送るボタンの見た目と使い心地（Enter、Shift+Enter、日本語の変換、スマホの送るボタン）。SpecDock と並べたときの色と字体。送り先は `send-test` の2つだけにしてください。
+- 止め方：`kill -TERM $(cat <orca-web の worktree iss-00028>/.workbench/trial/trial.pid)`。止めた後、試しの送信を使わないなら `.workbench/trial/` を消す。
+
 ## Residual Risks / Follow-ups
+
+- 確認の画面をなくしたので、利用者が宛先を目で確かめる機会は、題名と会話を見ることだけになる。同じタブの中の入れ替わりは指紋で止めるが、別のエージェントの小窓を開いていることには気づけない（埋め込む側の題名と会話で示す。requirement の risks）。
+- タッチが主の端末の判定（`(hover: none) and (pointer: coarse)`）は、外付けのキーボードをつないだ iPad などで Enter が改行になる（Cmd/Ctrl+Enter と送るボタンで送れる）。実物の iPhone の Safari での見え方は、本人の確かめで見る（この確かめは Mac の上の模擬）。
+- (f) の Orca の withdrawn の形は、Orca のソースが手元にないので確かめていない。unknown（card_gone）にして送り直しを誘わない形にした。構造化 Chat の実機の確かめは、セッションが用意されたときに行う。
+- 試しの orca-web は、同時に開ける会話の数に上限がある。多くのタブで同時に開くと、読めない（busy）になる（写しを撮るときに出た。既存の動き）。
+- iss-00014 の最終品質ゲートの P3 の2つ（試しの画面の空の横の欄、残った pid のファイル）は、この Issue の範囲の外なので直していない。
+- ChatGPT の仕様のレビューは得られなかった（共有の spec-dock/canonical が動き続けるため）。仕様の Strict のレビューを使うには、Issue ごとに固定できる置き場が要る。
