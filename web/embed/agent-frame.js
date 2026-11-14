@@ -1,14 +1,18 @@
 // エージェントの詳細とチャットの画面。詳細は /api/state を5秒ごとに読み、会話は /api/transcript/events（SSE）で受ける。
-// 会話の下に送る欄（D-10）を置く。流れと状態は send-view.js、描くのは send-dom.js。送れないときは欄を止めて理由を示す。
+// 詳細はいつも畳んで始め、利用者の開け閉めをそのまま残す（描き直しでも details を作り直さない）。見出しには稼働の印を1つ出す（D-08）。
+// 会話の下に送る欄（D-05）を置く。流れと状態は send-view.js、描くのは send-dom.js。送れないときは欄を止めて理由を示す。
 // 文字はすべて textContent で入れる（会話の本文、ツールの出力、題名、送る本文は信頼しないデータ）。
 
 import { createWriter } from '../write.js';
-import { renderChatRow, renderDetail } from './agent-dom.js';
+import { refreshTimes, renderChatRow, renderDetail, renderDetailMark } from './agent-dom.js';
+import { watchWorktreeSummary } from './agent-marks.js';
 import { buildChat, buildDetail, errorLabel, initialChat, olderResult, reduceChat } from './agent-view.js';
 import { renderSendPanel } from './send-dom.js';
-import { buildSendView, createSendFlow } from './send-view.js';
+import { buildSendView, composerKeyAction, createSendFlow } from './send-view.js';
 
 const STATE_POLL_MS = 5_000;
+/** 会話の時刻（now・5m など）を描き直す間隔。 */
+const TIME_REFRESH_MS = 30_000;
 /** 送れるかを読み直す間隔。読むのは書く欄か止まった間で、画面が見えているときだけ。 */
 const SEND_STATUS_POLL_MS = 15_000;
 const OPEN_ERRORS = {
@@ -40,8 +44,10 @@ const els = {
   scroller: document.getElementById('chat'),
   chatHead: document.getElementById('chat-head'),
   sendText: /** @type {HTMLTextAreaElement} */ (document.getElementById('send-text')),
+  sendButton: /** @type {HTMLButtonElement} */ (document.getElementById('send-button')),
   sendPanel: document.getElementById('send-panel'),
   send: document.getElementById('send'),
+  detailMark: document.getElementById('detail-mark'),
 };
 
 const writer = createWriter();
@@ -64,7 +70,8 @@ function renderChat({ stickToEnd }) {
   }
   els.session.textContent = chat.short ? `セッション ${chat.short}` : '';
   els.older.hidden = !(chat.status === 'ok' && chat.hasMore && chat.before);
-  for (const row of buildChat(chat.messages)) els.log.append(renderChatRow(document, row, { open: openTools }));
+  const now = Date.now();
+  for (const row of buildChat(chat.messages)) els.log.append(renderChatRow(document, row, { open: openTools, now }));
   if (stickToEnd || nearEnd) els.scroller.scrollTop = els.scroller.scrollHeight;
 }
 
@@ -158,9 +165,6 @@ const applyNarrow = () => {
 };
 applyNarrow();
 narrow.addEventListener('change', applyNarrow);
-// 狭い幅では、会話を広く見せるため、詳細を畳んで始める（押すと広げられる）。
-const detailBox = /** @type {HTMLDetailsElement} */ (document.getElementById('detail-box'));
-if (narrow.matches) detailBox.open = false;
 
 els.open.addEventListener('click', async () => {
   if (!detail?.open) return;
@@ -179,27 +183,50 @@ els.open.addEventListener('click', async () => {
 
 const sendFlow = createSendFlow({ agentId, writer, onChange: () => renderSend() });
 
+// タッチが主の端末では Enter で改行し、送るボタンで送る（D-04）。変われば描き直す。
+const touch = window.matchMedia('(hover: none) and (pointer: coarse)');
+touch.addEventListener('change', () => renderSend());
+
+/** 入力欄の高さを本文に合わせる。上限は CSS の max-height（広い幅は 8 行ほど、狭い幅は 5 行ほど）で、超えると欄の中でスクロールする。 */
+function fitComposer() {
+  els.sendText.style.height = 'auto';
+  els.sendText.style.height = `${els.sendText.scrollHeight}px`;
+}
+
 function renderSend() {
   const state = sendFlow.getState();
-  const view = buildSendView(state);
+  const view = buildSendView(state, { touchPrimary: touch.matches });
   els.chatHead.textContent = view.chatHead;
-  els.sendText.hidden = !view.editor.visible;
   els.sendText.disabled = view.editor.disabled;
-  if (els.sendText.value !== state.text) els.sendText.value = state.text;
+  els.sendText.placeholder = view.editor.placeholder;
+  if (els.sendText.value !== state.text) {
+    els.sendText.value = state.text;
+    fitComposer();
+  }
+  els.sendButton.disabled = view.button.disabled;
+  els.sendButton.setAttribute('aria-busy', view.button.busy ? 'true' : 'false');
   els.sendPanel.replaceChildren(renderSendPanel(document, view));
 }
 
-els.sendText.addEventListener('input', () => sendFlow.input(els.sendText.value));
-// ボタンは描き直すたびに作り直すので、まとめて受ける。押しの重なりは send-view.js の reduceSend が捨てる。
+els.sendText.addEventListener('input', () => {
+  sendFlow.input(els.sendText.value);
+  fitComposer();
+});
+// Enter で送る（Shift+Enter と変換中は送らない）。流れが送れない状態なら submit は何もしない。
+els.sendText.addEventListener('keydown', (event) => {
+  if (composerKeyAction(event, { touchPrimary: touch.matches }) !== 'send') return;
+  event.preventDefault();
+  void sendFlow.submit();
+});
+els.sendButton.addEventListener('click', () => void sendFlow.submit());
+// 帯のボタンは描き直すたびに作り直すので、まとめて受ける。押しの重なりは send-view.js の reduceSend が捨てる。
 els.sendPanel.addEventListener('click', (event) => {
   const button = /** @type {HTMLElement | null} */ (event.target)?.closest?.('button[data-action]');
   if (!button || /** @type {HTMLButtonElement} */ (button).disabled) return;
   const name = button.dataset.action;
-  if (name === 'submit') void sendFlow.submit();
-  else if (name === 'confirm') void sendFlow.confirm();
-  else if (name === 'cancel') sendFlow.cancel();
-  else if (name === 'query') void sendFlow.query();
-  else if (name === 'back' && sendFlow.back()) void sendFlow.refreshStatus();
+  if (name === 'query') void sendFlow.query();
+  else if (name === 'dismiss') void sendFlow.dismiss();
+  else if (name === 'adopt') sendFlow.adopt();
 });
 
 async function pollSend() {
@@ -222,4 +249,10 @@ if (!agentId) {
   void pollState();
   connect();
   void pollSend();
+  // 詳細の見出しの印。要約を同じオリジンで読む（10 秒ごと、見えない間は読まない）。読めなければ置き場を空にする。
+  watchWorktreeSummary('', {
+    onDocument: (summary) => renderDetailMark(els.detailMark, summary, agentId, { now: Date.now() }),
+    onError: () => els.detailMark.replaceChildren(),
+  });
+  setInterval(() => refreshTimes(els.log, Date.now()), TIME_REFRESH_MS);
 }
