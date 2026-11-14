@@ -184,9 +184,9 @@ test('renderAgentMarks：置き場の中を作り直し、印ごとに class・�
   // 経過の span
   const time = (el: FakeElement) => el.all().filter((c) => c.className === 'orca-mark-time');
   assert.equal(time(w).length, 1);
-  assert.equal(time(w)[0]?.textContent, '5分');
+  assert.equal(time(w)[0]?.textContent, '5m');
   assert.equal(time(u).length, 0);
-  assert.equal(time(s)[0]?.textContent, '2時間');
+  assert.equal(time(s)[0]?.textContent, '2h');
 
   // アイコンの SVG は createElementNS で作り、aria-hidden
   for (const el of els) {

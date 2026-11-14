@@ -50,9 +50,10 @@ const assets = [
   '/embed/agent-marks-view.js',
   '/embed/agent-marks-icons.js',
   '/embed/agent-marks.css',
+  '/embed/elapsed.js',
 ];
 
-test('印の4ファイルを正しい型で配り、Origin なしと自分の Origin に CORS を付けない', async () => {
+test('印の5ファイルを正しい型で配り、Origin なしと自分の Origin に CORS を付けない', async () => {
   await withApp({}, async (send, origin) => {
     for (const path of assets) {
       for (const headers of [{}, { origin }]) {

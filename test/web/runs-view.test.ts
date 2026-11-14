@@ -91,7 +91,7 @@ test('木の行は深さの順に並び、役割・Issue・題名・種類・モ
   assert.equal(worker1.model, 'gpt-x');
   assert.equal(worker1.effort, 'medium');
   assert.equal(worker1.state, '動いている');
-  assert.equal(worker1.elapsed, '12分');
+  assert.equal(worker1.elapsed, '12m');
   assert.equal(worker1.project, 'プロジェクトB');
   assert.equal(worker1.badge, 'プロジェクトB');
   assert.equal(worker1.detailHref, '/embed/agent?id=agent%2Fb');

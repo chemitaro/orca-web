@@ -170,7 +170,7 @@ SpecDock のダッシュボードを Tailscale のアドレスで開くと、状
 
 ### 稼働の印の部品（アイコン・色・経過の時間）
 
-SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に、worktree ごとのエージェントの印を描く ES Module の部品。要約を1回読めば、同じ文書から多くの箱や行に描ける。部品の4つのファイル（`/embed/agent-marks.js`、`agent-marks-view.js`、`agent-marks-icons.js`、`agent-marks.css`）は、要約と同じ読み取りの CORS で配る（`ORCA_WEB_READ_ORIGINS` のオリジンだけ。ほかのオリジンからの import は 403 で失敗する）。
+SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に、worktree ごとのエージェントの印を描く ES Module の部品。要約を1回読めば、同じ文書から多くの箱や行に描ける。部品の5つのファイル（`/embed/agent-marks.js`、`agent-marks-view.js`、`agent-marks-icons.js`、`agent-marks.css`、経過の表記の `elapsed.js`）は、要約と同じ読み取りの CORS で配る（`ORCA_WEB_READ_ORIGINS` のオリジンだけ。ほかのオリジンからの import は 403 で失敗する）。
 
 ```html
 <link rel="stylesheet" href="http://127.0.0.1:8791/embed/agent-marks.css" />
@@ -192,11 +192,12 @@ SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に、workt
 </script>
 ```
 
-- 種類はアイコン（Claude と Codex は各社のロゴ、ほかの種類は中立の丸、種類がなければ破線の丸）、状態は SpecDock のダッシュボードと同じ色（作業中 緑で、アイコンのまわりの弧が回る、許可待ち 琥珀、入力待ち 青（SpecDock の「着手できる」）、完了 灰、スリープ 薄い灰の線と月の印、不明 紫）、経過の時間は「今」「N分」「N時間」「N日」。印は要対応・作業中・不明・完了・スリープの順に並ぶ。
+- 種類はアイコン（Claude と Codex は各社のロゴ、ほかの種類は中立の丸、種類がなければ破線の丸）、状態は SpecDock のダッシュボードと同じ色（作業中 緑で、アイコンのまわりの弧が回る、許可待ち 琥珀、入力待ち 青（SpecDock の「着手できる」）、完了 灰、スリープ 薄い灰の線と月の印、不明 紫）、経過の時間は英語の短い形（1分未満 `now`、`5m`、`3h`、`2d`。週や月には上げない）。読み上げの名前と title は読める日本語の文（例「Claude、作業中、この状態になって 3時間」）。印は要対応・作業中・不明・完了・スリープの順に並ぶ。
 - 色だけに頼らないよう、各印は種類、状態、経過とその起点を読み上げの名前（aria-label）と title に持つ。
 - 形は SpecDock の `.chip` に合わせる（角丸 4px、1px の線、薄い背景、濃い文字、太さ 700、字体 `--ds-font-sans`）。
 - 色は `.orca-marks` の CSS のカスタムプロパティで、状態（`working`・`blocked`・`waiting`・`done`・`sleeping`・`unknown`）ごとに4つ：主 `--orca-mark-<状態>`、背景 `-bg`、線 `-line`、文字 `-ink`（ほかにフォーカスの `--orca-mark-focus`、高さ `--orca-mark-h`）。値は SpecDock の変数（`--sd-doing` など）を先に使うので、SpecDock の中では SpecDock の明暗にそのまま従う。外では同じ値の明暗の既定を使う。
 - 作業中の弧は CSS の transform だけで回り（1.2 秒、JS の時計を使わない）、`prefers-reduced-motion: reduce` では止まる。
+- 経過の表記は `web/embed/elapsed.js` の1か所（`formatElapsed`：短い形、`describeElapsed`：読める形、`elapsedMs`）。受け箱、Run の木、チャットからも同じ関数を import する（`{ clampFuture: true }` で未来の時刻を now にする）。
 - アイコンは `web/embed/agent-marks-icons.js` の表 `AGENT_ICONS` の1か所だけで決まる。差し替えるときはこの表の値だけを変える。
 - Claude と Codex（OpenAI）のロゴの SVG は、stablyai/orca（MIT）の `src/renderer/src/components/status-bar/icons.tsx`（コミット `80a514c`）から写した。ロゴは Anthropic・OpenAI の商標。
 

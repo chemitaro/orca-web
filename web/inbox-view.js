@@ -1,6 +1,8 @@
 // 受け箱の画面の組み立て（純粋な関数）。/api/inbox の文書（orca-web.inbox/v1）から、段の見出し、件数、
 // 項目の行、理由と経過の文、鮮度と読めない部分の文を作る。DOM、時計、fetch に触らない。
 
+import { formatElapsed } from './embed/elapsed.js';
+
 /** 画面の段の順。 */
 export const STAGE_ORDER = ['needs_action', 'stalled', 'running', 'unknown', 'finished'];
 
@@ -61,19 +63,6 @@ function detailHref(value) {
   return typeof value === 'string' && value.startsWith(DETAIL_PREFIX) ? value : null;
 }
 
-/** 経過の文（「12分」「3時間」「2日」）。読めない時刻は null。 */
-export function formatElapsed(since, now) {
-  if (typeof since !== 'string') return null;
-  const at = Date.parse(since);
-  if (Number.isNaN(at)) return null;
-  const minutes = Math.floor((now - at) / 60_000);
-  if (minutes < 1) return '1分未満';
-  if (minutes < 60) return `${minutes}分`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}時間`;
-  return `${Math.floor(hours / 24)}日`;
-}
-
 function itemRow(item, now) {
   const reasons = Array.isArray(item.reasons) ? item.reasons : [];
   const missing = Array.isArray(item.missing) ? item.missing : [];
@@ -84,7 +73,7 @@ function itemRow(item, now) {
     project: item.project?.name ?? null,
     issue: item.issue ?? null,
     agentType: item.agentType ?? null,
-    elapsed: formatElapsed(item.since, now),
+    elapsed: formatElapsed(item.since, now, { clampFuture: true }),
     lastWords: item.lastWords ?? null,
     reason: reasons.map((r) => REASON_LABELS[r] ?? String(r)).join('・'),
     missing: missing.map((m) => MISSING_LABELS[m] ?? String(m)).join('・'),
