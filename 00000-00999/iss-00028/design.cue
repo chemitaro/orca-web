@@ -59,8 +59,8 @@ design: {
 			- `unknown`：結果不明。本文を残し、帯（『届いたか分かりません。自動では送り直しません。』、「確かめる」、「閉じる」）を出す。
 			- `checking`：結果不明の照会の間。
 			出来事と移り方：
-			- `status`：disabled・compose・changed のときだけ受ける。200 で enabled と available が真のとき：target をまだ固定していなければ、受けた指紋を固定して compose。固定した指紋と同じなら compose（changed のままなら changed）。違えば target を上書きせず、pendingTarget に受けた指紋を入れて changed。そうでなければ disabled（理由。固定した target は消さない）。sending・unknown・checking の間は捨てる。
-			- `adopt`：changed のときだけ、pendingTarget を target に固定し直して compose（本文を残す）。
+			- `status`：disabled・compose・changed のときだけ受ける。200 で enabled と available が真のとき：target をまだ固定していなければ、受けた指紋を固定して compose。固定した指紋と同じなら compose（changed からも compose に戻り、pendingTarget を消す）。違えば target を上書きせず、pendingTarget に受けた指紋を入れて changed。そうでなければ disabled（理由。固定した target は消さない）。sending・unknown・checking の間は捨てる。
+			- `adopt`：changed で pendingTarget があるときだけ、pendingTarget を target に固定し直して compose（本文を残す）。pendingTarget がない（読み直しの応答の前、または読み直しが固定と同じ指紋を返した）ときは同じ物を返す。「新しい宛先で続ける」のボタンは pendingTarget があるときだけ出す（ないときは知らせの1行だけ）。固定と同じ指紋を受けた changed は compose に戻る。
 			- `input`：disabled・compose・changed のときだけ本文を変える。
 			- `submit`：compose で本文が空白だけでなく、target を持つときだけ sending に進む。ほかは同じ物を返す（押しを捨てる）。
 			- `intent`／`intent-failed`：sending の中で、意図の応答が 200 で ticket と operationId があり text が欄の本文と同じなら、operationId を覚えて sending のまま（流れが確定を送る）。送る前の拒みなら compose（本文を残し、notice に理由の1行）。ただし send_disabled は disabled、target_changed の changed_since_shown は changed（pendingTarget は流れの読み直しで入る）。どの送る前の拒みの後も、流れが status を1回読み直す。応答を受けられない・形が違うときは compose（何も送っていない。確定を送っていないので票は期限で消える）。
@@ -96,15 +96,45 @@ design: {
 			`send-dom.js` の renderSendPanel：buildSendView の形から、notice の1行（p、data-kind）、warnings（ul と li）、結果不明の帯（p と「確かめる」「閉じる」のボタン、data-action は query と dismiss）だけを作る。textContent だけを使う。確認の画面（dl、期限）と結果の画面は作らない。
 			`send-dom.js` は changed のとき、知らせの1行と「新しい宛先で続ける」のボタン（data-action adopt）も作る。
 			`agent-frame.js`：詳細を幅で開け閉めする処理を消す（details は描き直しでも作り直さず、利用者の開け閉めがそのまま残る）。送るボタンの click で `flow.submit()`。`#send-panel` の click は data-action の query・dismiss・adopt を受ける。描くたびに、入力欄の disabled と値と placeholder、送るボタンの disabled（phase が compose で本文が空白だけでないときだけ押せる）を buildSendView の形から決める。
-			`agent.css`：確認の画面と結果の画面の規則を消し、入力の箱と送るボタンと帯の規則を足す。幅 390px で横にはみ出さない。色は今の変数（明るい・暗いの両方）を使う。
+			`agent.css`：確認の画面と結果の画面の規則を消し、入力の箱と送るボタンと帯の規則を足す。幅 390px で横にはみ出さない。色と形は D-07 に従う。
 			"""
 		satisfies: ["R-01", "R-02", "R-03", "R-05", "F-06"]
+	}
+	"D-07": {
+		title: "SpecDock のデザインシステムに合わせた見た目（agent.css）"
+		text: """
+			`agent.css` の `:root` の変数（今の --bg、--fg、--muted、--line、--user-bg、--assistant-bg、--tool-bg、--error、--button-bg）を、SpecDock の変数を先に使う形に置き換える。iframe は別の文書なので SpecDock の変数は届かないが、同じ形にしておき、既定の値で SpecDock と同じ見た目にする。
+			対応（既定は spec-dock の main の app.css c050e7bd7 の値。明るい／暗い）：
+			- 背景 `var(--ds-bg, #ffffff / #111318)`、面 `var(--ds-surface-2, #f4f6f8 / #1d212a)`（エージェントの吹き出し、ツールの枠）、文字 `var(--ds-text, #1c2230 / #e6e9ef)`、薄い文字 `var(--ds-muted, #5a6372 / #98a1b2)`、線 `var(--ds-border, #dfe3e9 / #2b313c)`、強い線 `var(--ds-border-2, #848d9c / #6f7889)`、フォーカス `var(--ds-focus, #1a56c4 / #8fb4ff)`。
+			- 利用者の吹き出しと送るボタンの色は SpecDock の ready の組（`var(--sd-ready-bg, …)`・`var(--sd-ready, …)`。値は agent-marks.css の waiting の既定と同じ）。誤りの文字と帯は SpecDock の danger の組（`var(--ds-danger, #c21f4d / 暗い値は app.css から)`、`--ds-danger-bg`、`--ds-danger-line`、`--ds-danger-ink`）。
+			- 字体 `var(--ds-font-sans, "BIZ UDPGothic", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif)`、14px / 1.6。角丸 `var(--ds-radius-s, 4px)`（ボタン、ツール）、`var(--ds-radius, 6px)`（吹き出し）、`var(--ds-radius-l, 8px)`（入力の箱）。フォーカスは `outline: 3px solid var(--ds-focus, …)`。
+			暗い値は `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {…} }` と `:root[data-theme="dark"] {…}` の両方に置く（今の構造と同じ）。`agent.html` は `agent-marks.css` も読む。
+			実装担当は app.css の該当の値を `git -C <spec-dock の main のチェックアウト> show main:src/spec_dock/assets/dashboard/app.css` で読む（SpecDock のリポジトリは変えない）。手元に spec-dock のチェックアウトがなければタスク担当に問う。
+			"""
+		satisfies: ["R-09"]
+	}
+	"D-08": {
+		title: "詳細の見出しの状態の印"
+		text: """
+			`agent-frame.js` は、`web/embed/agent-marks.js` の `watchWorktreeSummary('', {onDocument})`（同じオリジン、10 秒ごと、見えない間は読まない）で要約を読み、`worktrees` の中から `agents[].id` がこのエージェントの id に一致するものを探し、その worktree を、このエージェントだけを持つ写し（`{...worktree, agents: [agent]}`）にして `renderAgentMarks(<summary の中の置き場の span>, copy, {now: Date.now(), size: 'sm', max: 1})` で描く（onSelect は渡さない）。見つからない・読めないときは置き場を空にする。
+			`agent.html` の `<summary>` は、置き場の span（`#detail-mark`、aria-hidden ではない。印は自分の aria-label を持つ）と『詳細』の文字を持つ。印の部品のファイルとアイコンの表は変えずに import するだけ。
+			"""
+		satisfies: ["R-10"]
+	}
+	"D-09": {
+		title: "時刻の短い表記"
+		text: """
+			`web/embed/agent-view.js` に `formatAgo(from, now): string | null`（純な関数。from は ISO 8601 の文字列。1分未満 'now'、60分未満 '<N>m'、24時間未満 '<N>h'、ほか '<N>d'、読めないか未来なら null）を置く。iss-00027 の英語の短い表記の関数が、この Issue の PR の前に `origin/main` の `web/embed/` に入っていれば、それを import して formatAgo の代わりに使い、自分の関数は書かない。
+			`agent-dom.js` の会話の行は、`<time datetime="<元の ISO>" title="<toLocaleString の全体の時刻>">` に formatAgo の文字を textContent で入れる。今の画面の時刻の描き直しは、会話の描き直し（SSE の出来事）と、30 秒ごとの描き直しで更新する。
+			"""
+		satisfies: ["R-11"]
 	}
 	"D-06": {
 		title: "試しの画面での写しと、検証用の宛先への送信と、文書"
 		text: """
 			タスク担当が行う。`npm run trial` を起動し、試し専用の `.workbench/trial/settings.json` だけ `sendEnabled: true` にし、自分で起動したヘッドレスの Chrome（`--disable-features=MacAppCodeSignClone`、CDP の `Browser.close` で閉じる）で、試しの画面の send-test の Claude の詳細とチャットを幅 1280px と `phone.html`（390px）で開く。
-			写す前に iframe の中の会話の欄（`#log`）に CSS の blur を当て、会話の本文が読めない写しにする。写しは Scope の `artifacts/` に置き、report.md から指す。
+			明るいと暗いの両方（試しの画面の iframe の `?theme=`、または Chrome の prefers-color-scheme の模擬）で写す。SpecDock のダッシュボード（`spec-dock dashboard` の画面のうち、この Mac で開けるもの）の同じ幅と同じ明暗の写しを並べる（1枚に並べた画像か、表の左右）。
+			写す前に iframe の中の会話の欄（`#log`）に CSS の blur を当て、会話の本文が読めない写しにする。SpecDock のダッシュボードの写しには、公開してよくない名前やパスが出ないか見て、出るなら写す範囲を切る。写しは Scope の `artifacts/` に置き、report.md から指す。
 			詳細が畳まれていること、送るボタンがあること、横のはみ出しが 0 であることを DOM で数える。send-test の Claude（Mac の幅）と Codex（390px）に Enter で1回ずつ送り、outcome と試しの `sends.jsonl` の行の数を確かめる。送る前に、`orca terminal list` と状態の API で宛先の handle が許された2つであることを確かめる。
 			README.md の「送信」の流れと前面の説明、AGENTS.md の `web/embed/send-view.js` の説明を、確認の画面のない流れに直す。
 			"""
