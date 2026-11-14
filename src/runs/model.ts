@@ -20,6 +20,7 @@ export interface RunNode {
   model: string | null;
   effort: string | null;
   state: string | null;
+  workingMode: 'monitoring' | null;
   since: string | null;
   project: RunProject | null;
   worktreeId: string | null;

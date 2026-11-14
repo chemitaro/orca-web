@@ -1,4 +1,4 @@
-import { findIssue } from '../inbox/classify.ts';
+import { agentWorkingMode, findIssue } from '../inbox/classify.ts';
 import type { AgentState, StateDocument, WorkerState } from '../state/model.ts';
 import {
   RUN_LIST_SCHEMA,
@@ -49,6 +49,7 @@ function makeNode(
     effort: worker?.effort.value ?? agent?.effort.value ?? null,
     state:
       agent?.state.value ?? (agent?.terminal.value === 'awaiting-restore' ? 'sleeping' : (worker?.state.value ?? null)),
+    workingMode: agent ? agentWorkingMode(agent) : null,
     since: agent?.stateStartedAt.value ?? null,
     project: repo ? { id: repo.id, name: repo.displayName.value ?? repo.id } : null,
     worktreeId,

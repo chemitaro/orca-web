@@ -120,6 +120,7 @@ export interface AgentState {
   terminalHandle: string | null;
   agentType: Fact<string>;
   state: Fact<string>;
+  workingMode: Fact<string>;
   stateStartedAt: Fact<string>;
   lastOutputAt: Fact<string>;
   title: Fact<string>;

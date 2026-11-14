@@ -73,6 +73,7 @@ export interface OrcaPsAgent {
   parentPaneKey: string | null;
   agentType: string | null;
   state: string | null;
+  workingMode: string | null;
   stateStartedAt: number | null;
   taskTitle: string | null;
 }
@@ -114,6 +115,7 @@ export interface OrcaAgentStatus {
   lastAssistantMessage: string | null;
   agentType: string | null;
   state: string | null;
+  workingMode: string | null;
   stateStartedAt: number | null;
   /** `agentStatus.model`（エージェントが報告した最後の値。今の Orca では出ない）。 */
   model: string | null;
@@ -136,6 +138,7 @@ export interface OrcaTab {
   /** 構造化 Chat のタブのエージェントの種類。 */
   agent: string | null;
   chatState: string | null;
+  chatWorkingMode: string | null;
   chatStateStartedAt: number | null;
   agentStatus: OrcaAgentStatus | null;
 }
@@ -300,6 +303,7 @@ function pickPsWorktree(r: Rec): OrcaPsWorktree | null {
       parentPaneKey: str(a.parentPaneKey),
       agentType: str(a.agentType),
       state: str(a.state),
+      workingMode: str(a.workingMode),
       stateStartedAt: num(a.stateStartedAt),
       taskTitle: str(a.taskTitle),
     })),
@@ -320,6 +324,7 @@ function pickAgentStatus(v: unknown): OrcaAgentStatus | null {
     lastAssistantMessage: str(a.lastAssistantMessage)?.slice(0, 500) ?? null,
     agentType: str(a.agentType),
     state: str(a.state),
+    workingMode: str(a.workingMode),
     stateStartedAt: num(a.stateStartedAt),
     model: str(a.model),
     effort: str(rec(a.providerSession)?.effort),
@@ -350,6 +355,7 @@ function pickTab(r: Rec): OrcaTab {
     customTitle: str(r.customTitle),
     agent: str(r.agent),
     chatState: str(chat?.state),
+    chatWorkingMode: str(chat?.workingMode),
     chatStateStartedAt: num(rec(chat?.mainAgent)?.stateStartedAt),
     agentStatus: pickAgentStatus(r.agentStatus),
   };

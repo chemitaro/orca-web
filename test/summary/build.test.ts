@@ -55,6 +55,7 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
           {
             id: 'a /?',
             mark: 'blocked',
+            workingMode: null,
             agentType: 'codex',
             since: STARTED,
             elapsedFrom: STARTED,
@@ -64,6 +65,7 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
           {
             id: 'waiting',
             mark: 'waiting',
+            workingMode: null,
             agentType: 'codex',
             since: STARTED,
             elapsedFrom: STARTED,
@@ -73,6 +75,7 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
           {
             id: 'working',
             mark: 'working',
+            workingMode: null,
             agentType: 'codex',
             since: STARTED,
             elapsedFrom: STARTED,
@@ -82,6 +85,7 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
           {
             id: 'z',
             mark: 'done',
+            workingMode: null,
             agentType: 'codex',
             since: STARTED,
             elapsedFrom: STARTED,
@@ -101,6 +105,7 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
           {
             id: 'sleep',
             mark: 'sleeping',
+            workingMode: null,
             agentType: 'codex',
             since: STARTED,
             elapsedFrom: STARTED,
@@ -120,6 +125,7 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
           {
             id: 'lost',
             mark: 'unknown',
+            workingMode: null,
             agentType: null,
             since: null,
             elapsedFrom: null,
@@ -202,4 +208,25 @@ test('開始時刻のないスリープと不明だけ worktree の活動時刻�
     assert.equal(entry.elapsedBasis, null);
   }
   assert.deepEqual(state, before);
+});
+
+test('monitoring は working として数え、同じ経過の起点を持つ', () => {
+  const state = input({
+    agents: [
+      agent('monitoring', { workingMode: fact('monitoring') }),
+      agent('ordinary'),
+      agent('done', { state: fact('done'), workingMode: fact('monitoring') }),
+    ],
+  }).state;
+  const summary = buildWorktreeSummary(state).worktrees[0];
+  assert.ok(summary);
+  assert.equal(summary.counts.working, 2);
+  assert.deepEqual(
+    summary.agents.map((a) => [a.id, a.mark, a.workingMode, a.since, a.elapsedFrom, a.elapsedBasis]),
+    [
+      ['done', 'done', null, STARTED, STARTED, 'state'],
+      ['monitoring', 'working', 'monitoring', STARTED, STARTED, 'state'],
+      ['ordinary', 'working', null, STARTED, STARTED, 'state'],
+    ],
+  );
 });

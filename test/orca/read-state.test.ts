@@ -68,6 +68,7 @@ test('read-state は取得元ごとの記録を返し、本文や transcript の
     parentPaneKey: null,
     agentType: 'claude',
     state: 'working',
+    workingMode: null,
     stateStartedAt: ms(20),
     taskTitle: 'text-3',
   });
@@ -92,6 +93,7 @@ test('read-state は取得元ごとの記録を返し、本文や transcript の
     lastAssistantMessage: null,
     agentType: 'claude',
     state: 'working',
+    workingMode: null,
     stateStartedAt: ms(21),
     model: null,
     effort: 'high',

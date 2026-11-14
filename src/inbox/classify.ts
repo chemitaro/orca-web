@@ -10,6 +10,10 @@ export function agentMark(agent: AgentState): AgentMark {
   return state === null && agent.terminal.value === 'awaiting-restore' ? 'sleeping' : 'unknown';
 }
 
+export function agentWorkingMode(agent: AgentState): 'monitoring' | null {
+  return agent.state.value === 'working' && agent.workingMode.value === 'monitoring' ? 'monitoring' : null;
+}
+
 const STAGES: readonly InboxStage[] = ['needs_action', 'stalled', 'running', 'unknown', 'finished'];
 
 function oneLine(value: string | null | undefined): string | null {
@@ -65,6 +69,7 @@ function agentItem(agent: AgentState, input: BuildInboxInput): InboxItem {
     reasons: [],
     ...location(input, agent.worktreeId, taskId),
     agentType: agent.agentType.value,
+    workingMode: agentWorkingMode(agent),
     since: agent.stateStartedAt.value,
     lastWords: oneLine(input.lastWords.get(agent.id)),
     links: {
@@ -100,6 +105,7 @@ function agentItem(agent: AgentState, input: BuildInboxInput): InboxItem {
   }
   if (
     mark === 'working' &&
+    item.workingMode !== 'monitoring' &&
     agent.lastOutputAt.value !== null &&
     input.now - Date.parse(agent.lastOutputAt.value) >= input.stallMs
   ) {
@@ -142,6 +148,7 @@ function unlinkedItems(input: BuildInboxInput): InboxItem[] {
       reasons: [message.type],
       ...location(input, worker?.worktreeId.value ?? null, message.taskId ?? worker?.taskId ?? null),
       agentType: null,
+      workingMode: null,
       since: message.createdAt,
       lastWords: oneLine(message.subject),
       links: { detail: null, open: null, pr: null },
@@ -159,6 +166,7 @@ function unlinkedItems(input: BuildInboxInput): InboxItem[] {
       reasons: ['gate'],
       ...location(input, workers[0]?.worktreeId.value ?? null, gate.taskId),
       agentType: null,
+      workingMode: null,
       since: gate.createdAt,
       lastWords: oneLine(gate.question),
       links: { detail: null, open: null, pr: null },
@@ -195,6 +203,7 @@ function prItems(input: BuildInboxInput): InboxItem[] {
       reasons: failed ? (worker ? ['ci_failed', 'merge_pending'] : ['ci_failed']) : open ? ['merge_pending'] : [],
       ...location(input, worktree.id, worker?.taskId ?? null),
       agentType: null,
+      workingMode: null,
       since: null,
       lastWords: oneLine(worktree.pr.value?.title),
       links: { detail: null, open: null, pr: httpsUrl(worktree.pr.value?.url) },
@@ -218,6 +227,7 @@ function prItems(input: BuildInboxInput): InboxItem[] {
       reasons: [],
       ...location(input, worker?.worktreeId.value ?? null, message.taskId ?? worker?.taskId ?? null),
       agentType: null,
+      workingMode: null,
       since: null,
       lastWords: null,
       links: { detail: null, open: null, pr: httpsUrl(message.prUrl) },

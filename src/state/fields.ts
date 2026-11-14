@@ -32,6 +32,7 @@ export const FIELDS: readonly FieldDef[] = [
   def('worktree.isArchived', 'アーカイブか', 'アーカイブした worktree か'),
   def('agent.agentType', '種類', 'エージェントの種類（claude、codex など）', true),
   def('agent.state', '状態', 'エージェントの状態（working、waiting、done など）', true),
+  def('agent.workingMode', '動きの種類', 'Orca の workingMode。monitoring はバックグラウンドタスクを監視中'),
   def('agent.stateStartedAt', '状態の開始時刻', '今の状態になった時刻', true),
   def('agent.lastOutputAt', '最後の出力の時刻', '端末の最後の出力の時刻（端末の handle で結ぶ）'),
   def('agent.title', '題名', '作業の題名（担当の Task の題名、エージェントの題名、タブの題名の順）', true),

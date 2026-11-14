@@ -27,6 +27,7 @@ function worktree(overrides: Partial<WorktreeSummary> = {}): WorktreeSummary {
       {
         id: 'tab-1:leaf-1',
         mark: 'working',
+        workingMode: null,
         agentType: 'claude',
         since: '2026-11-14T09:48:00.000Z',
         elapsedFrom: '2026-11-14T09:48:00.000Z',

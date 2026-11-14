@@ -58,6 +58,7 @@ export function agent(id = 'agent-a', patch: Partial<AgentState> = {}): AgentSta
     terminalHandle: 'term-a',
     agentType: fact('codex'),
     state: fact('working'),
+    workingMode: fact(null),
     stateStartedAt: fact(STARTED),
     lastOutputAt: fact(null),
     title: fact('仮のエージェント'),
