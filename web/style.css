@@ -305,10 +305,6 @@ a {
   font-size: 13px;
 }
 
-.item .open-status {
-  color: var(--muted);
-}
-
 @media (max-width: 390px) {
   body {
     padding: 12px;

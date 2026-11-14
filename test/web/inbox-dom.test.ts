@@ -51,9 +51,9 @@ class FakeElement {
     throw new Error('insertAdjacentHTML must not be used');
   }
 
-  /** 属性は SVG の要素にだけ付ける（HTML の要素には付けない）。 */
+  /** 属性は SVG の要素と、開くボタンの部品の aria・role だけに付ける。 */
   setAttribute(name: string, value: string): void {
-    if (this.namespaceURI !== SVG_NS) throw new Error('setAttribute is not expected');
+    if (this.namespaceURI !== SVG_NS && !/^(aria-|role$)/.test(name)) throw new Error('setAttribute is not expected');
     if (name.toLowerCase().startsWith('on')) throw new Error(`event attribute ${name} must not be set`);
     this.attrs[name] = String(value);
   }
@@ -74,6 +74,11 @@ class FakeElement {
     }
   }
 
+  replaceChildren(...nodes: FakeElement[]): void {
+    this.children.length = 0;
+    this.append(...nodes);
+  }
+
   all(): FakeElement[] {
     return [this, ...this.children.flatMap((c) => c.all())];
   }
@@ -88,7 +93,22 @@ const fakeDocument = {
 };
 
 const DANGER = '<script>alert(1)</script><img src=x onerror=alert(2)>';
-const ALLOWED = new Set(['SECTION', 'H2', 'DETAILS', 'SUMMARY', 'UL', 'LI', 'DIV', 'SPAN', 'P', 'A', 'BUTTON']);
+// svg と path は部品が createElementNS で作るアイコン（開くボタンのロゴと、monitoring の印）。
+const ALLOWED = new Set([
+  'SECTION',
+  'H2',
+  'DETAILS',
+  'SUMMARY',
+  'UL',
+  'LI',
+  'DIV',
+  'SPAN',
+  'P',
+  'A',
+  'BUTTON',
+  'svg',
+  'path',
+]);
 
 function dangerousView() {
   const base = input({
@@ -147,9 +167,14 @@ test('詳細は新しい画面、PR は https だけで noopener noreferrer の�
     ],
   });
   const view = buildInboxView(buildInbox(base), { now: NOW, formatTime: (s: string) => s });
-  const opened: unknown[] = [];
+  const opened: unknown[][] = [];
+  const mounted: unknown[][] = [];
   const nodes = view.stages.map((s: unknown) =>
-    renderStage(fakeDocument, s, { showOpen: true, onOpen: (target: unknown) => opened.push(target) }),
+    renderStage(fakeDocument, s, {
+      showOpen: true,
+      onOpen: (...args: unknown[]) => opened.push(args),
+      onOpenMount: (...args: unknown[]) => mounted.push(args),
+    }),
   ) as FakeElement[];
   const links = nodes.flatMap((n) => n.all()).filter((e) => e.tagName === 'A');
   assert.deepEqual(
@@ -161,9 +186,20 @@ test('詳細は新しい画面、PR は https だけで noopener noreferrer の�
   );
   const buttons = nodes.flatMap((n) => n.all()).filter((e) => e.tagName === 'BUTTON');
   assert.equal(buttons.length, 1);
-  assert.equal(buttons[0]?.textContent, 'Orca で開く');
+  // 開くボタンは共有の部品（sm、Orca のロゴと Open）。
+  assert.equal(buttons[0]?.textContent, 'Open');
+  assert.equal(buttons[0]?.className, 'orca-open-button');
+  assert.equal(buttons[0]?.attrs['aria-label'], 'Open（Orca で開く）');
+  assert.equal(buttons[0]?.title, 'Orca で開く');
+  const root = nodes.flatMap((n) => n.all()).find((e) => e.className === 'orca-open');
+  assert.equal(root?.dataset.size, 'sm');
+  assert.equal(mounted.length, 1);
+  const [target, control] = mounted[0] ?? [];
+  assert.equal((target as { agentId: string }).agentId, 'agent a');
+  assert.equal((control as { button: unknown }).button, buttons[0]);
   for (const fn of buttons[0]?.listeners.click ?? []) fn();
-  assert.deepEqual(opened.length, 1);
+  assert.equal(opened.length, 1);
+  assert.deepEqual(opened[0], [target, control]);
   const narrow = view.stages.map((s: unknown) =>
     renderStage(fakeDocument, s, { showOpen: false, onOpen: () => {} }),
   ) as FakeElement[];

@@ -140,6 +140,10 @@ const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?:
     '/embed/open-button.js': { file: 'embed/open-button.js', type: 'text/javascript; charset=utf-8' },
     '/embed/open-button-frame.js': { file: 'embed/open-button-frame.js', type: 'text/javascript; charset=utf-8' },
     '/embed/open-button.css': { file: 'embed/open-button.css', type: 'text/css; charset=utf-8' },
+    // 開くボタンの部品。同じオリジンの画面と iframe だけが読む（CORS を付けない）。
+    '/embed/open-control.js': { file: 'embed/open-control.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/open-control-view.js': { file: 'embed/open-control-view.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/open-control.css': { file: 'embed/open-control.css', type: 'text/css; charset=utf-8' },
     '/embed/agent': { file: 'embed/agent.html', type: 'text/html; charset=utf-8', page: 'embed' },
     '/embed/agent-frame.js': { file: 'embed/agent-frame.js', type: 'text/javascript; charset=utf-8' },
     '/embed/agent-view.js': { file: 'embed/agent-view.js', type: 'text/javascript; charset=utf-8' },
