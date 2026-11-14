@@ -31,12 +31,14 @@ ID: "iss-00035"
   - `2c1d1ac` ロゴの比の箱と iframe の幅（統括の答え C。タスク担当）
   - `f782e20` README.md と AGENTS.md（タスク担当）
   - `e6816b8` レビューの指摘の直し（タスク担当）
+  - `fa3530d` 再レビューの P3-a（状態を読めない間の title を見出しと合わせる。タスク担当）
+- PR：https://github.com/chemitaro/orca-web/pull/36（Refs #35）。CI（lint、テスト、ビルド）は `fa3530d` で pass。
 - 実装担当（`launch.effective`、起動の受け取りの値）：
   - impl（S-01）codex / gpt-6.1-sol / medium（dispatch `ctx_0ed611c63b6c`）
   - ui（S-02）claude / claude-opus-5-5 / medium（dispatch `ctx_8b5daf0295f0`）
   - S-03 と小さな直しはタスク担当（claude-opus-5-5 / medium）
-- `npm test` 682 件 pass、`npm run lint`（biome と tsc）と `npm run build` は exit 0（`e6816b8`）。
-- レビュー（独立した読むだけのレビュアー、Claude Opus 5.5 / medium、範囲 `1a2afed..f782e20`）：P0・P1 なし。P2-1 受け箱で、描き直しをまたいで古い部品の done の時計が新しい要求の途中の部品を idle に戻し、二重に送れる → 鍵ごとの板 `createOpenBoard`（最後の要求の結果だけを写す）で直し、テストを足した。P2-2 report.md が空 → この記録。P3-1 詳細の見出しが状態を読む前に押せて何も起きない → 読むまで押せなくし、要求の後に開く先を確かめ直す。P3-2 エージェントが見つからないときの title → 「エージェントが見つかりません」。直しの再レビューは下の「再レビュー」。
+- `npm test` 682 件 pass、`npm run lint`（biome と tsc）と `npm run build` は exit 0（`fa3530d`）。
+- レビュー（独立した読むだけのレビュアー、Claude Opus 5.5 / medium、範囲 `1a2afed..f782e20`）：P0・P1 なし。P2-1 受け箱で、描き直しをまたいで古い部品の done の時計が新しい要求の途中の部品を idle に戻し、二重に送れる → 鍵ごとの板 `createOpenBoard`（最後の要求の結果だけを写す）で直し、テストを足した。P2-2 report.md が空 → この記録。P3-1 詳細の見出しが状態を読む前に押せて何も起きない → 読むまで押せなくし、要求の後に開く先を確かめ直す。P3-2 エージェントが見つからないときの title → 「エージェントが見つかりません」。再レビュー（範囲 `f782e20..e6816b8`）：3件とも閉じ、新しい P0〜P2 なし。新しい P3-a（状態を読めない間、ボタンの title が「読んでいます」のまま）は `fa3530d` で直した。P3-b は残り（下）。
 - 描画（試しの画面、`npm run trial`、orca-web 8797・試しの画面 47950、tailnet でも。直す前は `1a2afed` の取り出しを 8795・47930 で。ヘッドレスの Chrome を `--disable-features=MacAppCodeSignClone` で起動し CDP で動かし、Browser.close で閉じた。会話の欄と最後の一言は隠して写した）：
   - 3か所 × 明暗、1280px：直した後の高さは、試しの画面の iframe 72×24（sm）、詳細の見出し 81×28（md）、受け箱 72×24（sm）。ロゴの箱 22×14・25×16。切れ 0、横のはみ出し 0。
   - 390px：直す前も後も、3か所ともボタンが出ない（埋め込みの iframe は display none で読み込まない）。はみ出し 0。
@@ -58,6 +60,8 @@ ID: "iss-00035"
 - Orca のロゴは細い横長の形で、24px のボタンの中では小さい。ロゴの比の箱で読める大きさにしたが、本人の確かめで小さければ、Orca のアプリのアイコン（四角い形）への差し替えを別に考える。
 - 詳細の見出しは、状態を読むまでの短い間、押せない形（琥珀の線）で始まる。読めない間はそのまま残る。
 - SpecDock の横の欄（spec-dock の iss-00592）に置くときは、幅を部品に任せる（統括が先方に伝え済み）。
+- 受け箱の板（`createOpenBoard`）は、受け箱から消えた項目の切り離された部品を鍵ごとに1つ持ち続ける（再レビューの P3-b。見た目と送信に害はなく、増え方は鍵の数まで）。
+- `spec-dock work finish` は GitHub の #35 を閉じるので、マージと本人の確かめの後に統括か利用者が行う（タスク担当は走らせていない）。explanation.html は雛形のまま（前の Issue と同じ）。
 - 本人の確かめは、この下に残す。
 
 ## 本人の確かめ
