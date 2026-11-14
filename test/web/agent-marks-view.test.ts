@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -413,4 +414,35 @@ test('T-22：monitoring は mark working・workingMode monitoring、状態の言
     buildMarks(wt, { now: NOW, max: 10 }).marks.map((m) => m.id),
     ['m', 'w', 'odd', 'missing', 'd'],
   );
+});
+
+// resources/logo.svg（v1.4.258、c91a7a6ee3dc76090cafb33943961ae2235246d6）の d の SHA-256。
+test('APP_ICONS.orca は上流の path をそのまま持ち、出どころと商標を記す', async () => {
+  const icons = await import('../../web/embed/agent-marks-icons.js');
+  const apps = Reflect.get(icons, 'APP_ICONS');
+  assert.ok(apps, 'APP_ICONS を export する');
+  assert.equal(apps.orca.label, 'Orca');
+  assert.equal(apps.orca.viewBox, '6.6666669 70.666669 318.60232 202.66667');
+  assert.equal(apps.orca.paths.length, 1);
+  const path = first(apps.orca.paths);
+  assert.equal(
+    createHash('sha256').update(path.d).digest('hex'),
+    'cf0ed532d447f68ee1e3296c4e56a5b448266e80dff4ef8cc9e0d6f165ac9b70',
+  );
+  assert.deepEqual(Object.keys(path).sort(), ['d', 'fill']);
+  assert.equal(path.fill, 'currentColor');
+  const source = readFileSync('web/embed/agent-marks-icons.js', 'utf8');
+  const comment = source.split('export const APP_ICONS')[0]?.trim().split('\n').at(-1) ?? '';
+  for (const word of [
+    '//',
+    'stablyai/orca',
+    'resources/logo.svg',
+    'v1.4.258',
+    'c91a7a6ee3dc76090cafb33943961ae2235246d6',
+    'MIT',
+    'Orca',
+    'Lovecast Inc.',
+    '商標',
+  ])
+    assert.ok(comment.includes(word), word);
 });
