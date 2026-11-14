@@ -184,11 +184,50 @@ test('T-12：animation を持つ規則は working の印の中の要素だけで
   const moving = animated.filter((r) => !reducedMotion(r.media));
   const spin = only(moving, 'animation を持つ規則');
   for (const sel of spin.selector.split(',')) {
-    assert.match(sel.trim(), /^\.orca-mark--working \S/, sel);
+    assert.match(sel.trim(), /^\.orca-mark--working:not\(\.orca-mark--monitoring\) \S/, sel);
   }
   assert.match(declarations(spin.body).get('animation') ?? '', /^orca-mark-spin 1\.2s linear infinite$/);
 
   const still = ruleFor(spin.selector, reducedMotion);
   assert.equal(still.get('animation'), 'none');
   assert.equal(animated.length, 2);
+});
+
+const RING = '.orca-mark--working:not(.orca-mark--monitoring) .orca-mark-icon';
+
+test('T-22：作業中の輪の全体（余白・静かな輪・回る弧・animation）は monitoring で出ない', () => {
+  // 作業中の印のアイコンに掛かる規則は、どれも monitoring を除く。
+  const ringRules = rules.filter(
+    (r) => r.selector.includes('.orca-mark--working') && r.selector.includes('.orca-mark-icon'),
+  );
+  assert.ok(ringRules.length >= 4, String(ringRules.length));
+  for (const r of ringRules) {
+    for (const sel of r.selector.split(',')) assert.ok(sel.trim().startsWith(RING), sel);
+  }
+  assert.equal(ruleFor(RING, plain).get('padding'), '2px');
+  const both = only(
+    rules.filter((r) => r.media === null && r.selector.replace(/\s+/g, ' ') === `${RING}::before, ${RING}::after`),
+    'the ring rule',
+  );
+  assert.equal(declarations(both.body).get('content'), '""');
+  assert.match(ruleFor(`${RING}::after`, plain).get('animation') ?? '', /^orca-mark-spin /);
+  // monitoring の規則は、輪も animation も足さない。
+  for (const r of rules.filter((x) => x.selector.includes('.orca-mark--monitoring') && !x.selector.includes(':not('))) {
+    const keys = [...declarations(r.body).keys()];
+    assert.ok(!keys.some((k) => k.startsWith('animation')), r.selector);
+    assert.ok(!/::(before|after)/.test(r.selector), r.selector);
+  }
+});
+
+test('T-22：monitoring の色は working の変数のまま（独自の色の変数を持たない）、電気の印は主の色で小 11px・中 13px', () => {
+  assert.doesNotMatch(css, /--orca-mark-monitoring/);
+  assert.equal(rules.filter((r) => r.selector === '.orca-mark--monitoring').length, 0);
+  const state = ruleFor('.orca-mark-state', plain);
+  assert.equal(state.get('color'), 'var(--orca-mark-st)');
+  assert.equal(state.get('width'), '11px');
+  assert.equal(state.get('height'), '11px');
+  assert.equal(state.get('flex'), 'none');
+  const md = ruleFor('.orca-marks--md .orca-mark-state', plain);
+  assert.equal(md.get('width'), '13px');
+  assert.equal(md.get('height'), '13px');
 });

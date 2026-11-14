@@ -268,6 +268,26 @@ a {
   font-size: 13px;
 }
 
+/* monitoring（バックグラウンドタスクを監視中）の電気の印。色は動いているの緑、回らない。 */
+.item .reason .state-icon,
+.tree .fact .state-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--ok);
+}
+
+.item .reason .state-icon {
+  align-self: center;
+  margin-right: -6px;
+}
+
+.tree .fact .state-icon {
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
 .item .reason .missing {
   color: var(--muted);
 }

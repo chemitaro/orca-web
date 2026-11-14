@@ -277,3 +277,35 @@ test('プロジェクトの画面は受け箱と Run の一覧を ?project= で�
     { text: 'プロジェクトの画面', href: '/projects/repo%2Fa' },
   ]);
 });
+
+test('T-23：節が state working・workingMode monitoring なら、状態の文が「バックグラウンドタスクを監視中」', () => {
+  const doc = buildRunTree(
+    state({
+      repos: [repo('repo-a', 'プロジェクトA')],
+      worktrees: [worktree()],
+      agents: [
+        agent('root', { terminalHandle: 'term-root', workingMode: fact('monitoring') }),
+        agent('agent/b', { terminalHandle: 'term-a' }),
+      ],
+      tasks: [task({ createdAt: fact(EARLY) })],
+      workers: [worker()],
+    }),
+    'run-a',
+  );
+  assert.ok(doc);
+  assert.equal(doc.root?.workingMode, 'monitoring');
+  const rows = buildTreeView(doc, { now: Date.parse(EARLY) + 5 * MIN, formatTime: iso }).rows;
+  assert.equal(rows[0].state, 'バックグラウンドタスクを監視中');
+  assert.equal(rows[0].monitoring, true);
+  assert.equal(rows[1].state, '動いている');
+  assert.equal(rows[1].monitoring, false);
+});
+
+test('T-23：state が working でなければ、workingMode が monitoring でも monitoring として示さない', () => {
+  const doc = treeDocument();
+  assert.ok(doc.root);
+  const odd = { ...doc, root: { ...doc.root, state: 'done', workingMode: 'monitoring' as const, children: [] } };
+  const [row] = buildTreeView(odd, { now: 0, formatTime: iso }).rows;
+  assert.equal(row.state, '終わった');
+  assert.equal(row.monitoring, false);
+});

@@ -1,10 +1,10 @@
 // エージェントの印の部品。SpecDock が import する入口。
 // 要約（GET /api/worktrees/summary）を1つの輪で読み（watchWorktreeSummary）、worktree ごとの置き場に印を描く（renderAgentMarks）。
 // 文字は textContent、SVG は createElementNS だけで作り、HTML として解かない（innerHTML を使わない）。
-import { AGENT_ICONS } from './agent-marks-icons.js';
+import { AGENT_ICONS, STATE_ICONS } from './agent-marks-icons.js';
 import { buildMarks } from './agent-marks-view.js';
 
-export { AGENT_ICONS, iconKey } from './agent-marks-icons.js';
+export { AGENT_ICONS, iconKey, STATE_ICONS } from './agent-marks-icons.js';
 export { buildMarks, findWorktree, formatElapsed, MARK_LABELS, MARKS } from './agent-marks-view.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -17,6 +17,8 @@ const PATH_ATTRS = [
   ['stroke', 'stroke'],
   ['strokeWidth', 'stroke-width'],
   ['strokeDasharray', 'stroke-dasharray'],
+  ['strokeLinecap', 'stroke-linecap'],
+  ['strokeLinejoin', 'stroke-linejoin'],
 ];
 // スリープの月（自前の形）。
 const MOON = {
@@ -40,6 +42,16 @@ function svg(doc, shape, className) {
   return root;
 }
 
+/**
+ * 状態の印（STATE_ICONS の鍵）の SVG。aria-hidden で、意味は添える文字や読み上げの名前が持つ。受け箱と Run の木も使う。
+ * @param {any} doc document
+ * @param {'monitoring'} key
+ * @param {string} [className]
+ */
+export function stateIcon(doc, key, className = 'orca-mark-state') {
+  return svg(doc, STATE_ICONS[key], className);
+}
+
 function span(doc, className, text) {
   const node = doc.createElement('span');
   node.className = className;
@@ -55,9 +67,12 @@ function markElement(doc, view, onSelect) {
   } else {
     node.setAttribute('role', 'img');
   }
-  node.className = `orca-mark orca-mark--${view.mark}`;
+  const monitoring = view.workingMode === 'monitoring';
+  node.className = `orca-mark orca-mark--${view.mark}${monitoring ? ' orca-mark--monitoring' : ''}`;
   node.setAttribute('aria-label', view.label);
   node.setAttribute('title', view.label);
+  // Orca の行の並び：状態の印を種類のロゴの左に置き、重ねない。
+  if (monitoring) node.append(stateIcon(doc, 'monitoring'));
   const icon = span(doc, 'orca-mark-icon');
   icon.append(svg(doc, AGENT_ICONS[view.icon] ?? AGENT_ICONS.other));
   node.append(icon);

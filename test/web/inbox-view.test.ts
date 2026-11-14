@@ -235,3 +235,39 @@ test('?project= を作り、URL から選択を読み戻し、ほかの引数を
   assert.equal(inboxApiPath(null), '/api/inbox');
   assert.equal(inboxApiPath('リポ/1&2'), `/api/inbox?project=${encodeURIComponent('リポ/1&2')}`);
 });
+
+test('T-23：monitoring の項目は状態の文が「バックグラウンドタスクを監視中」。running では『動いている』を置き換え、ほかの段ではほかの理由の前に足す', () => {
+  const base = input({
+    agents: [
+      agent('agent-m', {
+        workingMode: fact('monitoring'),
+        lastOutputAt: fact(new Date(NOW - 120 * MIN).toISOString()),
+      }),
+      agent('agent-ended', { workingMode: fact('monitoring'), terminal: fact('exited') }),
+      agent('agent-asked', {
+        workingMode: fact('monitoring'),
+        worker: { dispatchId: 'dispatch-a', taskId: 'task-a', runId: 'run-a' },
+      }),
+      agent('agent-w'),
+    ],
+    workers: [worker()],
+  });
+  base.mail = mail({ messages: [message({ type: 'question' })] });
+  const view = buildInboxView(buildInbox(base), { now: NOW, formatTime: iso });
+  const byKey = Object.fromEntries(
+    view.stages.flatMap((s: { stage: string; items: { key: string }[] }) =>
+      s.items.map((i) => [i.key, { ...i, stage: s.stage }]),
+    ),
+  );
+  assert.equal(byKey['agent:agent-m'].stage, 'running');
+  assert.equal(byKey['agent:agent-m'].reason, 'バックグラウンドタスクを監視中');
+  assert.equal(byKey['agent:agent-m'].monitoring, true);
+  assert.equal(byKey['agent:agent-ended'].stage, 'stalled');
+  assert.equal(byKey['agent:agent-ended'].reason, 'バックグラウンドタスクを監視中・端末が終わった');
+  assert.equal(byKey['agent:agent-ended'].monitoring, true);
+  assert.equal(byKey['agent:agent-asked'].stage, 'needs_action');
+  assert.equal(byKey['agent:agent-asked'].reason, 'バックグラウンドタスクを監視中・統括あての質問');
+  assert.equal(byKey['agent:agent-asked'].hint, 'Orca で開いて答える');
+  assert.equal(byKey['agent:agent-w'].reason, '動いている');
+  assert.equal(byKey['agent:agent-w'].monitoring, false);
+});

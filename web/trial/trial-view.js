@@ -80,3 +80,32 @@ export function detailUrl(base, detail, theme) {
   const suffix = theme === 'light' || theme === 'dark' ? `&theme=${theme}` : '';
   return `${base}${detail}${suffix}`;
 }
+
+/**
+ * 「状態の見本」の worktree。手で作った working・monitoring・done の3つで、実機の値と混ぜない。
+ * 詳細とパスを持たない（見本から詳細や「Orca で開く」に進まない）。
+ * @param {number} now
+ */
+export function stateSamples(now) {
+  // 見本の古さ（分）を時刻にする。経過の短い形への変換は部品（elapsed.js）がする。
+  const at = (minutes) => new Date(now - minutes * 60 * 1000).toISOString();
+  const sample = (key, mark, workingMode, agentType, minutes) => ({
+    id: `sample:${key}`,
+    mark,
+    workingMode,
+    agentType,
+    since: at(minutes),
+    elapsedFrom: at(minutes),
+    elapsedBasis: 'state',
+    detail: null,
+  });
+  return {
+    id: 'sample:states',
+    path: null,
+    agents: [
+      sample('working', 'working', null, 'claude', 12),
+      sample('monitoring', 'working', 'monitoring', 'claude', 5),
+      sample('done', 'done', null, 'codex', 180),
+    ],
+  };
+}

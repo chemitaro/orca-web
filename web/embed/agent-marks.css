@@ -176,13 +176,14 @@
 }
 
 /* 作業中：アイコンのまわりに SpecDock の作業中の輪（progressRing）に似た輪。静かな輪（::before）と 1/4 の弧（::after）。
-   回すのは弧だけで、transform だけを動かす。 */
-.orca-mark--working .orca-mark-icon {
+   回すのは弧だけで、transform だけを動かす。monitoring（バックグラウンドタスクを監視中）は working の中でも輪の全体を出さない
+   （Orca は monitoring で回る印を出さず、Activity の印だけを描く）。 */
+.orca-mark--working:not(.orca-mark--monitoring) .orca-mark-icon {
   padding: 2px;
 }
 
-.orca-mark--working .orca-mark-icon::before,
-.orca-mark--working .orca-mark-icon::after {
+.orca-mark--working:not(.orca-mark--monitoring) .orca-mark-icon::before,
+.orca-mark--working:not(.orca-mark--monitoring) .orca-mark-icon::after {
   content: "";
   position: absolute;
   inset: -1px;
@@ -192,7 +193,7 @@
   pointer-events: none;
 }
 
-.orca-mark--working .orca-mark-icon::after {
+.orca-mark--working:not(.orca-mark--monitoring) .orca-mark-icon::after {
   border-color: transparent;
   border-top-color: var(--orca-mark-working);
   animation: orca-mark-spin 1.2s linear infinite;
@@ -205,9 +206,24 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orca-mark--working .orca-mark-icon::after {
+  .orca-mark--working:not(.orca-mark--monitoring) .orca-mark-icon::after {
     animation: none;
   }
+}
+
+/* 電気の印（monitoring）。種類のロゴの左に並べ、色は状態の主の色（working の変数）。 */
+.orca-mark-state {
+  display: block;
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin-left: 1px;
+  color: var(--orca-mark-st);
+}
+
+.orca-marks--md .orca-mark-state {
+  width: 13px;
+  height: 13px;
 }
 
 .orca-mark-moon {

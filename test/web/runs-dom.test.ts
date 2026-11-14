@@ -4,8 +4,12 @@ import { renderRunList, renderTree } from '../../web/runs-dom.js';
 import { buildRunListView, buildTreeView } from '../../web/runs-view.js';
 
 /** 小さな偽の要素。textContent だけを文字として持ち、HTML を解く口を使うと失敗する。 */
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
 class FakeElement {
   readonly tagName: string;
+  readonly namespaceURI: string | null;
+  readonly attrs: Record<string, string> = {};
   readonly children: FakeElement[] = [];
   readonly dataset: Record<string, string> = {};
   readonly styleProps: Record<string, string> = {};
@@ -20,8 +24,9 @@ class FakeElement {
   target = '';
   #text = '';
 
-  constructor(tag: string) {
-    this.tagName = tag.toUpperCase();
+  constructor(tag: string, ns: string | null = null) {
+    this.namespaceURI = ns;
+    this.tagName = ns === SVG_NS ? tag : tag.toUpperCase();
   }
 
   set textContent(value: string) {
@@ -45,8 +50,15 @@ class FakeElement {
     throw new Error('insertAdjacentHTML must not be used');
   }
 
-  setAttribute(): void {
-    throw new Error('setAttribute is not expected');
+  /** 属性は SVG の要素にだけ付ける（HTML の要素には付けない）。 */
+  setAttribute(name: string, value: string): void {
+    if (this.namespaceURI !== SVG_NS) throw new Error('setAttribute is not expected');
+    if (name.toLowerCase().startsWith('on')) throw new Error(`event attribute ${name} must not be set`);
+    this.attrs[name] = String(value);
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attrs[name] ?? null;
   }
 
   append(...nodes: (FakeElement | string)[]): void {
@@ -63,6 +75,7 @@ class FakeElement {
 
 const fakeDocument = {
   createElement: (tag: string) => new FakeElement(tag),
+  createElementNS: (ns: string, tag: string) => new FakeElement(tag, ns),
   write() {
     throw new Error('document.write must not be used');
   },
@@ -212,4 +225,46 @@ test('リンクの href は /runs/<encodeURIComponent(id)> と /embed/agent?id=�
   const empty = renderRunList(fakeDocument, [], 'この条件の Run はありません') as unknown as FakeElement;
   assert.equal(empty.tagName, 'P');
   assert.equal(empty.textContent, 'この条件の Run はありません');
+});
+
+test('T-23：monitoring の節は状態の文の前に電気の印（createElementNS の SVG、aria-hidden）を描き、文字は textContent', () => {
+  const doc = {
+    schema: 'orca-web.run-tree/v1',
+    generatedAt: '2026-01-02T10:00:00.000Z',
+    stale: false,
+    connection: { state: 'connected', reason: null, checkedAt: null },
+    sources,
+    run: { id: 'run-a', title: 'x', coordinatorProject: null, coordinatorResolvedBy: 'run' },
+    root: node({
+      id: 'root',
+      role: 'coordinator',
+      state: 'working',
+      workingMode: 'monitoring',
+      children: [node({ id: 'w1', state: 'working', workingMode: null })],
+    }),
+    counts: { nodes: 2, workers: 1, otherProject: 0, orphan: 0 },
+  };
+  const rows = buildTreeView(doc as never, { now: 0, formatTime: (s: string) => s }).rows;
+  const ul = renderTree(fakeDocument, rows) as unknown as FakeElement;
+  const [root, w1] = ul.children as [FakeElement, FakeElement];
+  const value = (li: FakeElement) =>
+    li
+      .all()
+      .filter((e) => e.className === 'fact')
+      .find((f) => f.children[0]?.textContent === '状態')?.children[1] as FakeElement;
+  const v = value(root);
+  assert.equal(v.textContent, 'バックグラウンドタスクを監視中');
+  const [icon, text] = v.children as [FakeElement, FakeElement];
+  assert.equal(icon.tagName, 'svg');
+  assert.equal(icon.namespaceURI, SVG_NS);
+  assert.equal(icon.getAttribute('aria-hidden'), 'true');
+  assert.equal(icon.getAttribute('class'), 'state-icon');
+  assert.match(icon.children[0]?.getAttribute('d') ?? '', /^M22 12h-2\.48/);
+  assert.equal(text.tagName, 'SPAN');
+  assert.equal(text.textContent, 'バックグラウンドタスクを監視中');
+  assert.equal(value(w1).textContent, '動いている');
+  assert.equal(
+    w1.all().some((e) => e.tagName === 'svg'),
+    false,
+  );
 });

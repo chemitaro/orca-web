@@ -132,6 +132,8 @@ test('部品の入口は表と組み立てを再び export する', () => {
     'formatElapsed',
     'findWorktree',
     'buildMarks',
+    'STATE_ICONS',
+    'stateIcon',
   ]) {
     assert.ok(name in marks, name);
   }
@@ -269,6 +271,54 @@ test('renderAgentMarks：worktree がなければ空の置き場', () => {
   const root = container.children[0] as FakeElement;
   assert.equal(root.className, 'orca-marks orca-marks--sm');
   assert.equal(root.children.length, 0);
+});
+
+test('T-22：monitoring の印は class に orca-mark--monitoring、種類のロゴの前に電気の SVG（aria-hidden、線の属性）を持つ', () => {
+  const doc = new FakeDocument();
+  const container = doc.createElement('div');
+  renderAgentMarks(
+    container,
+    worktree([
+      agent({
+        id: 'm',
+        workingMode: 'monitoring',
+        elapsedFrom: '2026-01-02T09:55:00.000Z',
+        elapsedBasis: 'state',
+      }),
+      agent({ id: 'w' }),
+      agent({ id: 'd', mark: 'done', workingMode: 'monitoring' }),
+    ]),
+    { now: NOW },
+  );
+  const [m, w, d] = markEls(container.children[0] as FakeElement) as [FakeElement, FakeElement, FakeElement];
+  assert.equal(m.className, 'orca-mark orca-mark--working orca-mark--monitoring');
+  assert.equal(m.getAttribute('aria-label'), 'Claude、バックグラウンドタスクを監視中、この状態になって 5分');
+  assert.equal(w.className, 'orca-mark orca-mark--working');
+  assert.equal(d.className, 'orca-mark orca-mark--done');
+
+  // 並び：状態の印、種類のロゴ、経過（重ねない）。
+  const [state, icon, time] = m.children as [FakeElement, FakeElement, FakeElement];
+  assert.equal(m.children.length, 3);
+  assert.equal(state.tagName, 'svg');
+  assert.equal(state.namespaceURI, SVG_NS);
+  assert.equal(state.getAttribute('class'), 'orca-mark-state');
+  assert.equal(state.getAttribute('aria-hidden'), 'true');
+  assert.equal(state.getAttribute('viewBox'), '0 0 24 24');
+  const [path] = state.children as [FakeElement];
+  assert.equal(path.namespaceURI, SVG_NS);
+  assert.equal(path.getAttribute('d'), marks.STATE_ICONS.monitoring.paths[0]?.d);
+  assert.equal(path.getAttribute('fill'), 'none');
+  assert.equal(path.getAttribute('stroke'), 'currentColor');
+  assert.equal(path.getAttribute('stroke-width'), '2');
+  assert.equal(path.getAttribute('stroke-linecap'), 'round');
+  assert.equal(path.getAttribute('stroke-linejoin'), 'round');
+  assert.equal(icon.className, 'orca-mark-icon');
+  assert.equal(time.className, 'orca-mark-time');
+  assert.equal(time.textContent, '5m');
+
+  const stateSvgs = (el: FakeElement) => el.all().filter((c) => c.getAttribute('class') === 'orca-mark-state');
+  assert.equal(stateSvgs(w).length, 0);
+  assert.equal(stateSvgs(d).length, 0);
 });
 
 type Timer = { fn: () => void; ms: number; id: number };

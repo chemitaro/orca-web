@@ -1,7 +1,7 @@
 // 印の組み立て（純粋な関数）。GET /api/worktrees/summary（orca-web.worktree-summary/v1）の worktree の1つから、
 // エージェントごとの小さな印の形を作る。DOM、時計、fetch に触らない。
 // 要約の項目は信頼しないデータ。決めた項目だけを拾い、題名や本文は返さない。
-import { AGENT_ICONS, iconKey } from './agent-marks-icons.js';
+import { AGENT_ICONS, iconKey, STATE_ICONS } from './agent-marks-icons.js';
 import { describeElapsed, formatElapsed } from './elapsed.js';
 
 // 経過の規則は elapsed.js の1か所。既存の import の口を保つため、ここからも export する。
@@ -68,15 +68,19 @@ function elapsedText(basis, spoken) {
 
 function markView(agent, now) {
   const mark = MARKS.includes(agent?.mark) ? agent.mark : 'unknown';
+  // Orca の working の中の monitoring。mark が working で値がちょうど monitoring のときだけ。ほかの値と知らない値は null。
+  const workingMode = mark === 'working' && agent?.workingMode === 'monitoring' ? 'monitoring' : null;
+  const stateLabel = workingMode === 'monitoring' ? STATE_ICONS.monitoring.label : MARK_LABELS[mark];
   const icon = iconKey(agent?.agentType);
   const typeLabel = typeLabelFor(agent?.agentType, icon);
   const elapsed = formatElapsed(agent?.elapsedFrom, now);
   const spoken = describeElapsed(agent?.elapsedFrom, now);
   const detail = str(agent?.detail);
-  const parts = [typeLabel, MARK_LABELS[mark], elapsedText(agent?.elapsedBasis, spoken)].filter((p) => p !== null);
+  const parts = [typeLabel, stateLabel, elapsedText(agent?.elapsedBasis, spoken)].filter((p) => p !== null);
   return {
     id: str(agent?.id),
     mark,
+    workingMode,
     icon,
     typeLabel,
     elapsed,
@@ -86,7 +90,7 @@ function markView(agent, now) {
 }
 
 /**
- * @typedef {{ id: string | null, mark: string, icon: 'claude' | 'codex' | 'other' | 'none', typeLabel: string,
+ * @typedef {{ id: string | null, mark: string, workingMode: 'monitoring' | null, icon: 'claude' | 'codex' | 'other' | 'none', typeLabel: string,
  *   elapsed: string | null, label: string, detail: string | null }} MarkView
  */
 

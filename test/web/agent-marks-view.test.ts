@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { AGENT_ICONS, iconKey } from '../../web/embed/agent-marks-icons.js';
+import { AGENT_ICONS, iconKey, STATE_ICONS } from '../../web/embed/agent-marks-icons.js';
 import { buildMarks, findWorktree, formatElapsed, MARK_LABELS, MARKS } from '../../web/embed/agent-marks-view.js';
 import { formatElapsed as sharedFormatElapsed } from '../../web/embed/elapsed.js';
 
@@ -213,6 +213,7 @@ test('buildMarks：決めた項目だけを持つ印にする', () => {
     {
       id: 'a1',
       mark: 'working',
+      workingMode: null,
       icon: 'claude',
       typeLabel: 'Claude',
       elapsed: '5m',
@@ -251,6 +252,7 @@ test('buildMarks：種類、知らない状態、起点ごとの経過の文、d
   assert.deepEqual(byId.s, {
     id: 's',
     mark: 'sleeping',
+    workingMode: null,
     icon: 'codex',
     typeLabel: 'Codex',
     elapsed: '2h',
@@ -334,4 +336,81 @@ test('buildMarks：max を超えたら並べ替えた後に先頭の max−1 個
   const custom = buildMarks({ agents }, { now: NOW, max: 2 });
   assert.equal(custom.marks.length, 1);
   assert.deepEqual(custom.overflow, { count: 5, label: 'ほか 5 件' });
+});
+
+// lucide-react 0.577.0 の dist/esm/icons/activity.js の Activity の path と、defaultAttributes の線の属性。
+const ACTIVITY_D =
+  'M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2';
+
+test('T-22：状態の印の表の monitoring は lucide の Activity をそのまま写す', () => {
+  assert.deepEqual(STATE_ICONS.monitoring, {
+    label: 'バックグラウンドタスクを監視中',
+    viewBox: '0 0 24 24',
+    paths: [
+      {
+        d: ACTIVITY_D,
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: '2',
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+      },
+    ],
+  });
+});
+
+test('T-22：状態の印の表のすぐ上に lucide の出どころとライセンスがあり、d は web/ でこのファイルにだけある', () => {
+  const iconsFile = 'web/embed/agent-marks-icons.js';
+  const lines = readFileSync(iconsFile, 'utf8').split('\n');
+  const at = lines.findIndex((l) => l.startsWith('export const STATE_ICONS'));
+  assert.ok(at > 0);
+  const comment = lines[at - 1] ?? '';
+  assert.match(comment, /^\/\//);
+  assert.match(comment, /lucide/);
+  assert.match(comment, /ISC/);
+  assert.match(comment, /lucide-react 0\.577\.0/);
+  assert.match(comment, /AgentStateDot/);
+
+  const walk = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const p = join(dir, name);
+      return statSync(p).isDirectory() ? walk(p) : [p];
+    });
+  const holders = walk('web').filter((p) => readFileSync(p, 'utf8').includes('M22 12h-2.48a2 2 0 0 0-1.93'));
+  assert.deepEqual(holders, [join('web', 'embed', 'agent-marks-icons.js')]);
+});
+
+test('T-22：monitoring は mark working・workingMode monitoring、状態の言葉だけが変わり、経過は working と同じ', () => {
+  const wt = {
+    agents: [
+      agent({ id: 'm', workingMode: 'monitoring', elapsedFrom: ago(5 * MIN), elapsedBasis: 'state' }),
+      agent({ id: 'w', workingMode: null, elapsedFrom: ago(5 * MIN), elapsedBasis: 'state' }),
+      agent({ id: 'odd', workingMode: 'something-new', elapsedFrom: ago(5 * MIN), elapsedBasis: 'state' }),
+      agent({ id: 'd', mark: 'done', workingMode: 'monitoring' }),
+      agent({ id: 'missing' }),
+    ],
+  };
+  const byId = Object.fromEntries(buildMarks(wt, { now: NOW, max: 10 }).marks.map((m) => [m.id, m]));
+  assert.deepEqual(byId.m, {
+    id: 'm',
+    mark: 'working',
+    workingMode: 'monitoring',
+    icon: 'claude',
+    typeLabel: 'Claude',
+    elapsed: '5m',
+    label: 'Claude、バックグラウンドタスクを監視中、この状態になって 5分',
+    detail: '/embed/agent?id=m',
+  });
+  assert.equal(byId.w.workingMode, null);
+  assert.equal(byId.w.label, 'Claude、作業中、この状態になって 5分');
+  assert.equal(byId.odd.workingMode, null);
+  assert.equal(byId.odd.label, 'Claude、作業中、この状態になって 5分');
+  assert.equal(byId.d.workingMode, null);
+  assert.equal(byId.d.label, 'Claude、完了');
+  assert.equal(byId.missing.workingMode, null);
+  // 並びは working の仲間のまま（入れた順）。
+  assert.deepEqual(
+    buildMarks(wt, { now: NOW, max: 10 }).marks.map((m) => m.id),
+    ['m', 'w', 'odd', 'missing', 'd'],
+  );
 });

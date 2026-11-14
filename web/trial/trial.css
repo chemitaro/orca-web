@@ -441,3 +441,13 @@ p {
   height: 120px;
   border: 1px dashed var(--line);
 }
+
+/* 状態の見本の行：中の印、小の印、読み上げの名前。 */
+.states .row-marks {
+  flex: none;
+}
+
+.states .row-label {
+  color: var(--muted);
+  white-space: normal;
+}

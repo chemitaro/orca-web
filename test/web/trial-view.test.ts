@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import type { WorktreeSummary, WorktreeSummaryDocument } from '../../src/summary/model.ts';
-import { buildTrialView as build, detailUrl, orcaBase } from '../../web/trial/trial-view.js';
+import { buildMarks } from '../../web/embed/agent-marks-view.js';
+import { buildTrialView as build, detailUrl, orcaBase, stateSamples } from '../../web/trial/trial-view.js';
 
 // biome-ignore lint/suspicious/noExplicitAny: the view is an untyped JS object
 const buildTrialView = (doc: unknown, options: Parameters<typeof build>[1]): any => build(doc, options);
@@ -226,4 +227,37 @@ test('試しの画面は部品の JS と CSS を試しの orca-web から読み�
   const forbidden = await readFile(new URL('../../web/trial/forbidden.js', import.meta.url), 'utf8');
   assert.match(forbidden, /\bimport\(url\)/);
   assert.match(forbidden, /probeImport\([^)]*`\$\{base\}\/embed\/agent-marks\.js`\)/);
+});
+
+test('T-23：状態の見本は手で作った working・monitoring・done の3つで、実機の値と混ざらない（開く先も詳細もない）', () => {
+  const sample = stateSamples(NOW);
+  assert.equal(sample.id, 'sample:states');
+  assert.equal(sample.path, null);
+  assert.deepEqual(
+    sample.agents.map((a: { id: string; mark: string; workingMode: string | null }) => [a.id, a.mark, a.workingMode]),
+    [
+      ['sample:working', 'working', null],
+      ['sample:monitoring', 'working', 'monitoring'],
+      ['sample:done', 'done', null],
+    ],
+  );
+  for (const a of sample.agents) assert.equal(a.detail, null);
+  const marks = buildMarks(sample, { now: NOW, max: 10 }).marks;
+  assert.deepEqual(
+    marks.map((m) => [m.mark, m.workingMode, m.elapsed]),
+    [
+      ['working', null, '12m'],
+      ['working', 'monitoring', '5m'],
+      ['done', null, '3h'],
+    ],
+  );
+  assert.match(marks[1]?.label ?? '', /バックグラウンドタスクを監視中/);
+});
+
+test('T-23：試しの画面に「状態の見本」の節があり、部品で見本を描く', async () => {
+  const html = await readFile(new URL('../../web/trial/index.html', import.meta.url), 'utf8');
+  assert.match(html, /<h2 id="states-title">状態の見本/);
+  assert.match(html, /id="states"/);
+  const trial = await readFile(new URL('../../web/trial/trial.js', import.meta.url), 'utf8');
+  assert.match(trial, /stateSamples\(/);
 });

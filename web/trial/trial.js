@@ -2,12 +2,13 @@
 // 部品の watchWorktreeSummary の1つの輪で要約を読む（見えない間は読まない）。同じ文書から、構造の図の箱、
 // Issue の一覧の行、worktree の節の見本を描く。文字は textContent だけ。印を選ぶと詳細とチャットの iframe を開き、
 // 節ごとに open-button.js のボタンを置く。
-import { buildTrialView, detailUrl, orcaBase } from './trial-view.js';
+import { buildTrialView, detailUrl, orcaBase, stateSamples } from './trial-view.js';
 
 const wide = window.matchMedia('(min-width: 721px)');
 const dark = window.matchMedia('(prefers-color-scheme: dark)');
 
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
+const statesEl = $('states');
 const boxesEl = $('boxes');
 const rowsEl = $('rows');
 const sectionsEl = $('sections');
@@ -70,6 +71,24 @@ function drawMarks(container, place, key, where, size) {
       render();
     },
   });
+}
+
+/** 状態の見本：手で作った worktree の印を、行ごとに1つずつ（中と小の大きさ）と読み上げの名前で描く。選べない。 */
+function renderStates() {
+  const now = Date.now();
+  const sample = stateSamples(now);
+  const items = sample.agents.map((agent) => {
+    const one = { agents: [agent] };
+    const node = el('li', 'row');
+    const md = el('span', 'row-marks');
+    marks.renderAgentMarks(md, one, { now, size: 'md' });
+    const sm = el('span', 'row-marks');
+    marks.renderAgentMarks(sm, one, { now, size: 'sm' });
+    const label = marks.buildMarks(one, { now, max: 1 }).marks[0]?.label ?? '';
+    node.append(md, sm, el('span', 'row-label', label));
+    return node;
+  });
+  statesEl.replaceChildren(...items);
 }
 
 function renderBoxes() {
@@ -211,6 +230,7 @@ function placeFrame() {
 function render() {
   if (selected && !selectedTarget()) selected = null;
   showBanner(view.banner);
+  renderStates();
   renderBoxes();
   renderRows();
   renderSections();
