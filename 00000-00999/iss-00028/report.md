@@ -45,6 +45,13 @@ ID: "iss-00028"
 - P2/P3 の残り：P2 1（スリープの文字の色とフォーカスの輪が `?theme=` に従わない。画面の実装担当に、agent.css に `--ds-muted`・`--ds-focus` も明暗ごとに置くよう伝える）
 - ChatGPT の2人目：得られなかった。共有の `spec-dock/canonical` がほかの Issue の自動保存で動き、Strict の前置き（ブランチの先端の一致）を満たせなかった（round 1 は途中で先端が動いて中止、round 2 は古い版のまま 50 分を超えたので止めた）。2人のレビューとは呼ばない
 
+### 仕様のレビュー（続き、R-12）：合格（round 5、2026-11-14）
+
+- 合格の固定（sha256）：requirement.cue `3598b5b510a8fe67cea9c2cb4b32eb93a9c5e395ada9b9994856d954ebf06c42`、design.cue `69862e232a4f62e495f32c75c2247c14678718d9c4175f1697dd3608e85cbda9`、plan.cue `2630017cc6152c83b995eb5c5dcecf28fbd6993c582c027aed38560f7a4e3463`。コードの固定は `3a83547061ac0cbf01cab2cfe3e8b17fb72a54dc`（ブランチ chemitaro/iss-00028-bubble）
+- 結果：`.workbench/spec-review/iss-00028/round-5.json`（Claude spec-reviewer Opus 5.5 / high。P0/P1 0、P2 1、P3 1）
+- P2：plan の exit が続きの完了を含まない（続きの完了は verification の「続き」の行と gate2 による）。P3：直す前の写しの撮り方（S-05 の前に撮って解消）
+- ChatGPT の2人目：前と同じ理由で使っていない
+
 ### 区切りのレビュー CP-1：合格
 
 - 範囲 fc654c0..46df4ec（S-01・S-02）。code-reviewer（Opus 5.5 / medium、standards と spec を1人）。round 1 fail（P1 1：メモリーに unknown の照会しかないのに not_sent を返す。直した 46df4ec）、round 2 pass（P0〜P3 0）。`.workbench/code-review/iss-00028-cp1/`
