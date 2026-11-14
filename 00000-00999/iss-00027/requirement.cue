@@ -9,7 +9,7 @@ assurance: {
 	reason: "表示だけを変え、送信や書き込みには触れない。読み取りの CORS を静的な部品の2〜3のファイルに広げるが、許すオリジンは状態の API と同じ。誤りは表示で分かり、直せる"
 }
 
-purpose: "（2026-11-14 に R-05・R-06 を追記：色とスタイルを SpecDock に合わせ、作業中に回る動きを付ける。同日 R-07：経過を now・5m・3h・2d に。同日 R-08〜R-10：背後の作業を待つ状態 background を Orca と同じ印で示す。）SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に置く worktree ごとのエージェントの印を、種類はアイコン、稼働の状態は色、経過の時間（分・時間・日）で小さく見せる部品にする。SpecDock は要約を1回読めば、多くの箱や行に描ける。"
+purpose: "（2026-11-14 に R-05・R-06 を追記：色とスタイルを SpecDock に合わせ、作業中に回る動きを付ける。同日 R-07：経過を now・5m・3h・2d に。同日 R-08〜R-10：Orca の working の中の monitoring（バックグラウンドタスクを監視中）を Orca と同じ印で示す。）SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に置く worktree ごとのエージェントの印を、種類はアイコン、稼働の状態は色、経過の時間（分・時間・日）で小さく見せる部品にする。SpecDock は要約を1回読めば、多くの箱や行に描ける。"
 
 background: """
 	本人の確かめ（2026-11-14、iss-00014 の report.md の『## 本人の確かめ』）：試しの画面の稼働の印は動くが、種類（Codex・Claude）と状態とスリープが文字で、狭い枠に向かない。種類はアイコン、状態は色、スリープも文字でなく、経過の時間を出す。
@@ -25,12 +25,12 @@ includes: [
 	"部品の JS と CSS への、状態の API と同じ読み取りの CORS",
 	"試しの画面（`web/trial/`）を新しい部品で描き直し、狭い枠（構造の図の箱、Issue の一覧の行）の見本を置く",
 	"README.md と AGENTS.md の更新",
-	"（R-08〜R-10）背後の作業を待つ状態（background）：Orca の `workingMode` と主エージェントの状態の始まりの読み取り（既存の読みの項目を足すだけ）、状態の文書への2つの事実の追加（版は v1 のまま）、印・要約・受け箱・Run の木での扱い",
+	"（R-08〜R-10）Orca の working の中の monitoring：`workingMode` の読み取り（既存の読みの項目を足すだけ）、状態の文書への事実 `workingMode` の追加（版は v1 のまま）、印・要約・受け箱・Run の木での扱い",
 ]
 excludes: [
 	"SpecDock 側の組み込み（spec-dock の epic-00471・epic-00526。SpecDock のリポジトリは変えない）",
 	"エージェントの状態の決め方（`agentMark`）と受け箱の段の、R-08〜R-10 のほかの変更",
-	"状態の API（`orca-web.state/v1`）の、R-08 の事実の追加のほかの変更。Orca への新しい命令",
+	"状態の API（`orca-web.state/v1`）の、R-08 の事実 workingMode の追加のほかの変更。Orca への新しい命令",
 	"チャットと詳細の画面の直し（iss-00028）",
 ]
 
@@ -137,49 +137,53 @@ requirements: {
 		]
 	}
 	"R-08": {
-		title: "Orca が背後の作業を待つ印を出すときだけ、エージェントを background と判定する"
+		title: "Orca が working の中の monitoring（バックグラウンドタスクを監視中）とするエージェントを、その値のとおりに読む"
 		text: """
-			本人の要望（2026-11-14）：エージェントの番は終わったが、自分で起こしたコマンドの実行を待っている状態に Orca が出す電気のようなマークを、orca-web でも使う。統括の決定（task_17e9d7936edf、msg_1ca07b651357）：新しい状態として扱い、Orca がこの印を出さないのに orca-web がこの状態と判定することがないようにする（迷えば今の状態のまま）。
-			Orca 1.4.258（stablyai/orca、タグ v1.4.258、コミット c91a7a6e）での事実：
-			- 印は `AgentStateDot.tsx` の `monitoring` の分岐の lucide の `Activity`（脈の線）、ラベルは `Monitoring background tasks`、色は working と同じ `text-agent-working`。回る印（`AgentWorkingSpinner`）はない。
-			- 値はエージェントの状態の `state: 'working'` と `workingMode: 'monitoring'` の組（`agent-status-types.ts` は state が working のときだけ workingMode を受ける）。`agent-lead-status-fold.ts` の `foldAgentLeadStatus` が、主エージェントの番が `done` で、生きている子の作業がエージェントでないもの（シェルのコマンド、Monitor、workflow）だけのときに作る。子がエージェントのとき、または `orca orchestration check --wait` を待つとき（`orca-cli-invocations.ts`：worker を待つのは monitoring でない）は、ただの working（回る印）。
-			- 読める場所：タブの `agentStatus.workingMode`（端末のタブ）、`chatStatus.workingMode`（構造化 Chat）、`worktree ps` の `agents[].workingMode`。待ちの始まりは、同じ場所の `mainAgent.stateStartedAt`（主エージェントが done になった時刻。組の `stateStartedAt` は作業の始まりのまま続くので待ちの始まりでない）。
-			判定：エージェントの状態の値を選んだのと同じ取得元で、`state` が `working` かつ `workingMode` がちょうど `monitoring` のときだけ、印を `background` にする。ほかの取得元の workingMode を混ぜない。workingMode がない、ほかの値、state が working でないときは、今までどおりの印。
-			状態の文書（`orca-web.state/v1`、版はそのまま）のエージェントに、事実 `workingMode` と `mainAgentStateStartedAt` を足す（値は状態と同じ取得元から）。Orca に新しい命令を送らない（今の読みの結果の項目を拾うだけ）。
+			本人の要望（2026-11-14）：エージェントの番は終わったが、自分で起こしたコマンドの実行を待っている状態に Orca が出す電気のようなマークを、orca-web でもそのまま使う。本人の確認（統括の伝言 msg_92bbf57b6a40）：印の位置付け・出すタイミング・意味は独自の解釈をせず Orca 本体に合わせる。
+			根拠（stablyai/orca、タグ v1.4.258、コミット c91a7a6e）：
+			- `src/shared/agent-status/contracts/agent-status-types.ts`：`AgentWorkingMode = 'monitoring'`。state が `working` のときだけ `workingMode: 'monitoring'` を受ける。
+			- `src/shared/agent-status/lifecycle/agent-lead-status-fold.ts` の `foldAgentLeadStatus`：主エージェントの番が `done` で、生きている子の作業がエージェントでないものだけのとき `{ state: 'working', workingMode: 'monitoring' }`。
+			- `src/shared/agent-status/child-work/agent-status-child-work-liveness.ts`：エージェントでない子（シェルのコマンド、Monitor、workflow）だけが生きていれば monitoring。子がエージェント、または `orca orchestration check --wait` を待つ（`src/shared/orca-cli-invocations.ts`）なら、ただの working。
+			- 読める場所：タブの `agentStatus.workingMode`（端末のタブ）、`chatStatus.workingMode`（構造化 Chat。`src/shared/runtime-mobile-session-tab-contracts.ts`）、`worktree ps` の `agents[].workingMode`（`src/shared/runtime-worktree-contracts.ts`）。
+			読み方：状態の値（`state`）を選んだのと同じ取得元の `workingMode` を、状態の文書（`orca-web.state/v1`、版はそのまま）のエージェントの事実 `workingMode` に入れる。ほかの取得元の値を混ぜない。orca-web は別の値から推さず、独自の判定を足さない。Orca の値が読めないときは monitoring として扱わない。Orca に新しい命令を送らない（今の読みの結果の項目を1つ拾うだけ）。
+			『monitoring のエージェント』とは、その事実の値がちょうど `monitoring` で、同じ取得元の state が `working` のものだけをいう。
 			"""
 		acceptance: [
-			"手書きの読みの結果で、タブの agentStatus が working・monitoring なら background。workingMode がない・ほかの値・state が done や waiting なら今までどおり。タブの state がなく ps の state を使うときは ps の workingMode だけを見る（タブの workingMode を混ぜない）。構造化 Chat は chatStatus.workingMode、タブのない ps のエージェントは ps の workingMode（テスト）",
-			"状態の文書のエージェントに workingMode と mainAgentStateStartedAt の事実があり、取得元と項目の名前が状態と同じ取得元を指す（テスト）",
-			"実機（読むだけ）で、Orca が monitoring とするエージェントの件数と、orca-web の background の件数が同じ（写しを report.md に。会話の中身を写さない）",
+			"手書きの読みの結果で、タブの agentStatus が working・monitoring なら事実 workingMode が monitoring。タブの state がなく ps の state を使うときは ps の workingMode だけ（タブの値を混ぜない）。構造化 Chat は chatStatus.workingMode、タブのない ps のエージェントは ps の workingMode。値がなければ missing（テスト）",
+			"monitoring のエージェントの印（agentMark）は working のまま。state が working でなければ、workingMode が monitoring でも monitoring として扱わない（テスト）",
+			"実機（読むだけ）で、Orca が working・monitoring とするエージェントの件数と、orca-web の monitoring のエージェントの件数が同じ（件数だけを report.md に。会話の中身を写さない）",
 		]
 	}
 	"R-09": {
-		title: "background は Orca と同じ電気の印を、緑で、回さずに、種類のロゴの横に出す"
+		title: "monitoring の印は Orca と同じ絵・置き場・ラベルで、色は doing の緑、回らない"
 		text: """
-			統括の決定：アイコンは Orca が出す印の SVG をそのまま写す（lucide の `Activity`、lucide-react 0.577.0、ISC。出どころとライセンスの1行を `AGENT_ICONS` の近くに足す）。位置は Orca の見せ方に合わせる（Orca の行は状態の印を種類のロゴの左に並べ、重ねない）。狭い枠（小 16px）でも読める大きさにする。
-			- 色：『動いている』の仲間として SpecDock の doing（緑、working と同じ組の変数）。回る弧は付けない（回る弧は working だけ）。
-			- 経過の時間：待ちの始まり（`mainAgentStateStartedAt`）から。読めなければ worktree の最後の活動から。どちらもなければ出さない。
-			- 読み上げの名前と title：Orca のラベル（Monitoring background tasks）に合わせた短い言葉「背後の作業を監視中」と、起点の言葉（「待ちになって 5分」、最後の活動からなら今までの文）。短い形を読ませない（R-07）。
-			- 並び：working の次（要対応、working、background、unknown、done、sleeping）。
+			根拠：`src/renderer/src/components/AgentStateDot.tsx`（monitoring は lucide の `Activity`、ラベル `agentStateLabel('monitoring')`、working の回る印 `AgentWorkingSpinner` は出さない）、`src/renderer/src/components/sidebar/workspace-card/activity/worktree-card-compact-agent-row.tsx`（状態の印を種類のロゴの左に並べ、重ねない）、`src/renderer/src/i18n/locales/ja.json`（ラベルの日本語は「バックグラウンドタスクを監視中」。en は `Monitoring background tasks`。working は「作業中」、done は「完了」で orca-web の今の言葉と同じ）。
+			- 絵：lucide-react 0.577.0（Orca 1.4.258 が使う版、ISC）の `Activity` の path をそのまま写す。出どころとライセンスの1行を `AGENT_ICONS` の近くに書く。
+			- 置き場：monitoring の印は、種類のロゴの左に並べる（重ねない）。working の回る弧を出さない。狭い枠（小 16px）でも線が読める大きさ。
+			- ラベル：読み上げの名前と title の状態の言葉は「バックグラウンドタスクを監視中」（Orca の日本語の画面と同じ）。
+			- 経過の時間：Orca はこの印のときに別の時計を出さない（行の時刻の規則はどの状態でも同じ `getCompactAgentTime`）。orca-web も足さず、working と同じ規則（状態の始まりから。R-01・R-07）のまま。
+			- 色：統括の決定で、SpecDock のデザインシステムの doing の緑（working と同じ組）。Orca の黄（`--agent-working`）には合わせない。
+			- 並び：working の印の仲間として、今の working の位置。
 			"""
 		acceptance: [
-			"印の組み立てが background を知り、label に「背後の作業を監視中」と起点ごとの経過の文を持つ。短い形を label に入れない（テスト）",
-			"描画で、background の印が種類のロゴの前に電気の印（createElementNS の SVG、aria-hidden）を持ち、path の d が lucide 0.577.0 の Activity と同じ。その値は web/ の中で agent-marks-icons.js にだけある（テスト）",
-			"CSS で、background の主・背景・線・文字が working と同じ SpecDock の doing の変数を使い、background の中に animation を持つ規則がない（テスト）",
-			"試しの画面（tailnet でも）で、working・background・done を並べた写しを report.md に残す",
+			"印の組み立てで、monitoring のエージェントは mark working、label の状態の言葉が「バックグラウンドタスクを監視中」、経過は working と同じ（短い形を label に入れない）（テスト）",
+			"描画で、monitoring の印は種類のロゴの前に電気の印（createElementNS の SVG、aria-hidden）を持ち、path の d が lucide 0.577.0 の Activity と同じ。その値は web/ の中で agent-marks-icons.js にだけある。表の近くに出どころとライセンス（テスト）",
+			"CSS で、monitoring の印の色が working と同じ doing の変数で、回る弧と animation がない（テスト）",
+			"試しの画面（tailnet でも）で、working・monitoring・done を並べた写しを report.md に残す",
 		]
 	}
 	"R-10": {
-		title: "要約・受け箱・Run の木で、background を『動いている』として扱う"
+		title: "要約・受け箱・Run の木で、monitoring は working として数え、種類として monitoring を持つ"
 		text: """
-			- 要約（`orca-web.worktree-summary/v1`、版はそのまま）：`counts.background` を足し、印 `background` のエージェントの `elapsedFrom` は待ちの始まり、種類 `elapsedBasis: 'wait'`。読めなければ worktree の最後の活動（`worktree-activity`）。`since` は今までどおり状態の始まり。
-			- 受け箱：段は `running`（動いている）で、理由 `background`（「背後の作業を監視中」）。`finished` にも `needs_action` にも入れない。出力が止まった（`no_output`）の判定は working だけのまま（待ちは出力しないのが普通なので）。端末が終わった（`terminal_ended`）は今までどおり。
-			- Run の木：節の状態を `background` にし、R-09 と同じ電気の印と言葉を出す。節の経過は待ちの始まり（なければ worktree の最後の活動）から。
+			本人の確認：要約の API でも、working を数える所ではこれも working として数え、種類として monitoring を足す。受け箱の『動いている』、Run の木、稼働の印の数のどれも Orca と食い違わない。
+			- 要約（`orca-web.worktree-summary/v1`、版はそのまま）：エージェントの `mark` は working のまま、`counts.working` に入る。エージェントに `workingMode`（`'monitoring'` か null）を足す。経過の起点は working と同じ。
+			- 受け箱：段は running（動いている）、理由は working のまま。項目に `workingMode` を足し、画面は状態の言葉を「バックグラウンドタスクを監視中」にする。出力が止まった（`no_output`）は monitoring に当てない（Orca は monitoring を生きた working として示し、止まったとはしない）。端末が終わった（`terminal_ended`）は今までどおり。
+			- Run の木：節の `state` は working のまま、節に `workingMode` を足し、画面は R-09 と同じ電気の印と言葉を出す。
 			"""
 		acceptance: [
-			"要約で background の数と elapsedBasis wait、始まりがなければ worktree-activity（テスト）",
-			"受け箱で background は running の段・理由 background。長く出力がなくても stalled にならない。端末が終われば stalled（テスト）",
-			"Run の木の節の状態が background で、DOM に電気の印と「背後の作業を監視中」がある（テスト）",
+			"要約で monitoring のエージェントは mark working・counts.working に入り・workingMode monitoring。ほかは workingMode null（テスト）",
+			"受け箱で monitoring は running の段・理由 working・workingMode monitoring。長く出力がなくても stalled にならない。端末が終われば stalled（テスト）",
+			"Run の木の節が state working・workingMode monitoring で、DOM に電気の印と「バックグラウンドタスクを監視中」がある（テスト）",
 		]
 	}
 }
@@ -190,8 +194,8 @@ failures: {
 		text:  "要約が読めないときは、輪は受け手の誤りの処理に渡すだけで、前の描画を消さない。文書の形が違えば、組み立ては印を返さない。`stale` の文書は、受け手が古いことを示せるよう、そのまま渡す（試しの画面は帯で示す）。"
 	}
 	"F-03": {
-		title: "背後の待ちを推測で作らない"
-		text:  "workingMode が状態と違う取得元にしかない、値が monitoring でない、state が working でないときは background にしない（今までの印のまま）。check --wait の待ちのように Orca が回る印を出す状態は working のまま。"
+		title: "monitoring を推測で作らない"
+		text:  "workingMode が状態と違う取得元にしかない、値がちょうど monitoring でない、state が working でない、値が読めないときは monitoring として扱わない（今までの working などのまま）。check --wait の待ちのように Orca が回る印を出す状態は、ただの working。"
 	}
 	"F-02": {
 		title: "知らない種類、知らない状態、解けない時刻を推測で埋めない"
@@ -217,8 +221,8 @@ decisions: [
 	"色とスタイルを SpecDock のダッシュボードのデザインシステムに合わせ、working に回る動きを付け、動きを減らす設定では止める（本人の要望、統括の依頼 task_719d89144ea2、2026-11-14。PR #29 のマージの後の続きとして、新しい PR にする）",
 	"waiting（入力待ち）は SpecDock の ready（着手できる、青）の色にする。利用者が動けば進む状態で、SpecDock の『着手できる』と同じく『こちらの番』を示し、blocked（許可待ち、琥珀）と見分けられるため。スリープは SpecDock の track の灰（`--sd-track`）にし、背景は塗らない。終わった（done、`--ds-faint` の灰の塗り）より控えめで、休んでいることを示すため（タスク担当、2026-11-14）",
 	"経過の時間の表記は英語の短い形（now、5m、3h、2d、日より上に上げない）に統一し、読み上げは読める日本語の文にする。表記の関数は `web/embed/elapsed.js` の1か所にし、iss-00028 のチャットからも import できる（本人の指摘と統括の決定、task_27eff0d07653、2026-11-14。R-02 の『今・N分・N時間・N日』を置き換える）",
-	"背後の作業を待つ状態は名前 background。Orca の workingMode=monitoring のときだけ。check --wait の待ちは Orca と同じく working（回る印）。本人の言う『雷・電気のマーク』は Orca の lucide の Activity（Monitoring background tasks）と判断する。色は doing の緑、回る弧なし、受け箱は『動いている』。title と読み上げは Orca のラベルに合わせた短い言葉（統括の決定、task_17e9d7936edf・msg_1ca07b651357、2026-11-14）",
-	"待ちの始まりは主エージェントの `mainAgent.stateStartedAt`（組の stateStartedAt は作業の始まりから続くため）。受け箱の『出力が止まった』は background に当てない（タスク担当、2026-11-14）",
+	"背後の作業の待ちは、Orca と同じく working の一つの形（workingMode monitoring）として扱い、新しい状態を作らない。Orca が state working・workingMode monitoring とするときだけ印を出し、独自の判定を足さず、読めなければ出さない。数は working に入れ、種類として monitoring を足す。印の絵（lucide Activity）・置き場（ロゴの左）・ラベル（バックグラウンドタスクを監視中）・経過の出し方は Orca と同じ。色だけ SpecDock の doing の緑。check --wait の待ちは Orca と同じく回る working（本人の確認と統括の決定、task_17e9d7936edf・msg_1ca07b651357・msg_92bbf57b6a40、2026-11-14。先の『新しい状態 background』の案を置き換える）",
+	"受け箱の『出力が止まった』を monitoring に当てない。Orca は monitoring を生きた working として示し、受け箱の段を Orca と食い違わせないため（タスク担当、2026-11-14）",
 	"回る動きは SpecDock にない（SpecDock の作業中は点滅）。本人の言葉どおり回る動きにする。周期は 1.2 秒の等速（タスク担当、2026-11-14）",
 ]
 

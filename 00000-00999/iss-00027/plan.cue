@@ -81,7 +81,7 @@ steps: {
 		session:  "doc"
 	}
 	"S-10": {
-		title:    "背後の待ちの読み取り（D-12）と判定・要約・受け箱・Run の木（D-13）"
+		title:    "workingMode の読み取りと判定の関数（D-12）、要約・受け箱・Run の木（D-13）"
 		text:     "2026-11-14 の追記（本人の要望、統括の決定 task_17e9d7936edf）。開始は main の `4e1995b`、ブランチ `chemitaro/iss-00027-background`。対象：`src/orca/read-state.ts`、`src/state/model.ts`、`src/state/normalize.ts`、`src/state/fields.ts`、`src/inbox/classify.ts`、`src/inbox/model.ts`、`src/summary/build.ts`、`src/summary/model.ts`、`src/runs/tree.ts`、`test/state/`（手書きの読みの結果。fixture は `test/state/fixture.ts` に足す）、`test/inbox/`、`test/summary/`、`test/runs/`、（期待値が変わる）`test/server/` と fields の一覧のテスト。web/ は変えない。確かめ：T-18、T-19、T-20、T-21。完了：`npm run lint`、`npm test`、`npm run build` が通る。区切りのレビュー：なし。止まって HEAD を報告する"
 		realizes: ["R-08", "R-10", "F-03"]
 		after:    ["S-09"]
@@ -90,7 +90,7 @@ steps: {
 	}
 	"S-11": {
 		title:    "電気の印と印の部品（D-14）、受け箱・Run の木・試しの画面（D-15）"
-		text:     "対象：`web/embed/agent-marks-icons.js`、`agent-marks-view.js`、`agent-marks.js`、`agent-marks.css`、`web/inbox-view.js`、`web/runs-view.js`、`web/runs-dom.js`、（色）`web/*.css` の Run の木の分、`web/trial/trial-view.js`・`trial.js`・`index.html`・`trial.css`、`test/web/` の該当のテスト。lucide の d は `.workbench/lucide/package/dist/esm/icons/activity.js`（lucide-react 0.577.0）から写す。確かめ：T-22、T-23。完了：`npm run lint`、`npm test`、`npm run build` が通る。試しの画面で working・background・done の見本が見えることを見る（試しのサーバーは止めない。止まっていたら同じ形で起動し直す。送信と「Orca で開く」はしない）。区切りのレビュー：なし。止まって HEAD を報告する"
+		text:     "対象：`web/embed/agent-marks-icons.js`、`agent-marks-view.js`、`agent-marks.js`、`agent-marks.css`、`web/inbox-view.js`、`web/inbox-dom.js`、`web/runs-view.js`、`web/runs-dom.js`、（印の大きさ）`web/*.css` の受け箱と Run の木の分、`web/trial/trial-view.js`・`trial.js`・`index.html`・`trial.css`、`test/web/` の該当のテスト。lucide の d は `.workbench/lucide/package/dist/esm/icons/activity.js`（lucide-react 0.577.0）から写す。確かめ：T-22、T-23。完了：`npm run lint`、`npm test`、`npm run build` が通る。試しの画面で working・monitoring・done の見本が見えることを見る（試しのサーバーは止めない。止まっていたら同じ形で起動し直す。送信と「Orca で開く」はしない）。区切りのレビュー：なし。止まって HEAD を報告する"
 		realizes: ["R-09", "R-10"]
 		after:    ["S-10"]
 		status:   "todo"
@@ -98,7 +98,7 @@ steps: {
 	}
 	"S-12": {
 		title:    "実機の確かめ（読むだけ）、写し、README.md・AGENTS.md、report.md"
-		text:     "タスク担当が行う。Orca の monitoring の件数と orca-web の background の件数を比べ（件数と結論だけ。会話の中身を写さない）、試しの画面（tailnet でも）で working・background・done を並べた写しを report.md に残す。README の印の状態の説明・要約の項目・CSS の変数と、AGENTS.md の `src/summary/`・`src/inbox/`・`web/embed/` の説明を改める。確かめ：T-24。完了：文書が出来上がったものと合う"
+		text:     "タスク担当が行う。Orca の working・monitoring の件数と orca-web の monitoring の件数を比べ（件数と結論だけ。会話の中身を写さない）、試しの画面（tailnet でも）で working・monitoring・done を並べた写しを report.md に残す。README の印の状態の説明・要約の項目・CSS の変数と、AGENTS.md の `src/summary/`・`src/inbox/`・`src/runs/`・`web/embed/` の説明を改める。確かめ：T-24。完了：文書が出来上がったものと合う"
 		realizes: ["R-08", "R-09", "R-10"]
 		after:    ["S-11"]
 		status:   "todo"
@@ -124,13 +124,13 @@ tests: {
 	"T-15": {title: "`buildMarks`：elapsed が短い形、label が読める形（basis ごとの文）で、label に『今』も短い形（/\\d+[mhd]\\b/ と now）も含まない。agent-marks-view.js から formatElapsed を今までどおり import できる。経過の境目（60_000 など）が web/ の中で elapsed.js にだけある", verifies: ["R-07"]}
 	"T-16": {title: "`/embed/elapsed.js` が印の部品と同じ読み取りの CORS で配られる（許したオリジンで Access-Control-Allow-Origin、ほかは 403、Origin なしは 200）", verifies: ["R-07"]}
 	"T-17": {title: "記録：試しの画面（tailnet でも）で経過が now・Nm・Nh・Nd に見える写しが report.md にある。README と AGENTS.md が elapsed.js と短い形を書く", verifies: ["R-07"]}
-	"T-18": {title: "読み取り：agentStatus・chatStatus・ps の agents から workingMode と mainAgent.stateStartedAt を拾う。ほかの項目（プロンプトなど）を増やさない", verifies: ["R-08"]}
-	"T-19": {title: "正規化：端末のタブの state が tabs なら workingMode・mainAgentStateStartedAt も tabs、state が ps なら ps だけ（tabs の workingMode が monitoring でも ps の state なら混ぜない）。Chat は chatStatus、タブのない ps は ps。値がなければ missing。fields に2つの項目", verifies: ["R-08", "F-03"]}
-	"T-20": {title: "agentMark：working・monitoring → background。working で workingMode なし・ほかの値、done・waiting で monitoring → 今の印", verifies: ["R-08", "F-03"]}
-	"T-21": {title: "要約：counts.background、background の elapsedFrom = mainAgentStateStartedAt・basis wait、なければ worktree-activity、どちらもなければ null。受け箱：running・理由 background、長い無出力でも stalled にならない、端末が終われば stalled。Run の木：節の state background、since が待ちの始まり", verifies: ["R-10"]}
-	"T-22": {title: "印：buildMarks が background を working の次に並べ、label が「背後の作業を監視中」と「待ちになって <読める形>」（短い形なし）。DOM で種類のロゴの前に電気の SVG（aria-hidden、stroke の属性）。d が lucide 0.577.0 の Activity と同じで web/ の中で agent-marks-icons.js にだけある。表の近くに出どころとライセンス。CSS：background の変数が doing を先に使い、background に animation と回る弧がない", verifies: ["R-09"]}
-	"T-23": {title: "受け箱の理由の文、Run の木の行の状態の文と DOM の電気の SVG、試しの画面の数の札の background と状態の見本（working・background・done）", verifies: ["R-09", "R-10"]}
-	"T-24": {title: "記録：report.md に Orca 1.4.258 の出どころ、実機の monitoring と background の件数、working・background・done を並べた写し（tailnet でも）。README と AGENTS.md が background を書く", verifies: ["R-08", "R-09", "R-10"]}
+	"T-18": {title: "読み取り：agentStatus・chatStatus・ps の agents から workingMode を拾う。ほかの項目（プロンプトなど）を増やさない", verifies: ["R-08"]}
+	"T-19": {title: "正規化：端末のタブの state が tabs なら workingMode も tabs、state が ps なら ps だけ（tabs の workingMode が monitoring でも ps の state なら混ぜない）。Chat は chatStatus、タブのない ps は ps。値がなければ missing。fields に agent.workingMode", verifies: ["R-08", "F-03"]}
+	"T-20": {title: "agentWorkingMode：working・monitoring → monitoring。working で workingMode なし・ほかの値、done・waiting・blocked で monitoring → null。agentMark は monitoring でも working", verifies: ["R-08", "F-03"]}
+	"T-21": {title: "要約：monitoring のエージェントは mark working、counts.working に入り、workingMode monitoring、経過は working と同じ。受け箱：running・理由 working・workingMode monitoring、長い無出力でも stalled にならない、端末が終われば stalled、ふつうの working の無出力は今までどおり stalled。Run の木：節の state working・workingMode monitoring", verifies: ["R-10"]}
+	"T-22": {title: "印：buildMarks で monitoring は mark working・workingMode monitoring、label が「バックグラウンドタスクを監視中」と working と同じ経過の文（短い形なし）。要約の workingMode が知らない値なら null。DOM で種類のロゴの前に電気の SVG（aria-hidden、stroke の属性）、class orca-mark--monitoring。d が lucide 0.577.0 の Activity と同じで web/ の中で agent-marks-icons.js にだけある。表の近くに出どころとライセンス。CSS：monitoring の色が working の変数、回る弧と animation が monitoring で出ない", verifies: ["R-09"]}
+	"T-23": {title: "受け箱と Run の木の行の状態の文が monitoring で「バックグラウンドタスクを監視中」、DOM に電気の SVG。試しの画面の状態の見本（working・monitoring・done）", verifies: ["R-09", "R-10"]}
+	"T-24": {title: "記録：report.md に Orca 1.4.258 の根拠のファイル、実機の Orca の monitoring と orca-web の monitoring の件数、working・monitoring・done を並べた写し（tailnet でも）。README と AGENTS.md が monitoring を書く", verifies: ["R-08", "R-09", "R-10"]}
 }
 
 verification: """
@@ -143,9 +143,9 @@ verification: """
 	- record_paths：なし（report.md は Git の外で、SpecDock が保存する）
 	追記（2026-11-14、S-06〜S-07）の関門：新しいブランチ `chemitaro/iss-00027-style`、新しい PR。区切りのレビュー：なし。最終品質ゲート：範囲 `10ab4e9..HEAD`（`web/`、`test/`、`README.md`、`AGENTS.md`）、観点は既定（functional-correctness、requirements-closure、test-adequacy）に security-baseline（DOM と CSS の変更が受けた文字を HTML として解かない、秘密や個人のパスや IP を出さない）を足す。second_opinion：none。test_commands：`npm run lint`、`npm test`、`npm run build`。merge：agent（統括がマージする）
 	経過の表記の追記（2026-11-14、S-08〜S-09）の関門：新しいブランチ `chemitaro/iss-00027-elapsed`、新しい PR。区切りのレビュー：なし。最終品質ゲート：範囲 `fc654c0..HEAD`（`src/`、`web/`、`test/`、`README.md`、`AGENTS.md`）、観点は既定に security-baseline（新しく配るファイルの CORS が印の部品と同じだけ、秘密や個人のパスや IP を出さない）を足す。second_opinion：none。test_commands：`npm run lint`、`npm test`、`npm run build`。merge：agent（統括がマージする）
-	背後の待ちの追記（2026-11-14、S-10〜S-12）の関門：新しいブランチ `chemitaro/iss-00027-background`、新しい PR。区切りのレビュー：なし。最終品質ゲート：範囲 `4e1995b..HEAD`（`src/`、`web/`、`test/`、`README.md`、`AGENTS.md`）、観点は既定に security-baseline（新しく拾う項目が決めた2つだけで、会話の中身を拾わない。DOM が textContent と createElementNS だけ。秘密や個人のパスや IP を出さない）と、アイコンの出どころとライセンスの記載を足す。second_opinion：none。test_commands：`npm run lint`、`npm test`、`npm run build`。merge：agent（統括がマージする）
+	背後の待ちの追記（2026-11-14、S-10〜S-12）の関門：新しいブランチ `chemitaro/iss-00027-background`、新しい PR。区切りのレビュー：なし。最終品質ゲート：範囲 `4e1995b..HEAD`（`src/`、`web/`、`test/`、`README.md`、`AGENTS.md`）、観点は既定に security-baseline（新しく拾う項目が workingMode だけで、会話の中身を拾わない。DOM が textContent と createElementNS だけ。秘密や個人のパスや IP を出さない）と、アイコンの出どころとライセンスの記載を足す。second_opinion：none。test_commands：`npm run lint`、`npm test`、`npm run build`。merge：agent（統括がマージする）
 	"""
-rollback: "PR #29 を戻せば、要約の2つの項目と部品のファイルがなくなり、試しの画面は前の文字の丸に戻る。PR #30 を戻せば、色と形は PR #29 のもの（塗りの丸い札）に戻り、回る動きがなくなる。経過の表記の PR を戻せば、経過は日本語（今・N分・N時間・N日）に、受け箱と Run の木は前の formatElapsed に戻り、`/embed/elapsed.js` は配られなくなる。背後の待ちの PR を戻せば、background の判定と印、状態の文書の2つの事実、要約の counts.background がなくなり、その状態のエージェントは今までどおり working（回る印）に戻る。状態の API とほかの配るファイルは元のまま。"
+rollback: "PR #29 を戻せば、要約の2つの項目と部品のファイルがなくなり、試しの画面は前の文字の丸に戻る。PR #30 を戻せば、色と形は PR #29 のもの（塗りの丸い札）に戻り、回る動きがなくなる。経過の表記の PR を戻せば、経過は日本語（今・N分・N時間・N日）に、受け箱と Run の木は前の formatElapsed に戻り、`/embed/elapsed.js` は配られなくなる。背後の待ちの PR を戻せば、workingMode の事実と項目と電気の印がなくなり、monitoring のエージェントは今までどおり回る working の印に戻る。状態の API とほかの配るファイルは元のまま。"
 exit:     "最終品質ゲートが `68d8c88..HEAD`（PR #29）、追記の `10ab4e9..HEAD`（PR #30）、`fc654c0..HEAD`（経過の表記の PR）、`4e1995b..HEAD`（背後の待ちの PR）のそれぞれで合格し、実機の確かめと写しが report.md にあり、各 PR の CI が通ってマージできる状態になっている。"
 
 execution: {
