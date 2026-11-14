@@ -21,7 +21,7 @@ ID: "iss-00035"
   - 状態：途中は回る印（押せない、aria-busy）、開けたらチェックの印（2秒でロゴに戻る）、開けなかったら線とロゴが琥珀（`--ds-warn`）で title に理由（次に押すまで残る）。横の結果の文字はなくし、読み上げには目に見えない status の領域で同じ言葉を伝える。回る動きは prefers-reduced-motion で止まる。
 - 変えていないもの：開く口（`POST /api/open` と送る本体）、短期のトークン、Host・同じオリジン・frame-ancestors・CSP・CORS、幅 390px 以下で出さない決まり。Run の木とプロジェクトの画面には開く操作を置かない（前の Issue の決定）。
 - 統括の決定と答え（2026-11-14）：置き換えは今ある3か所と試しの画面だけ（Run の木とプロジェクトには足さない）。WCAG 2.5.3 のため aria-label を「Open（Orca で開く）」に。ロゴの箱は正方形でなくロゴの比の横長（見本の C。正方形の 14px では高さ約 9px で Orca の形と読めなかった）。
-- 仕様の扱い：standard の Issue で、仕様の判断は統括の決定と答えに依るため、別の仕様レビューは行わず、タスク担当が正本を承認して実装に渡した（S-01 の実装担当の問いへの答え）。
+- 仕様の扱い：実装の前は、タスク担当が正本を承認して実装に渡した（S-01 の実装担当の問いへの答え）。統括の指示（2026-11-14）で、後から spec-review を通した（下の「レビュー記録」）。
 
 ## Verification
 
@@ -54,6 +54,16 @@ ID: "iss-00035"
   - 受け箱：`http://127.0.0.1:8797/`（tailnet も同じ port）
   - 詳細の見出しは、試しの画面で印を選ぶと右の欄に開く。
   - 止めるのは `kill -TERM $(cat .workbench/trial/trial.pid)`（worktree iss-00035 の中で）。
+
+## レビュー記録
+
+- spec-review：合格（round 1）。spec-reviewer（Claude Opus 5.5 / medium、standard）。統括の決定と答えを authority として渡した。対象の sha256 は requirement.cue `e99494b0…ff4d7e`、design.cue `e2f613b0…28fa1`、plan.cue `c4a1156f…88ea`。結果は P0 0・P1 0・P2 2・P3 0（`.workbench/spec-review/iss-00035/round-1.json`、検査 `round-1.check.json` は valid・pass）。
+  - P2 の2件は、design.cue の D-03 にまだ書いていない点の指摘。1つは受け箱の描き直しで途中の状態を戻す決まり、もう1つは詳細の見出しで状態を読む前とエージェントが見つからないときの押せない状態。実装はすでに `e6816b8`・`fa3530d` で扱っている（`createOpenBoard`、`syncOpenTarget`）。P2 なので記録だけにした。
+- final-quality-gate：合格（campaign `iss-00035-c1`、attempt 1、合格のコミット `fa3530d`、base `1a2afed`）。
+  - レビューのレーン：quality-gate-reviewer（Claude Opus 5.5 / medium）。P0〜P3 すべて 0、coverage_complete true。観点は functional-correctness・requirements-closure・test-adequacy・security-baseline。
+  - テストのレーン：`npm run lint`・`npm test`（682 件）・`npm run build` はすべて exit 0。
+  - second_opinion：none。
+  - PR #36 の head は合格のコミット `fa3530d` と同じ。記録は [closure.md](closure.md)。
 
 ## Residual Risks / Follow-ups
 
