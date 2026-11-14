@@ -48,6 +48,22 @@ steps: {
 		status:   "todo"
 		session:  "doc"
 	}
+	"S-06": {
+		title:    "印の色と形を SpecDock に合わせ（D-08）、作業中に回る動きを付ける（D-09）"
+		text:     "2026-11-14 の追記（本人の要望）。開始は main の `10ab4e9`（PR #29 のマージ）、ブランチ `chemitaro/iss-00027-style`。対象：`web/embed/agent-marks.css`、（必要なら）`web/embed/agent-marks.js`、`web/trial/trial.css`、`test/web/agent-marks-css.test.ts`（新規。CSS の文字を読む）、（DOM を変えたら）`test/web/agent-marks-dom.test.ts`。確かめ：T-11、T-12。完了：`npm run lint`、`npm test`、`npm run build` が通る。`npm run trial` の試しの画面で、明暗の両方で色が SpecDock の系統に見え、working が回ることを見る（送信と「Orca で開く」はしない。試しのサーバーは止めずに残す。止まっていたら同じ形で起動し直す）。区切りのレビュー：なし。止まって HEAD を報告する"
+		realizes: ["R-05", "R-06"]
+		after:    ["S-05"]
+		status:   "todo"
+		session:  "style"
+	}
+	"S-07": {
+		title:    "突き合わせの表、並べた写し、動きを減らす設定の確かめ、README（D-10）"
+		text:     "タスク担当が行う。report.md に突き合わせの表と理由を書き、試しの画面と SpecDock のダッシュボードを明暗で並べて写し、動きを減らす設定を確かめ、README.md の CSS のカスタムプロパティと動きの説明を改める。確かめ：T-13。完了：report.md と README.md が出来上がったものと合う"
+		realizes: ["R-05", "R-06"]
+		after:    ["S-06"]
+		status:   "todo"
+		session:  "doc"
+	}
 }
 
 tests: {
@@ -61,6 +77,9 @@ tests: {
 	"T-08": {title: "部品の4つのファイル：Origin なしは CORS なしで 200 と正しい content-type。許したオリジンの GET・HEAD に `Access-Control-Allow-Origin` と `Vary: Origin`、OPTIONS は 204。ポートやスキームだけ違うオリジンは 403、POST は 405。`/embed/open-button.js` は Origin が違っても今までどおり 200 で CORS なし", verifies: ["R-04"]}
 	"T-09": {title: "試しの画面の組み立て：同じ要約の文書から、構造の図の箱、Issue の一覧の行、節の一覧の見本が組める。数の札は文字の状態の名前を持たない。経過と種類の文字の組み立てが trial-view.js に残らない（部品を使う）。試しの静的なサーバーの CSP の style-src に試しの orca-web の基が入り、ほかの指示は変わらない。許さないオリジンの画面が部品の import を試して拒まれたことを示す", verifies: ["R-02", "R-03"]}
 	"T-10": {title: "実機の確かめ：要約のスリープの大半に elapsedFrom、since のあるエージェントは elapsedFrom = since（件数だけ）。試しの画面の Mac の幅と 390px の写しで印が収まる。47900 から部品の import が通り、47901 から拒まれる", verifies: ["R-01", "R-02", "R-03", "R-04"]}
+	"T-11": {title: "CSS：`.orca-marks` の各状態の主・背景・線・文字の変数が SpecDock の変数（`--sd-doing` など、スリープは `--sd-track` と `--ds-muted`）を先に使い、既定の値が D-08 の表の明るい値と同じ。`prefers-color-scheme: dark` の既定が表の暗い値と同じ。`.orca-mark` の角丸 4px、線 1px、太さ 700、字体が `--ds-font-sans` を先に使う。不明に破線がない", verifies: ["R-05"]}
+	"T-12": {title: "CSS：回る keyframes が transform だけを動かし、animation を持つ規則が working の印の中の要素だけ。`prefers-reduced-motion: reduce` の中で、その要素の animation が none", verifies: ["R-06"]}
+	"T-13": {title: "記録：report.md に突き合わせの表と、waiting・スリープ・+N の色の理由がある。試しの画面と SpecDock のダッシュボードを明暗で並べた写しがあり、working が回り、動きを減らす設定で止まる（animation-name が none）", verifies: ["R-05", "R-06"]}
 }
 
 verification: """
@@ -71,6 +90,7 @@ verification: """
 	- 最終品質ゲート：範囲 `68d8c88..HEAD` の全体（`src/`、`web/`、`test/`、`README.md`、`AGENTS.md`）。観点は既定に、security-baseline（CORS が SpecDock のオリジンと部品の4つのファイルだけ、DOM が textContent と createElementNS だけ、秘密と会話の中身と個人のパスを出さない）と、ロゴの出どころと商標の記載を足す。second_opinion：none（standard）
 	- test_commands：`npm run lint`、`npm test`、`npm run build`（結合のテストは `npm test` の中の `test/server/*.test.ts`）
 	- record_paths：なし（report.md は Git の外で、SpecDock が保存する）
+	追記（2026-11-14、S-06〜S-07）の関門：新しいブランチ `chemitaro/iss-00027-style`、新しい PR。区切りのレビュー：なし。最終品質ゲート：範囲 `10ab4e9..HEAD`（`web/`、`test/`、`README.md`、`AGENTS.md`）、観点は既定（functional-correctness、requirements-closure、test-adequacy）に security-baseline（DOM と CSS の変更が受けた文字を HTML として解かない、秘密や個人のパスや IP を出さない）を足す。second_opinion：none。test_commands：`npm run lint`、`npm test`、`npm run build`。merge：agent（統括がマージする）
 	"""
 rollback: "PR を戻せば、要約の2つの項目と部品のファイルがなくなり、試しの画面は前の文字の丸に戻る。状態の API、受け箱、ほかの配るファイルは元のまま。"
 exit:     "最終品質ゲートが `68d8c88..HEAD`（origin/main を取り込んだ後は、その取り込みを含む最終のコミット）で合格し、実機の確かめと写しが report.md にあり、PR の CI が通ってマージできる状態になっている。"
@@ -81,10 +101,12 @@ execution: {
 		ui: {task: "印の部品（S-01。Claude の実装担当、Orca の worker）", model: "claude-opus-5-5", effort: "medium", rationale: "本人の指示（2026-11-13、統括の依頼書）：画面と一体の部分（HTML・CSS・画面の JavaScript）は Claude Opus 5.5、standard は medium。provider: claude"}
 		impl: {task: "要約の項目と部品の配りの CORS（S-02〜S-03。Codex の実装担当、Orca の worker）", model: "gpt-6.1-sol", effort: "medium", rationale: "本人の指示（2026-11-13、統括の依頼書）：テストで確かめられるコード（API、サーバー、データの形）は Codex GPT-6.1 Sol / medium をなるべく使う。provider: codex"}
 		trial: {task: "試しの画面の描き直し（S-04。Claude の実装担当、Orca の worker）", model: "claude-opus-5-5", effort: "medium", rationale: "本人の指示（2026-11-13）：画面は Claude Opus 5.5 / medium。S-03 の配りの後でないと別のオリジンから部品を読めないので、ui と別のセッションにする。provider: claude"}
-		doc: {task: "実機の確かめ、写し、文書（S-05。タスク担当が自分で行う）", model: "opus", effort: "medium", rationale: "統括の依頼書：要件・設計・計画と文書はタスク担当が書く。実機の確かめは読むだけで、コードを変えない"}
+		style: {task: "色とスタイルと回る動き（S-06。Claude の実装担当、Orca の worker。2026-11-14 の追記）", model: "claude-opus-5-5", effort: "medium", rationale: "統括の依頼（task_719d89144ea2、2026-11-14）：画面なので Claude Opus 5.5 / medium。provider: claude"}
+		doc: {task: "実機の確かめ、写し、文書（S-05、S-07。タスク担当が自分で行う）", model: "opus", effort: "medium", rationale: "統括の依頼書：要件・設計・計画と文書はタスク担当が書く。実機の確かめは読むだけで、コードを変えない"}
 	}
 	reviews: {
 		spec: {role: "仕様のレビュー（spec-reviewer）", model: "opus", effort: "high"}
 		gate: {role: "最終品質ゲート（quality-gate-reviewer）", after: "S-05", model: "opus", effort: "medium"}
+		gate2: {role: "追記分の最終品質ゲート（quality-gate-reviewer）", after: "S-07", model: "opus", effort: "medium"}
 	}
 }

@@ -110,9 +110,48 @@ design: {
 		text:  "README.md に部品の使い方（import の1行、`watchWorktreeSummary` と `renderAgentMarks` の例、CSS のカスタムプロパティ、アイコンの表の差し替え）と要約の新しい項目を、AGENTS.md の `web/embed/` と `src/summary/` の説明に部品と項目を書く。実機で要約の新しい項目の件数を数え（中身は書かない）、試しの画面を Mac の幅と 390px で写して report.md に残す（写しに個人のパスや IP が出ないよう、見本の名前を確かめる）。"
 		satisfies: ["R-01", "R-02", "R-03", "R-04"]
 	}
+	"D-08": {
+		title: "印の色と形を SpecDock のデザインシステムに合わせる `web/embed/agent-marks.css`"
+		text: """
+			正本：spec-dock の `src/spec_dock/assets/dashboard/app.css`（読んだ版：spec-dock の main の `928460f48`）と `core/ui.js`。
+
+			状態ごとの色の組（主の色 `--orca-mark-<state>`、背景 `-bg`、線 `-line`、文字 `-ink`）を `.orca-marks` に置き、値は SpecDock の変数を先に、なければ同じ値の既定を使う（例 `--orca-mark-working: var(--sd-doing, #0b8a4a)`）。SpecDock の中では SpecDock の明暗（`data-theme` と OS の設定）にそのまま従い、外では `prefers-color-scheme: dark` で暗い既定に替える。
+
+			| orca-web の状態 | SpecDock の変数 | 明るい（主・背景・線・文字） | 暗い（主・背景・線・文字） |
+			|---|---|---|---|
+			| working | `--sd-doing*` | #0b8a4a・#e7f6ee・#b3e0c6・#0a6b3a | #3ddc84・rgb(61 220 132 / 10%)・rgb(61 220 132 / 28%)・#7ce8ab |
+			| blocked | `--sd-blocked*` | #a86e00・#fff6dc・#efd595・#7a5000 | #ffc93c・rgb(255 201 60 / 10%)・rgb(255 201 60 / 28%)・#ffd978 |
+			| waiting | `--sd-ready*` | #2457c5・#edf2fc・#c3d3f3・#1d469f | #6f9dff・rgb(111 157 255 / 10%)・rgb(111 157 255 / 28%)・#a8c3ff |
+			| done | `--sd-done*`（= `--ds-faint`・`--ds-tip-bg`・`--ds-tip-line`・`--ds-tip-ink`） | #7d8696・#f3f5f8・#d6dbe3・#343c4a | #7f889a・rgb(163 172 187 / 9%)・rgb(163 172 187 / 26%)・#d0d6df |
+			| unknown | `--sd-unknown*` | #7048c0・#f3effc・#d6c8f2・#5b37a6 | #b79bff・rgb(183 155 255 / 10%)・rgb(183 155 255 / 28%)・#d2c0ff |
+			| sleeping | `--sd-track`（= `--ds-border-2`）と `--ds-muted` | 主・線 #848d9c、背景 transparent、文字 #5a6372 | 主・線 #6f7889、背景 transparent、文字 #98a1b2 |
+			| +N（overflow） | done と同じ組 | done と同じ | done と同じ |
+
+			形（SpecDock の `.chip` に合わせる）：角丸 4px（`--ds-radius-s`）、線 1px solid `-line`、背景 `-bg`、文字 `-ink`、太さ 700、字体 `var(--ds-font-sans, "BIZ UDPGothic", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif)`、経過の数字は tabular-nums。高さは小 16px・中 20px のまま。アイコンの白い台はやめ、ロゴを状態の薄い背景の上にそのまま置く（Claude の橙はそのまま、OpenAI の currentColor は `-ink`）。不明の破線の縁はやめ、SpecDock の不明の紫で示す。スリープは月の印（`-ink`）。フォーカスの縁は SpecDock の `--ds-focus`（既定 #1a56c4、暗い #8fb4ff）の 2px。
+			試しの画面（`web/trial/trial.css`）の数の札の色の点も、同じ `--orca-mark-<state>` を使う。
+			README の CSS のカスタムプロパティの説明を、新しい名前（状態ごとの4つ）に改める。
+			"""
+		satisfies: ["R-05"]
+	}
+	"D-09": {
+		title: "作業中の回る動き `web/embed/agent-marks.css`（必要なら `agent-marks.js`）"
+		text: """
+			SpecDock の作業中の動きは `.st-ico[data-live="1"] .sd-nx` の点滅（`@keyframes sd-next`、opacity、2 秒、ease-in-out）で、回る動きはない。本人の要望どおり回る動きにする。
+			- working の印のアイコンのまわりに、SpecDock の作業中の輪（`progressRing`：track の細い輪と、主の色の太い弧）に似た輪を描く：静かな輪（線 `--orca-mark-working-line`）と、その上の 1/4 ほどの弧（`--orca-mark-working`）。弧は疑似要素（`::after` の border の一部の色）か、小さな SVG で作る。
+			- 弧だけを `@keyframes orca-mark-spin { to { transform: rotate(360deg); } }` で 1.2 秒の等速（linear、infinite）で回す。keyframes は transform のほかを動かさない。JS の時計を使わない。
+			- `@media (prefers-reduced-motion: reduce)` では `animation: none`（弧は止まったまま見える）。
+			- working のほかの印には回る要素も animation もない。
+			"""
+		satisfies: ["R-06"]
+	}
+	"D-10": {
+		title: "突き合わせの記録と確かめ（report.md、写し）"
+		text: "タスク担当が、D-08 の表を report.md に写し（形・太さ・角丸・字体の行を足す）、SpecDock にない状態（waiting、スリープ、+N）の色の理由を書く。試しの画面（tailnet でも）と SpecDock のダッシュボード（127.0.0.1:47800）を明暗の両方で並べて写し、report.md に残す（写しは `.workbench/trial-evidence/iss-00027/`、コミットしない）。動きを減らす設定は、ヘッドレスの Chrome の `Emulation.setEmulatedMedia`（prefers-reduced-motion: reduce）で working の弧の animation-name が none になることを確かめる。"
+		satisfies: ["R-05", "R-06"]
+	}
 }
 
-compatibility: "要約の文書は項目を足すだけで、版 v1 のまま。既存の受け手（試しの画面だけ）は描き直す。部品のファイル以外の配りは変わらない。"
+compatibility: "要約の文書は項目を足すだけで、版 v1 のまま。既存の受け手（試しの画面だけ）は描き直す。部品のファイル以外の配りは変わらない。D-08 で CSS のカスタムプロパティの名前を状態ごとの4つ（主・背景・線・文字）に改める（受け手はまだ試しの画面だけなので、古い名前の互換は持たない）。"
 risks: [
 	"ロゴは各社の商標。本人の判断（無料で公開する個人の道具）で使う。出どころと商標を書き、表を1か所にして、外すときは小さな直しで済むようにする",
 	"worktree の最後の活動の時刻はエージェントごとでなく worktree ごとなので、同じ worktree の複数のスリープは同じ経過になる。読み上げの名前で起点の違いを示す",
