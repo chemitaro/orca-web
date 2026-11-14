@@ -192,7 +192,28 @@ p {
   background: var(--chip);
 }
 
-/* 数の札の色の点。色は部品の CSS のカスタムプロパティと同じ値（部品が読めないときの値も置く）。 */
+/* 数の札の色の点。色は部品と同じ --orca-mark-<状態>（SpecDock の変数を先に使う）。
+   点は .orca-marks の外にあるので、主の色だけを同じ値で .counts に置く。 */
+.counts {
+  --orca-mark-working: var(--sd-doing, #0b8a4a);
+  --orca-mark-blocked: var(--sd-blocked, #a86e00);
+  --orca-mark-waiting: var(--sd-ready, #2457c5);
+  --orca-mark-done: var(--sd-done, #7d8696);
+  --orca-mark-unknown: var(--sd-unknown, #7048c0);
+  --orca-mark-sleeping: var(--sd-track, #848d9c);
+}
+
+@media (prefers-color-scheme: dark) {
+  .counts {
+    --orca-mark-working: var(--sd-doing, #3ddc84);
+    --orca-mark-blocked: var(--sd-blocked, #ffc93c);
+    --orca-mark-waiting: var(--sd-ready, #6f9dff);
+    --orca-mark-done: var(--sd-done, #7f889a);
+    --orca-mark-unknown: var(--sd-unknown, #b79bff);
+    --orca-mark-sleeping: var(--sd-track, #6f7889);
+  }
+}
+
 .count-dot {
   width: 8px;
   height: 8px;
@@ -202,29 +223,27 @@ p {
 }
 
 .count--working {
-  --dot: var(--work);
+  --dot: var(--orca-mark-working);
 }
 
 .count--waiting {
-  --dot: var(--wait);
+  --dot: var(--orca-mark-waiting);
 }
 
 .count--blocked {
-  --dot: var(--stop);
+  --dot: var(--orca-mark-blocked);
 }
 
 .count--done {
-  --dot: var(--accent);
+  --dot: var(--orca-mark-done);
 }
 
-.count--sleeping,
+.count--sleeping {
+  --dot: var(--orca-mark-sleeping);
+}
+
 .count--unknown {
-  --dot: var(--done);
-}
-
-.count--unknown .count-dot {
-  background: transparent;
-  border: 1px dashed var(--done);
+  --dot: var(--orca-mark-unknown);
 }
 
 /* 見本の並び。 */

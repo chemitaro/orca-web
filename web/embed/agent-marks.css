@@ -1,15 +1,34 @@
-/* エージェントの印の部品（agent-marks.js）の見た目。
-   色は :root でなく .orca-marks に置くカスタムプロパティで、受け手のページが上書きできる。 */
+/* エージェントの印の部品（agent-marks.js）の見た目。SpecDock のダッシュボードのデザインシステムに合わせる。
+   色は :root でなく .orca-marks に置くカスタムプロパティで、受け手のページが上書きできる。
+   状態ごとに4つ（主 --orca-mark-<状態>、背景 -bg、線 -line、文字 -ink）。値は SpecDock の変数（--sd-*、--ds-*）を先に使い、
+   SpecDock の外では同じ値の既定を使う（SpecDock の中では SpecDock の明暗の切り替えにそのまま従う）。
+   waiting は SpecDock の ready、スリープは track の灰と muted の文字、+N は done の組。 */
 .orca-marks {
-  --orca-mark-working: #1f9d55;
-  --orca-mark-blocked: #d64545;
-  --orca-mark-waiting: #d69e2e;
-  --orca-mark-done: #3b6fd4;
-  --orca-mark-sleeping: #8a919c;
-  --orca-mark-unknown: #8a919c;
-  --orca-mark-fg: #ffffff;
-  --orca-mark-icon-bg: #ffffff;
-  --orca-mark-icon-fg: #1f2328;
+  --orca-mark-working: var(--sd-doing, #0b8a4a);
+  --orca-mark-working-bg: var(--sd-doing-bg, #e7f6ee);
+  --orca-mark-working-line: var(--sd-doing-line, #b3e0c6);
+  --orca-mark-working-ink: var(--sd-doing-ink, #0a6b3a);
+  --orca-mark-blocked: var(--sd-blocked, #a86e00);
+  --orca-mark-blocked-bg: var(--sd-blocked-bg, #fff6dc);
+  --orca-mark-blocked-line: var(--sd-blocked-line, #efd595);
+  --orca-mark-blocked-ink: var(--sd-blocked-ink, #7a5000);
+  --orca-mark-waiting: var(--sd-ready, #2457c5);
+  --orca-mark-waiting-bg: var(--sd-ready-bg, #edf2fc);
+  --orca-mark-waiting-line: var(--sd-ready-line, #c3d3f3);
+  --orca-mark-waiting-ink: var(--sd-ready-ink, #1d469f);
+  --orca-mark-done: var(--sd-done, #7d8696);
+  --orca-mark-done-bg: var(--sd-done-bg, #f3f5f8);
+  --orca-mark-done-line: var(--sd-done-line, #d6dbe3);
+  --orca-mark-done-ink: var(--sd-done-ink, #343c4a);
+  --orca-mark-unknown: var(--sd-unknown, #7048c0);
+  --orca-mark-unknown-bg: var(--sd-unknown-bg, #f3effc);
+  --orca-mark-unknown-line: var(--sd-unknown-line, #d6c8f2);
+  --orca-mark-unknown-ink: var(--sd-unknown-ink, #5b37a6);
+  --orca-mark-sleeping: var(--sd-track, #848d9c);
+  --orca-mark-sleeping-bg: transparent;
+  --orca-mark-sleeping-line: var(--sd-track, #848d9c);
+  --orca-mark-sleeping-ink: var(--ds-muted, #5a6372);
+  --orca-mark-focus: var(--ds-focus, #1a56c4);
   --orca-mark-h: 16px;
   --orca-mark-font: 10px;
 
@@ -24,15 +43,31 @@
 
 @media (prefers-color-scheme: dark) {
   .orca-marks {
-    --orca-mark-working: #2fb36b;
-    --orca-mark-blocked: #e5534b;
-    --orca-mark-waiting: #d4a72c;
-    --orca-mark-done: #4f8ff0;
-    --orca-mark-sleeping: #5f6773;
-    --orca-mark-unknown: #5f6773;
-    --orca-mark-fg: #ffffff;
-    --orca-mark-icon-bg: #f6f8fa;
-    --orca-mark-icon-fg: #1f2328;
+    --orca-mark-working: var(--sd-doing, #3ddc84);
+    --orca-mark-working-bg: var(--sd-doing-bg, rgb(61 220 132 / 10%));
+    --orca-mark-working-line: var(--sd-doing-line, rgb(61 220 132 / 28%));
+    --orca-mark-working-ink: var(--sd-doing-ink, #7ce8ab);
+    --orca-mark-blocked: var(--sd-blocked, #ffc93c);
+    --orca-mark-blocked-bg: var(--sd-blocked-bg, rgb(255 201 60 / 10%));
+    --orca-mark-blocked-line: var(--sd-blocked-line, rgb(255 201 60 / 28%));
+    --orca-mark-blocked-ink: var(--sd-blocked-ink, #ffd978);
+    --orca-mark-waiting: var(--sd-ready, #6f9dff);
+    --orca-mark-waiting-bg: var(--sd-ready-bg, rgb(111 157 255 / 10%));
+    --orca-mark-waiting-line: var(--sd-ready-line, rgb(111 157 255 / 28%));
+    --orca-mark-waiting-ink: var(--sd-ready-ink, #a8c3ff);
+    --orca-mark-done: var(--sd-done, #7f889a);
+    --orca-mark-done-bg: var(--sd-done-bg, rgb(163 172 187 / 9%));
+    --orca-mark-done-line: var(--sd-done-line, rgb(163 172 187 / 26%));
+    --orca-mark-done-ink: var(--sd-done-ink, #d0d6df);
+    --orca-mark-unknown: var(--sd-unknown, #b79bff);
+    --orca-mark-unknown-bg: var(--sd-unknown-bg, rgb(183 155 255 / 10%));
+    --orca-mark-unknown-line: var(--sd-unknown-line, rgb(183 155 255 / 28%));
+    --orca-mark-unknown-ink: var(--sd-unknown-ink, #d2c0ff);
+    --orca-mark-sleeping: var(--sd-track, #6f7889);
+    --orca-mark-sleeping-bg: transparent;
+    --orca-mark-sleeping-line: var(--sd-track, #6f7889);
+    --orca-mark-sleeping-ink: var(--ds-muted, #98a1b2);
+    --orca-mark-focus: var(--ds-focus, #8fb4ff);
   }
 }
 
@@ -41,9 +76,8 @@
   --orca-mark-font: 12px;
 }
 
+/* 形は SpecDock の .chip（角丸 4px、1px の線、薄い背景、濃い文字、太さ 700）。 */
 .orca-mark {
-  --orca-mark-bg: var(--orca-mark-unknown);
-
   box-sizing: border-box;
   display: inline-flex;
   flex: none;
@@ -53,44 +87,77 @@
   min-width: var(--orca-mark-h);
   margin: 0;
   padding: 1px;
-  border: 1px solid transparent;
-  border-radius: calc(var(--orca-mark-h) / 2);
-  background: var(--orca-mark-bg);
-  color: var(--orca-mark-fg);
-  font:
-    600 var(--orca-mark-font) / 1 system-ui,
+  border: 1px solid var(--orca-mark-st-line);
+  border-radius: var(--ds-radius-s, 4px);
+  background: var(--orca-mark-st-bg);
+  color: var(--orca-mark-st-ink);
+  font-family: var(
+    --ds-font-sans,
+    "BIZ UDPGothic",
     -apple-system,
-    sans-serif;
+    BlinkMacSystemFont,
+    "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN",
+    "Noto Sans JP",
+    "Yu Gothic UI",
+    Meiryo,
+    sans-serif
+  );
+  font-size: var(--orca-mark-font);
+  font-weight: 700;
+  line-height: 1;
   white-space: nowrap;
 }
 
 .orca-mark--working {
-  --orca-mark-bg: var(--orca-mark-working);
+  --orca-mark-st: var(--orca-mark-working);
+  --orca-mark-st-bg: var(--orca-mark-working-bg);
+  --orca-mark-st-line: var(--orca-mark-working-line);
+  --orca-mark-st-ink: var(--orca-mark-working-ink);
 }
 .orca-mark--blocked {
-  --orca-mark-bg: var(--orca-mark-blocked);
+  --orca-mark-st: var(--orca-mark-blocked);
+  --orca-mark-st-bg: var(--orca-mark-blocked-bg);
+  --orca-mark-st-line: var(--orca-mark-blocked-line);
+  --orca-mark-st-ink: var(--orca-mark-blocked-ink);
 }
 .orca-mark--waiting {
-  --orca-mark-bg: var(--orca-mark-waiting);
+  --orca-mark-st: var(--orca-mark-waiting);
+  --orca-mark-st-bg: var(--orca-mark-waiting-bg);
+  --orca-mark-st-line: var(--orca-mark-waiting-line);
+  --orca-mark-st-ink: var(--orca-mark-waiting-ink);
 }
 .orca-mark--done {
-  --orca-mark-bg: var(--orca-mark-done);
+  --orca-mark-st: var(--orca-mark-done);
+  --orca-mark-st-bg: var(--orca-mark-done-bg);
+  --orca-mark-st-line: var(--orca-mark-done-line);
+  --orca-mark-st-ink: var(--orca-mark-done-ink);
 }
 .orca-mark--sleeping {
-  --orca-mark-bg: var(--orca-mark-sleeping);
+  --orca-mark-st: var(--orca-mark-sleeping);
+  --orca-mark-st-bg: var(--orca-mark-sleeping-bg);
+  --orca-mark-st-line: var(--orca-mark-sleeping-line);
+  --orca-mark-st-ink: var(--orca-mark-sleeping-ink);
 }
 .orca-mark--unknown {
-  --orca-mark-bg: var(--orca-mark-unknown);
-  border: 1px dashed var(--orca-mark-fg);
+  --orca-mark-st: var(--orca-mark-unknown);
+  --orca-mark-st-bg: var(--orca-mark-unknown-bg);
+  --orca-mark-st-line: var(--orca-mark-unknown-line);
+  --orca-mark-st-ink: var(--orca-mark-unknown-ink);
 }
 .orca-mark--more {
-  --orca-mark-bg: var(--orca-mark-sleeping);
+  --orca-mark-st: var(--orca-mark-done);
+  --orca-mark-st-bg: var(--orca-mark-done-bg);
+  --orca-mark-st-line: var(--orca-mark-done-line);
+  --orca-mark-st-ink: var(--orca-mark-done-ink);
+
   justify-content: center;
   padding: 0 4px;
 }
 
-/* ロゴが状態の色の上でも読めるよう、白い小さな丸の台に載せる。 */
+/* ロゴは状態の薄い背景の上にそのまま置く（Claude の橙はそのまま、currentColor は状態の文字の色）。 */
 .orca-mark-icon {
+  position: relative;
   box-sizing: border-box;
   display: inline-flex;
   flex: none;
@@ -99,9 +166,7 @@
   width: calc(var(--orca-mark-h) - 4px);
   height: calc(var(--orca-mark-h) - 4px);
   padding: 1px;
-  border-radius: 50%;
-  background: var(--orca-mark-icon-bg);
-  color: var(--orca-mark-icon-fg);
+  color: var(--orca-mark-st-ink);
 }
 
 .orca-mark-icon svg {
@@ -110,12 +175,47 @@
   height: 100%;
 }
 
+/* 作業中：アイコンのまわりに SpecDock の作業中の輪（progressRing）に似た輪。静かな輪（::before）と 1/4 の弧（::after）。
+   回すのは弧だけで、transform だけを動かす。 */
+.orca-mark--working .orca-mark-icon {
+  padding: 2px;
+}
+
+.orca-mark--working .orca-mark-icon::before,
+.orca-mark--working .orca-mark-icon::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--orca-mark-working-line);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.orca-mark--working .orca-mark-icon::after {
+  border-color: transparent;
+  border-top-color: var(--orca-mark-working);
+  animation: orca-mark-spin 1.2s linear infinite;
+}
+
+@keyframes orca-mark-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orca-mark--working .orca-mark-icon::after {
+    animation: none;
+  }
+}
+
 .orca-mark-moon {
   display: block;
   flex: none;
   width: calc(var(--orca-mark-h) - 6px);
   height: calc(var(--orca-mark-h) - 6px);
-  color: var(--orca-mark-fg);
+  color: var(--orca-mark-st-ink);
 }
 
 .orca-mark-time {
@@ -129,12 +229,6 @@ button.orca-mark {
 }
 
 button.orca-mark:focus-visible {
-  outline: 2px solid var(--orca-mark-icon-fg);
+  outline: 2px solid var(--orca-mark-focus);
   outline-offset: 1px;
-}
-
-@media (prefers-color-scheme: dark) {
-  button.orca-mark:focus-visible {
-    outline-color: var(--orca-mark-icon-bg);
-  }
 }
