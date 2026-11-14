@@ -12,6 +12,29 @@ ID: "iss-00028"
 
 ## Outcome
 
+`/embed/agent`（エージェントの詳細とチャットの小窓）を、普通のシンプルなチャットにした。
+
+- 詳細は幅によらず畳んで始まる。見出しに、iss-00027 の印の部品でこのエージェントの状態と種類の印を出す（経過は出さない）。
+- 入力欄と送るボタン：キーボードが主の端末は Enter で送り Shift+Enter で改行する。変換中の Enter では送らない。タッチが主の端末は Enter で改行し、送るボタンで送る。確認の画面、送る前の「確かめる」、60 秒の期限はない。
+- 守りは内部に残した：送れるかの口が宛先の指紋（`target`）を返す。画面は最初の指紋を固定して送る意図に添え、意図はその時の宛先と比べて違えば 409 `changed_since_shown` で送らない。確定の確かめ直し（前面のプロセス、ptyId・incarnation・providerSession）、使い捨ての票（期限は内部だけ）、操作の ID、送る前の記録、`sendEnabled`、書き込みの守りは変えていない。書いている間に宛先が変わると「新しい宛先で続ける」を押すまで送らない。結果不明は帯を出し、その間は送らない。
+- 見た目は SpecDock のデザインシステム（`--ds-*`・`--sd-*`、明暗と `?theme=`）に合わせた。会話の時刻は `elapsed.js` の短い形（now・5m・3h・2d）。
+- iss-00013 の残りの P2/P3：(a) foreground_mismatch の言葉と README の前面の説明、(b) 後着の unknown の照会が確定を隠す、(c) 照会の追記の失敗を `checkWarning` で示す、(d) 記録を読めないときに not_sent と示さず 503 `record_unreadable`、(e) 再起動の直後の method_not_found でも経路を止める、(f) 構造化 Chat の消えたカードを unknown `card_gone` と示す。6つすべてを直した。
+- コミット：`f556284`（S-01）、`9966f51`（S-02）、`46df4ec`（CP-1 の P1 の直し）、`9a694fe`（origin/main の取り込み）、`8583c76`（S-03）、`de9f0c9`（S-04 の README・AGENTS）。
+- 実装担当（`launch.effective`、受け取りの値）：
+  - impl（S-01・S-02）codex / gpt-6.1-sol / medium（dispatch `ctx_2066e9462e02`）
+  - ui（S-03）claude / claude-opus-5-5 / high（`ctx_d9b7997d8231`）
+  - S-04 はタスク担当（Opus 5.5 / high）
+
+### 逸脱と判断
+
+- 統括の決定を仕様に入れた：スマホの Enter は案A（msg_745bb8dec9ff）、SpecDock のデザインシステム（msg_6a989e74bba2）、時刻の短い表記（msg_3a70faf1dfc3）。epic-00004 は、了承された節（requirement の includes の2つ目・R-02・R-04 の text・F-01・decisions、design の D-02・D-05）だけを書き直した。
+- 開始のコミットは、仕様の途中で iss-00027 が main に入ったので、68d8c88 から fc654c0 に fast-forward した。S-03 の前に、origin/main（1bcca57、iss-00027 の elapsed.js）をマージのコミット `9a694fe` で取り込んだ。依頼書の「origin/main を取り込み直す」に当たる。push 済みのブランチなので、rebase ではなく merge にした。最終品質ゲートの基は、取り込んだ main の先端 1bcca57 にした（1bcca57..HEAD がこの Issue の正味の変更）。
+- CP-1 round 1 の P1（メモリーに unknown の照会しかないのに not_sent を返す）は、D-02 (d) の意味（読めないことを not_sent と示さない）を守る読み方で直した。メモリーで答えるのは after・refused・unknown でない照会があるときだけ。
+- 計画の観点の名前「concurrency-idempotency」「ui-interaction」は契約の観点の一覧にない。そのため reliability-recovery と e2e-user-flow に置き換え、二重送信・誤送信・鍵・見た目の問いを review_questions に書いた。
+- S-03 の実装担当の判断（了承）：pendingAgentType を足した（adopt 後の placeholder のため）。形の違う target は unknown_shape で disabled にする。帯の間は入力欄も止める。status を読み直すのは送る前の拒みの後と「閉じる」の後だけ。時刻は elapsed.js の formatElapsed。誤りの言葉から「もう一度確かめてください」を除いた。agent.css は `--chat-*` を `var(--ds-…/--sd-…, 既定)` で置き、`--sd-*`・`--ds-muted`・`--ds-focus` を明暗ごとに置いた。
+- git-autocommit が付けたコミットの題の種類は、`8583c76` が test、`de9f0c9`（文書だけ）が feat で、中身と合わない。履歴を書き換えないので、そのまま残す。
+- 試しの orca-web は、iss-00027 の試し（8792・47900）が動いていたので、止めずに別の port（8793・47910・47911）で起動した。
+
 ## レビュー記録
 
 ### 仕様のレビュー（spec-review、保証レベル strict）：合格（round 4）
@@ -23,5 +46,27 @@ ID: "iss-00028"
 - ChatGPT の2人目：得られなかった。共有の `spec-dock/canonical` がほかの Issue の自動保存で動き、Strict の前置き（ブランチの先端の一致）を満たせなかった（round 1 は途中で先端が動いて中止、round 2 は古い版のまま 50 分を超えたので止めた）。2人のレビューとは呼ばない
 
 ## Verification
+
+- テスト：開始のコミットで 576 pass。CP-1 の後（46df4ec）で 593、取り込みの後（9a694fe）で 598、`de9f0c9` で 618 件 pass。`npm run lint` と `npm run build` は exit 0。
+- 区切りのレビュー CP-1（fc654c0..46df4ec）：round 1 fail（P1 1。直した）、round 2 pass（P0〜P3 0）。`.workbench/code-review/iss-00028-cp1/`
+- 実機（2026-11-14、`orca --version` 1.4.258。`npm run trial -- --tailscale-ip <IP> --orca-port 8793 --page-port 47910 --forbidden-port 47911`。ヘッドレスの Chrome は `--disable-features=MacAppCodeSignClone` で起動し、CDP で動かした。数と結論だけを書く）：
+  - 写し（send-test の Claude、iframe だけを切り出し、会話の欄・題名・セッションはぼかした）。SpecDock のダッシュボード（`chemitaro/orca-web` の構造の図）と並べた。
+    - [Mac の幅・明るい](artifacts/20261114t024349z--compare-1280-light.png)
+    - [Mac の幅・暗い](artifacts/20261114t024348z--compare-1280-dark.png)
+    - [390px・明るい](artifacts/20261114t024349z-02--compare-390-light.png)
+    - [390px・暗い](artifacts/20261114t024349z-01--compare-390-dark.png)
+  - 4つの場合（1280px と 390px、明と暗）のすべてで同じ結果だった。
+    - 詳細は畳まれ、open の属性がない。
+    - 見出しの印は1つで、経過の文字は0。
+    - 送るボタン（aria-label「送る」）が見える。
+    - 横のはみ出しは0、はみ出す要素も0。確認の画面の要素は0。
+    - 会話の時刻は8つすべてが now・Nm・Nh・Nd で、日本語の経過は出ない。
+    - 背景は明 rgb(255,255,255)、暗 rgb(17,19,24) で、SpecDock と同じ値。字体はどちらも `"BIZ UDPGothic", …`。
+    - placeholder は、キーボードの端末で「Claude に送る（Enter で送信、Shift+Enter で改行）」、タッチの模擬で「Claude に送る」。
+  - 送信（試し専用の `.workbench/trial/settings.json` だけ `sendEnabled: true`。送る前に `orca terminal list` と状態の API で、send-test のエージェントが2つだけで、handle が許された2つと一致することを確かめた）：
+    - Claude（1280px、キーボード）：1行目を書いて Shift+Enter を押すと、改行が入り（2行）、送られなかった。続けて Enter を押すと1回で送られ、`input_accepted`。欄が空になり「送りました（入力を受けた）」と出た。
+    - Codex（390px、タッチの模擬・暗）：Enter で改行が入り、送られなかった。送るボタンで送られ、`submitted`（stages input_accepted・turn_started）。
+    - 試しの `sends.jsonl` は 0 行から 4 行になった（送る前と後が2組）。どちらの会話にも、送った時刻の利用者の行と、その後の返事の行がある（中身は写していない）。業務中のエージェントには送っていない。
+  - 常駐の orca-web（8791）と、その設定と登録には触れていない。
 
 ## Residual Risks / Follow-ups
