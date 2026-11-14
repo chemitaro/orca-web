@@ -45,7 +45,7 @@ design: {
 			export function iconKey(agentType) {...}
 			```
 
-			図形：claude と codex は各社の実物のロゴ。Orca（stablyai/orca、MIT、コミット `80a514cfb6ac169ef311e70ea2b8a07b961416d8`）の `src/renderer/src/components/status-bar/icons.tsx` の `ClaudeIcon`（viewBox `0 0 24 24`、path 1本、fill `#D97757`、fillRule nonzero）と `OpenAIIcon`（viewBox `0 0 24 24`、path 1本、fill `currentColor`、fillRule evenodd）から、viewBox、path の `d`、fill、fillRule の値だけを写す（タスク担当がそのコミットのファイルを `.workbench/orca-icons.tsx` に置いた。実装担当はそこか、`gh api` で同じコミットから読む）。表のすぐ上に、出どころ（Orca の MIT のファイルのパスとコミットから写したこと）と、ロゴは Anthropic・OpenAI の商標であることを1行のコメントで書き、README にも1行書く。other は中立の丸の縁に点、none は破線の丸（どちらも自前、16×16 か 24×24 の viewBox、`currentColor`）。label は claude → `Claude`、codex → `Codex`、other → 種類の値をそのまま（長さは 40 字まで）、none → `エージェント`。表の値は SVG の文字列でなく、viewBox と path の `d`・fill・fillRule・stroke などの決めた項目だけ（DOM は createElementNS で作り、innerHTML を使わない）。アイコンは印の中で白い小さな丸の台（`--orca-mark-icon-bg`）に載せ、状態の色の上でもロゴの色（Claude の橙、OpenAI の currentColor は濃い色 `--orca-mark-icon-fg`）が読めるようにする。
+			図形：claude と codex は各社の実物のロゴ。Orca（stablyai/orca、MIT、コミット `80a514cfb6ac169ef311e70ea2b8a07b961416d8`）の `src/renderer/src/components/status-bar/icons.tsx` の `ClaudeIcon`（viewBox `0 0 24 24`、path 1本、fill `#D97757`、fillRule nonzero）と `OpenAIIcon`（viewBox `0 0 24 24`、path 1本、fill `currentColor`、fillRule evenodd）から、viewBox、path の `d`、fill、fillRule の値だけを写す（タスク担当がそのコミットのファイルを `.workbench/orca-icons.tsx` に置いた。実装担当はそこか、`gh api` で同じコミットから読む）。表のすぐ上に、出どころ（Orca の MIT のファイルのパスとコミットから写したこと）と、ロゴは Anthropic・OpenAI の商標であることを1行のコメントで書き、README にも1行書く。other は中立の丸の縁に点、none は破線の丸（どちらも自前、16×16 か 24×24 の viewBox、`currentColor`）。label は claude → `Claude`、codex → `Codex`、other → 種類の値をそのまま（長さは 40 字まで）、none → `エージェント`。表の値は SVG の文字列でなく、viewBox と path の `d`・fill・fillRule・stroke などの決めた項目だけ（DOM は createElementNS で作り、innerHTML を使わない）。アイコンの置き方と色は D-08（台を置かず、状態の薄い背景の上にロゴを直接置く。OpenAI の currentColor は状態の文字の色）。
 			"""
 		satisfies: ["R-02", "F-02"]
 	}
@@ -57,13 +57,13 @@ design: {
 			```js
 			export const MARKS = ['working','blocked','waiting','done','sleeping','unknown'];
 			export const MARK_LABELS = { working:'作業中', blocked:'許可待ち', waiting:'入力待ち', done:'完了', sleeping:'スリープ', unknown:'不明' };
-			export function formatElapsed(from, now) // → '今' | 'N分' | 'N時間' | 'N日' | null
+			export function formatElapsed(from, now) // D-11 の elapsed.js から再び export する。'now' | 'Nm' | 'Nh' | 'Nd' | null
 			export function findWorktree(summary, { path, id }) // → worktree | null
 			export function buildMarks(worktree, { now, max = 4 }) // → { marks: MarkView[], overflow: { count, label } | null }
 			// MarkView = { id, mark, icon: <AGENT_ICONS の鍵>, typeLabel, elapsed: string | null, label: string, detail: string | null }
 			```
 
-			- `formatElapsed`：from が文字列でない、解けない、now が数でないときは null。差が負（未来）なら null。60 秒未満は「今」、60 分未満は「N分」、24 時間未満は「N時間」、ほかは「N日」（切り捨て）。
+			- `formatElapsed`：D-11 の `web/embed/elapsed.js` のものを使う（このファイルに規則を持たない）。
 			- `findWorktree`：summary の schema が `orca-web.worktree-summary/v1` で worktrees が配列のときだけ探す。path は両方の末尾の `/` を除いて比べる。path を先に、なければ id で探す。見つからなければ null。
 			- `buildMarks`：worktree の agents（配列でなければ空）を MarkView にし、いつも（max 以下でも）要対応（blocked、waiting）、working、unknown、done、sleeping の順に安定に並べ替える（同じ印の中は要約の並びのまま）。mark が MARKS にない値は unknown。detail は `/embed/agent?id=` で始まる文字列だけ（ほかは null）。label は「<種類の label>、<状態の名前>、<経過の文>」（経過の文は basis が state なら「この状態になって N分」、worktree-activity なら「最後の活動から N分」、経過がなければ省く）。`max` を超えたら、先頭の max−1 個を印にし、残りの数を overflow（label「ほか N 件」、表示「+N」）にする。切るのは並べ替えた後。
 			"""
@@ -81,7 +81,7 @@ design: {
 
 			- `renderAgentMarks`：container の中を `<span class="orca-marks orca-marks--sm">` で作り直す。印ごとに、onSelect があれば `<button type="button">`、なければ `<span role="img">`。class は `orca-mark orca-mark--<mark>`、`aria-label` と `title` は MarkView の label。中身は SVG のアイコン（`aria-hidden`）と、経過があれば `<span class="orca-mark-time">`。スリープは月の小さな SVG を重ねる。overflow は `orca-mark orca-mark--more` に「+N」。ボタンを押すと `onSelect({ id, detail })`。文字は textContent、SVG は createElementNS だけ。
 			- `watchWorktreeSummary`：`${base}/api/worktrees/summary` を `cache: 'no-store'` で読み、成功なら onDocument(JSON)、HTTP の誤りや例外なら onError(err)。すぐに1回読み、終わってから次を予約する（重ならない）。`doc.hidden` の間は読まずに予約だけを続け、`visibilitychange` で見えたらすぐ読む。stop の後は読まず、予約を消し、見え方の受け手を外す。
-			- CSS：色は `:root` でなく `.orca-marks` に置くカスタムプロパティ `--orca-mark-working`（緑）、`--orca-mark-blocked`（赤）、`--orca-mark-waiting`（琥珀）、`--orca-mark-done`（青）、`--orca-mark-sleeping`（灰）、`--orca-mark-unknown`（灰）と、前景の `--orca-mark-fg`、アイコンの台 `--orca-mark-icon-bg`（白）と `--orca-mark-icon-fg`（濃い色。OpenAI のロゴの currentColor）。`prefers-color-scheme: dark` で暗い背景向けの値にする。小 16px・中 20px の高さ、角丸、間隔 2px、折り返しあり。unknown は破線の縁。ボタンは focus-visible の縁を持つ。
+			- CSS：色と形と動きは D-08・D-09 のとおり（`.orca-marks` に置く状態ごとの4つのカスタムプロパティ、SpecDock の `.chip` の形、working の回る弧）。
 			"""
 		satisfies: ["R-02", "R-03", "F-01"]
 	}
@@ -163,7 +163,9 @@ design: {
 			export function describeElapsed(from, now)
 			```
 
-			- 境目（60_000、60、24）はこのファイルにだけ置く。
+			- 選択肢：`formatElapsed(from, now, { clampFuture = false } = {})`、`describeElapsed` も同じ。`clampFuture: true` のときは、未来の時刻を 0 の経過（短い形 `now`、読める形 `1分未満`）にする。解けない値と数でない now はいつも null。
+			- 境目（60_000、60、24）はこのファイルにだけ置く（`web/embed/send-view.js` の別の意味の 60_000 は経過の規則でないので対象外）。
+			- 受け箱：`web/inbox-view.js` の `formatElapsed` を消し、`./embed/elapsed.js` の `formatElapsed(since, now, { clampFuture: true })` を使う。`web/runs-view.js` も同じ関数を `./embed/elapsed.js` から import する（`inbox-view.js` から import しない）。受け箱と Run の木の経過は短い形になる（未来は now）。
 			- `web/embed/agent-marks-view.js` は `formatElapsed` をここから import して再び export し（既存の import の口を保つ）、MarkView の `elapsed` に短い形を入れる。label の経過の文は `describeElapsed` で作る：basis が state なら「この状態になって <読める形>」（1分未満なら「この状態になったばかり」）、worktree-activity なら「最後の活動から <読める形>」（1分未満なら「最後の活動は1分未満前」）、ほかは「経過 <読める形>」。短い形（now・m・h・d）を label に入れない。
 			- `web/embed/agent-marks.js` が DOM に `title` と `aria-label` として label を入れるのは今のまま。
 			- `src/server/app.ts` の配る表に `/embed/elapsed.js` を足し、印の部品と同じ `cors: 'read'` を付ける（別のオリジンから import される agent-marks-view.js が import するため）。
