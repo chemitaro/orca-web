@@ -169,3 +169,50 @@ test('T-16：字体は --ds-font-sans の 14px / 1.6、角丸は --ds-radius の
 test('T-16：確認の画面と結果の画面の規則がない', () => {
   assert.doesNotMatch(css, /\.send-confirm|\.send-result|\.send-expires|\.send-outcome|\.send-target/);
 });
+
+// 会話の発言の吹き出しは1重（T-19、R-12、D-10）。renderChatRow は発言の行を li.row.bubble.<role> にし、中に本文の
+// div.bubble を置くので、吹き出しの規則は li.row の子の本文だけに当て、li.row には線・背景・内側の余白を置かない。
+const BOX_PROPS = /^(border(-[a-z]+)*|background(-[a-z]+)*|padding(-[a-z]+)*|outline|box-shadow)$/;
+const lastCompound = (selector: string) =>
+  selector
+    .trim()
+    .split(/\s*[>+~]\s*|\s+/)
+    .at(-1) ?? '';
+
+test('T-19：.bubble に当たる規則はすべて li.row の子の本文（li.row > .bubble の形）だけを指す', () => {
+  const hits = rules.flatMap((r) =>
+    r.selector
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => /\.bubble\b/.test(s)),
+  );
+  assert.ok(hits.length >= 2, `吹き出しの規則がある（${hits.join(' | ')}）`);
+  for (const selector of hits) assert.match(selector, /^li\.row(\.user)? > \.bubble$/, selector);
+});
+
+test('T-19：発言の行（li.row とその class の組み）に線・背景・内側の余白の規則がない', () => {
+  for (const rule of rules) {
+    for (const selector of rule.selector.split(',').map((s) => s.trim())) {
+      const target = lastCompound(selector);
+      if (!/^li(\.|$)/.test(target) && !/^\.(row|bubble|user|assistant)\b/.test(target)) continue;
+      if (target.includes('.bubble') && /^li\.row(\.user)? > \.bubble$/.test(selector)) continue;
+      for (const prop of declarations(rule.body).keys()) assert.doesNotMatch(prop, BOX_PROPS, `${selector} の ${prop}`);
+    }
+  }
+});
+
+test('T-19：吹き出しの色は R-09 のまま（エージェントは surface と border、自分は ready の組）', () => {
+  const bubble = only('li.row > .bubble', (m) => m === null);
+  assert.equal(bubble.get('border'), '1px solid var(--chat-border)');
+  assert.equal(bubble.get('background'), 'var(--chat-surface)');
+  assert.equal(bubble.get('padding'), '6px 10px');
+  assert.equal(bubble.get('border-radius'), 'var(--ds-radius, 6px)');
+  const user = only('li.row.user > .bubble', (m) => m === null);
+  assert.equal(user.get('background'), 'var(--chat-user-bg)');
+  assert.equal(user.get('border-color'), 'var(--chat-user-line)');
+});
+
+test('T-19：発言どうしの間は 12px、吹き出しと時刻の間は 2px（SpecDock の app.css の値）', () => {
+  assert.equal(only('ol#log', (m) => m === null).get('gap'), '12px');
+  assert.equal(only('li.row time', (m) => m === null).get('margin-top'), '2px');
+});

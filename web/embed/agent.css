@@ -332,9 +332,11 @@ ol#log {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
+/* 発言の行は li.row.bubble.<role> で、中に本文の div.bubble がある。吹き出しの規則は本文（li.row の子）だけに当て、
+   行には線・背景・内側の余白を置かない（1重の吹き出し、R-12・D-10）。 */
 li.row {
   display: flex;
   flex-direction: column;
@@ -347,7 +349,7 @@ li.row.user {
   align-items: flex-end;
 }
 
-.bubble {
+li.row > .bubble {
   white-space: pre-wrap;
   padding: 6px 10px;
   border: 1px solid var(--chat-border);
@@ -357,7 +359,7 @@ li.row.user {
   min-width: 0;
 }
 
-li.user .bubble {
+li.row.user > .bubble {
   background: var(--chat-user-bg);
   border-color: var(--chat-user-line);
 }
