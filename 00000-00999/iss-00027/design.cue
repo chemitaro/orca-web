@@ -65,7 +65,7 @@ design: {
 
 			- `formatElapsed`：from が文字列でない、解けない、now が数でないときは null。差が負（未来）なら null。60 秒未満は「今」、60 分未満は「N分」、24 時間未満は「N時間」、ほかは「N日」（切り捨て）。
 			- `findWorktree`：summary の schema が `orca-web.worktree-summary/v1` で worktrees が配列のときだけ探す。path は両方の末尾の `/` を除いて比べる。path を先に、なければ id で探す。見つからなければ null。
-			- `buildMarks`：worktree の agents（配列でなければ空）を、要約の並びのまま MarkView にする。mark が MARKS にない値は unknown。detail は `/embed/agent?id=` で始まる文字列だけ（ほかは null）。label は「<種類の label>、<状態の名前>、<経過の文>」（経過の文は basis が state なら「この状態になって N分」、worktree-activity なら「最後の活動から N分」、経過がなければ省く）。`max` を超えたら、先頭の max−1 個を印にし、残りの数を overflow（label「ほか N 件」、表示「+N」）にする。並びの優先：要対応（blocked、waiting）、working、unknown、done、sleeping の順に安定に並べ替えてから切る。
+			- `buildMarks`：worktree の agents（配列でなければ空）を MarkView にし、いつも（max 以下でも）要対応（blocked、waiting）、working、unknown、done、sleeping の順に安定に並べ替える（同じ印の中は要約の並びのまま）。mark が MARKS にない値は unknown。detail は `/embed/agent?id=` で始まる文字列だけ（ほかは null）。label は「<種類の label>、<状態の名前>、<経過の文>」（経過の文は basis が state なら「この状態になって N分」、worktree-activity なら「最後の活動から N分」、経過がなければ省く）。`max` を超えたら、先頭の max−1 個を印にし、残りの数を overflow（label「ほか N 件」、表示「+N」）にする。切るのは並べ替えた後。
 			"""
 		satisfies: ["R-02", "R-03", "F-01", "F-02"]
 	}
@@ -95,11 +95,13 @@ design: {
 	"D-06": {
 		title: "試しの画面の描き直し `web/trial/`"
 		text: """
-			`trial.js` は試しの orca-web の `${base}/embed/agent-marks.js` を動的な import で読み、`watchWorktreeSummary` の1つの輪で要約を読む。同じ文書から：
+			`trial.js` は試しの orca-web の `${base}/embed/agent-marks.js` を動的な import で読み、`${base}/embed/agent-marks.css` を `<link rel="stylesheet">` で足し、`watchWorktreeSummary` の1つの輪で要約を読む。同じ文書から：
 			- 構造の図の箱の見本：幅 180px ほどの箱（worktree の名前、ブランチ）に印。
 			- Issue の一覧の行の見本：1行（Issue の番号か worktree の名前、印）を、エージェントのいる worktree ごとに並べる。
 			- 今の節の一覧（`sections`）も新しい印で描く。数の札（「作業中 2」などの文字）は、色の点と数だけにする。
 			印を選ぶと、今と同じく詳細とチャットの iframe を開く。`trial-view.js` の経過と種類の文字の組み立ては部品に移し、重複を残さない。`phone.html`（390px の枠）でも同じ画面を見る。
+			- 試しの静的なサーバー（`src/tools/trial-host.ts`）の HTML の CSP の `style-src` に、`script-src` と同じ試しの orca-web の基（bases）を足す（ほかの指示は変えない）。
+			- 許さないオリジンの画面（`web/trial/forbidden.html`・`forbidden.js`）に、`${base}/embed/agent-marks.js` の動的な import を試す行を足し、拒まれた（import が失敗した）ことを示す。
 			"""
 		satisfies: ["R-02", "R-03", "R-04"]
 	}

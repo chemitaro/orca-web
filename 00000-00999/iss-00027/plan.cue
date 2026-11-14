@@ -34,7 +34,7 @@ steps: {
 	}
 	"S-04": {
 		title:    "試しの画面を新しい部品で描き直す（D-06）"
-		text:     "対象：`web/trial/trial.js`、`web/trial/trial-view.js`、`web/trial/trial.css`、`web/trial/index.html`、`test/web/trial-view.test.ts`（とほかの trial のテスト）。確かめ：T-09。完了：`npm run lint`、`npm test`、`npm run build` が通る。`npm run trial` で起動し、Mac の幅と `phone.html`（390px）で、構造の図の箱、Issue の一覧の行、節の一覧に印が収まり、印を選ぶと詳細とチャットが開き、47901 の画面で import が拒まれることを見る（送信はしない）。見終えたら止める。区切りのレビュー：なし。止まって HEAD を報告する"
+		text:     "対象：`web/trial/trial.js`、`web/trial/trial-view.js`、`web/trial/trial.css`、`web/trial/index.html`、`web/trial/forbidden.html`、`web/trial/forbidden.js`、`src/tools/trial-host.ts`（CSP の style-src）、`test/web/trial-view.test.ts`、`test/tools/trial-host.test.ts`（とほかの trial のテスト）。確かめ：T-09。完了：`npm run lint`、`npm test`、`npm run build` が通る。`npm run trial` で起動し、Mac の幅と `phone.html`（390px）で、構造の図の箱、Issue の一覧の行、節の一覧に印が収まり、印を選ぶと詳細とチャットが開き、47901 の画面で import が拒まれることを見る（送信はしない）。見終えたら止める。区切りのレビュー：なし。止まって HEAD を報告する"
 		realizes: ["R-02", "R-03", "R-04"]
 		after:    ["S-03"]
 		status:   "todo"
@@ -53,13 +53,13 @@ steps: {
 tests: {
 	"T-01": {title: "`buildWorktreeSummary`：stateStartedAt のあるエージェントは elapsedFrom = since・basis state。since がない sleeping と unknown は worktree の lastActivityAt・basis worktree-activity。since がない working などの印、lastActivityAt が null の worktree、worktrees にない worktree のエージェントは両方 null。既存の項目と並びは変わらない", verifies: ["R-01"]}
 	"T-02": {title: "`formatElapsed`：59 秒は「今」、60 秒は「1分」、59 分は「59分」、60 分は「1時間」、23 時間 59 分は「23時間」、24 時間は「1日」。未来、解けない文字、文字でない値、now が数でないときは null", verifies: ["R-02", "F-02"]}
-	"T-03": {title: "`buildMarks`：要約の worktree から、icon の鍵、mark（知らない値は unknown）、elapsed、label（種類、状態、起点ごとの経過の文）、detail（`/embed/agent?id=` で始まるものだけ）を返す。agents が配列でなければ空。max を超えると、要対応・working・unknown・done・sleeping の順に並べて max−1 個と overflow「+N」。題名などの決めていない項目を拾わない", verifies: ["R-02", "F-01", "F-02"]}
+	"T-03": {title: "`buildMarks`：要約の worktree から、icon の鍵、mark（知らない値は unknown）、elapsed、label（種類、状態、起点ごとの経過の文）、detail（`/embed/agent?id=` で始まるものだけ）を返す。agents が配列でなければ空。いつも要対応・working・unknown・done・sleeping の順に安定に並べ（同じ印の中は要約の並び）、max を超えると先頭の max−1 個と overflow「+N」。題名などの決めていない項目を拾わない", verifies: ["R-02", "F-01", "F-02"]}
 	"T-04": {title: "アイコンの表：iconKey が claude・claude-agent-teams → claude、codex → codex、null・'' → none、ほか → other。claude と codex の path の `d` は Orca のコミット 80a514c の ClaudeIcon・OpenAIIcon の値と同じ。表の近くに出どころと商標のコメントがある。ロゴの path の値が `web/` の中で `agent-marks-icons.js` にだけある", verifies: ["R-02", "F-02"]}
 	"T-05": {title: "`findWorktree`：パスの一致、末尾の `/` の違い、id の一致、見つからないとき、文書の形が違うときに null", verifies: ["R-03", "F-01"]}
 	"T-06": {title: "`watchWorktreeSummary`：すぐに1回読み、終わってから間隔で予約する（重ならない）。hidden の間は読まず、visibilitychange で見えたら読む。HTTP の誤りと例外は onError で、輪は続く。stop の後は読まず、予約と受け手を外す（fetch・時計・doc を差し替える）", verifies: ["R-03", "F-01"]}
 	"T-07": {title: "`renderAgentMarks`：置き場の中を作り直し、印ごとに class `orca-mark--<mark>`、aria-label と title、SVG のアイコン（createElementNS、aria-hidden）、経過の span を持つ。スリープに月の印。onSelect があればボタンで、押すと `{ id, detail }` を渡す。なければ role img。overflow の印。innerHTML を使わない", verifies: ["R-02", "R-03"]}
 	"T-08": {title: "部品の4つのファイル：Origin なしは CORS なしで 200 と正しい content-type。許したオリジンの GET・HEAD に `Access-Control-Allow-Origin` と `Vary: Origin`、OPTIONS は 204。ポートやスキームだけ違うオリジンは 403、POST は 405。`/embed/open-button.js` は Origin が違っても今までどおり 200 で CORS なし", verifies: ["R-04"]}
-	"T-09": {title: "試しの画面の組み立て：同じ要約の文書から、構造の図の箱、Issue の一覧の行、節の一覧の見本が組める。数の札は文字の状態の名前を持たない。経過と種類の文字の組み立てが trial-view.js に残らない（部品を使う）", verifies: ["R-02", "R-03"]}
+	"T-09": {title: "試しの画面の組み立て：同じ要約の文書から、構造の図の箱、Issue の一覧の行、節の一覧の見本が組める。数の札は文字の状態の名前を持たない。経過と種類の文字の組み立てが trial-view.js に残らない（部品を使う）。試しの静的なサーバーの CSP の style-src に試しの orca-web の基が入り、ほかの指示は変わらない。許さないオリジンの画面が部品の import を試して拒まれたことを示す", verifies: ["R-02", "R-03"]}
 	"T-10": {title: "実機の確かめ：要約のスリープの大半に elapsedFrom、since のあるエージェントは elapsedFrom = since（件数だけ）。試しの画面の Mac の幅と 390px の写しで印が収まる。47900 から部品の import が通り、47901 から拒まれる", verifies: ["R-01", "R-02", "R-03", "R-04"]}
 }
 
