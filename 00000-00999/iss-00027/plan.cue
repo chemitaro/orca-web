@@ -82,7 +82,7 @@ steps: {
 	}
 	"S-10": {
 		title:    "workingMode の読み取りと判定の関数（D-12）、要約・受け箱・Run の木（D-13）"
-		text:     "2026-11-14 の追記（本人の要望、統括の決定 task_17e9d7936edf）。開始は main の `4e1995b`、ブランチ `chemitaro/iss-00027-background`。対象：`src/orca/read-state.ts`、`src/state/model.ts`、`src/state/normalize.ts`、`src/state/fields.ts`、`src/inbox/classify.ts`、`src/inbox/model.ts`、`src/summary/build.ts`、`src/summary/model.ts`、`src/runs/tree.ts`、`test/state/`（手書きの読みの結果。fixture は `test/state/fixture.ts` に足す）、`test/inbox/`、`test/summary/`、`test/runs/`、（期待値が変わる）`test/server/` と fields の一覧のテスト。web/ は変えない。確かめ：T-18、T-19、T-20、T-21。完了：`npm run lint`、`npm test`、`npm run build` が通る。区切りのレビュー：なし。止まって HEAD を報告する"
+		text:     "2026-11-14 の追記（本人の要望、統括の決定 task_17e9d7936edf）。開始は main の `4e1995b`、ブランチ `chemitaro/iss-00027-background`。対象：`src/orca/read-state.ts`、`src/state/model.ts`、`src/state/normalize.ts`、`src/state/fields.ts`、`src/inbox/classify.ts`、`src/inbox/model.ts`、`src/summary/build.ts`、`src/summary/model.ts`、`src/runs/tree.ts`、`src/runs/model.ts`、`test/state/`（手書きの読みの結果。fixture は `test/state/fixture.ts` に足す）、`test/inbox/`、`test/summary/`、`test/runs/`、（期待値が変わる）`test/server/` と fields の一覧のテスト。web/ は変えない。確かめ：T-18、T-19、T-20、T-21。完了：`npm run lint`、`npm test`、`npm run build` が通る。区切りのレビュー：なし。止まって HEAD を報告する"
 		realizes: ["R-08", "R-10", "F-03"]
 		after:    ["S-09"]
 		status:   "todo"
@@ -128,8 +128,8 @@ tests: {
 	"T-19": {title: "正規化：端末のタブの state が tabs なら workingMode も tabs、state が ps なら ps だけ（tabs の workingMode が monitoring でも ps の state なら混ぜない）。Chat は chatStatus、タブのない ps は ps。値がなければ missing。fields に agent.workingMode", verifies: ["R-08", "F-03"]}
 	"T-20": {title: "agentWorkingMode：working・monitoring → monitoring。working で workingMode なし・ほかの値、done・waiting・blocked で monitoring → null。agentMark は monitoring でも working", verifies: ["R-08", "F-03"]}
 	"T-21": {title: "要約：monitoring のエージェントは mark working、counts.working に入り、workingMode monitoring、経過は working と同じ。受け箱：running・理由 working・workingMode monitoring、長い無出力でも stalled にならない、端末が終われば stalled、ふつうの working の無出力は今までどおり stalled。Run の木：節の state working・workingMode monitoring", verifies: ["R-10"]}
-	"T-22": {title: "印：buildMarks で monitoring は mark working・workingMode monitoring、label が「バックグラウンドタスクを監視中」と working と同じ経過の文（短い形なし）。要約の workingMode が知らない値なら null。DOM で種類のロゴの前に電気の SVG（aria-hidden、stroke の属性）、class orca-mark--monitoring。d が lucide 0.577.0 の Activity と同じで web/ の中で agent-marks-icons.js にだけある。表の近くに出どころとライセンス。CSS：monitoring の色が working の変数、回る弧と animation が monitoring で出ない", verifies: ["R-09"]}
-	"T-23": {title: "受け箱と Run の木の行の状態の文が monitoring で「バックグラウンドタスクを監視中」、DOM に電気の SVG。試しの画面の状態の見本（working・monitoring・done）", verifies: ["R-09", "R-10"]}
+	"T-22": {title: "印：buildMarks で monitoring は mark working・workingMode monitoring、label が「バックグラウンドタスクを監視中」と working と同じ経過の文（短い形なし）。要約の workingMode が知らない値なら null。DOM で種類のロゴの前に電気の SVG（aria-hidden、stroke の属性）、class orca-mark--monitoring。d が lucide 0.577.0 の Activity と同じで web/ の中で agent-marks-icons.js にだけある。表の近くに出どころとライセンス。CSS：monitoring の色が working の変数、作業中の輪の全体（静かな輪・回る弧・animation）が monitoring で出ない", verifies: ["R-09"]}
+	"T-23": {title: "受け箱と Run の木の行の状態の文が monitoring で「バックグラウンドタスクを監視中」、DOM に電気の SVG。受け箱の running では『動いている』を置き換え、stalled（端末が終わった）・needs_action ではほかの理由を残してその前に足す。試しの画面の状態の見本（working・monitoring・done）", verifies: ["R-09", "R-10"]}
 	"T-24": {title: "記録：report.md に Orca 1.4.258 の根拠のファイル、実機の Orca の monitoring と orca-web の monitoring の件数、working・monitoring・done を並べた写し（tailnet でも）。README と AGENTS.md が monitoring を書く", verifies: ["R-08", "R-09", "R-10"]}
 }
 

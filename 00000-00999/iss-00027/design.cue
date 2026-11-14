@@ -201,14 +201,14 @@ design: {
 			- `agent-marks-icons.js` に `STATE_ICONS.monitoring`（`AGENT_ICONS` と同じ形 `{ label: 'バックグラウンドタスクを監視中', viewBox: '0 0 24 24', paths: [{ d, fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }] }`）を足す。d は lucide-react 0.577.0 の `dist/esm/icons/activity.js` の `M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2`（属性は lucide の defaultAttributes と同じ）。表の近くに1行：lucide（ISC、lucide-react 0.577.0。Orca 1.4.258 の AgentStateDot の monitoring の印）から写した。描画は path の stroke の属性（linecap、linejoin）も createElementNS で付ける。
 			- `agent-marks-view.js`：MarkView に `workingMode: 'monitoring' | null`（要約の `workingMode` が `monitoring` で mark が working のときだけ。ほかの値と知らない値は null）。label の状態の言葉は、monitoring なら「バックグラウンドタスクを監視中」、ほかは今の MARK_LABELS。並び・経過・mark は今のまま。
 			- `agent-marks.js`：monitoring の印は class に `orca-mark--monitoring` を足し、種類のロゴの前（左）に電気の印の SVG（class `orca-mark-state`、aria-hidden）を置く（Orca の行の並び：状態の印、種類のロゴ）。重ねない。
-			- `agent-marks.css`：色は working の変数のまま。working の回る弧（`::after`）と animation を `.orca-mark--monitoring` では出さない。電気の印は小で 11px ほど、中で 13px ほど、色は主の色。
+			- `agent-marks.css`：色は working の変数のまま。working の作業中の輪の全体（静かな輪の `::before`、回る弧の `::after`、animation、輪のための余白）を `.orca-mark--monitoring` では出さない（Orca は monitoring で `AgentWorkingSpinner` を出さず `Activity` だけを描く）。電気の印は小で 11px ほど、中で 13px ほど、色は主の色。
 			"""
 		satisfies: ["R-09"]
 	}
 	"D-15": {
 		title: "受け箱・Run の木の画面と試しの画面 `web/inbox-view.js`、`web/inbox-dom.js`、`web/runs-view.js`、`web/runs-dom.js`、`web/trial/*`"
 		text: """
-			- 受け箱：項目の `workingMode` が monitoring なら、行の状態の言葉（理由の『動いている』の隣か代わりの文）を「バックグラウンドタスクを監視中」にし、DOM で電気の印（`STATE_ICONS.monitoring`、createElementNS、aria-hidden）を添える。段は動いている。
+			- 受け箱：項目の `workingMode` が monitoring なら、段によらず（Orca の値のとおり）、理由の言葉の並びの先頭に「バックグラウンドタスクを監視中」を足し、DOM で電気の印（`STATE_ICONS.monitoring`、createElementNS、aria-hidden）を添える。running の段では理由の『動いている』をこの言葉に置き換える（同じ意味の重ねを避ける）。stalled・needs_action の段ではほかの理由（端末が終わった、許可待ちなど）を残し、その前に足す。段は D-13 のまま。
 			- Run の木：行の組み立てに `workingMode` を持たせ、monitoring なら状態の文を「バックグラウンドタスクを監視中」、`runs-dom.js` が状態の文の前に電気の印を描く（文字は textContent）。
 			- 試しの画面：working・monitoring・done の3つを手で作った worktree の見本で部品に描く節「状態の見本」を足す（見本と分かる見出し。実機の値と混ぜない）。数の札は今のまま（monitoring は working に入る）。
 			"""
