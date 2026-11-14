@@ -139,6 +139,7 @@ stablyai/orca タグ v1.4.258（コミット `c91a7a6e`）。手元の Orca も 
 - S-10（codex / gpt-6.1-sol / medium、ctx_884b6dce03ad）：`f36598c`。618 → 627 件。
 - S-11（claude / claude-opus-5-5 / medium、ctx_ac6b586ad5c0）：`6199f60`。627 → 640 件。
 - S-12（タスク担当）：README・AGENTS.md `231c30c`、この節。
+- 最終品質ゲート fqg-iss-00027-4：`4e1995b..231c30c` で合格（P0〜P3 0件、coverage complete、lint・640 tests・build 0）。PR #33 https://github.com/chemitaro/orca-web/pull/33（CI pass、MERGEABLE）。
 - 仕様のレビュー：round-6b pass（P2 2・P3 1。輪の `::before` が残る、受け箱の stalled の見せ方、`src/runs/model.ts` の対象漏れを直した）、round-7 pass（0件）。
 
 ## Residual Risks / Follow-ups
