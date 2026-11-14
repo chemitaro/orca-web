@@ -161,7 +161,9 @@ export class SendJournal {
     } catch (error) {
       if (
         (error as NodeJS.ErrnoException).code !== 'ENOENT' &&
-        !this.#memory.some((row) => row.operationId === operationId)
+        !this.#memory.some(
+          (row) => row.operationId === operationId && (row.kind !== 'check' || row.outcome !== 'unknown'),
+        )
       )
         throw error;
       raw = '';

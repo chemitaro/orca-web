@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, open, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -972,4 +972,33 @@ test('再起動後 preflight 前の method_not_found は現在の runtime の経
       });
     }
   }
+});
+
+test('再起動後 unknown の照会だけがメモリーにある読み取り失敗は record_unreadable にする', async (t) => {
+  const f = await fixture(t);
+  const dir = await mkdtemp(path.join(tmpdir(), 'orca-web-unknown-check-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const service = new SendService({ ...f.deps, journal: new SendJournal(dir) });
+  f.responses.set('terminal.send', { ok: false, kind: 'timeout', message: 'private' });
+  const intent = await service.intent({ agent: TERMINAL_AGENT, text: 'hello' });
+  assert.ok(intent.ok);
+  await service.confirm({ ticket: intent.ticket, text: 'hello' });
+  const journal = new SendJournal(dir);
+  const restarted = new SendService({ ...f.deps, journal });
+  f.responses.set('orchestration.requestShow', ok({ state: 'pending' }));
+  const pending = await restarted.check(intent.operationId, { query: true });
+  assert.ok(pending.ok && pending.state === 'recorded');
+  assert.equal(pending.record.outcome, 'unknown');
+  assert.equal(pending.record.checks.length, 1);
+  await rm(path.join(dir, 'sends.jsonl'));
+  await mkdir(path.join(dir, 'sends.jsonl'));
+  for (const query of [false, true]) {
+    assert.deepEqual(await restarted.check(intent.operationId, { query }), {
+      ok: false,
+      error: 'record_unreadable',
+    });
+  }
+  await assert.rejects(journal.read(intent.operationId), { code: 'EISDIR' });
+  assert.equal(f.calls.filter((call) => call.method === 'orchestration.requestShow').length, 1);
+  assert.equal(f.sends().length, 1);
 });

@@ -280,6 +280,8 @@ test('ENOENT 以外で読めなくても当該 ID のメモリーの結果だけ
   await journal.appendBefore(before());
   await journal.appendAfter({ operationId: 'op', outcome: 'submitted', detail: { code: 'saved' } });
   await journal.appendCheck({ operationId: 'checked', outcome: 'input_accepted', detail: {} });
+  await journal.appendCheck({ operationId: 'submitted', outcome: 'submitted', detail: {} });
+  await journal.appendAfter({ operationId: 'unknown-after', outcome: 'unknown', detail: { code: 'timeout' } });
   await journal.appendRefused({ operationId: 'refused', reason: 'busy' });
   const file = path.join(dir, 'sends.jsonl');
   await rm(file);
@@ -287,6 +289,8 @@ test('ENOENT 以外で読めなくても当該 ID のメモリーの結果だけ
   assert.equal((await journal.read('op'))?.outcome, 'submitted');
   assert.equal((await journal.read('op'))?.before, null);
   assert.equal((await journal.read('checked'))?.outcome, 'input_accepted');
+  assert.equal((await journal.read('submitted'))?.outcome, 'submitted');
+  assert.equal((await journal.read('unknown-after'))?.outcome, 'unknown');
   assert.equal((await journal.read('refused'))?.outcome, 'refused');
   await assert.rejects(journal.read('absent'), { code: 'EISDIR' });
   await assert.rejects(new SendJournal(dir).read('op'), { code: 'EISDIR' });
