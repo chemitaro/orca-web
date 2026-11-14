@@ -167,7 +167,8 @@ test('after と check を保持し再読込でも最新の確定結果と照会�
   assert.equal(record.after.outcome, 'unknown');
   assert.deepEqual(await new SendJournal(dir).read('op'), record);
   await journal.appendCheck({ operationId: 'op', outcome: 'unknown', detail: { code: 'orca_pending' } });
-  assert.equal((await journal.read('op'))?.outcome, 'unknown');
+  assert.equal((await journal.read('op'))?.outcome, 'submitted');
+  assert.equal((await new SendJournal(dir).read('op'))?.outcome, 'submitted');
 });
 
 test('after と check は書けなくても偽を返して結果をメモリーに保つ', async (t) => {
@@ -271,4 +272,22 @@ test('拒否は本文を含めず記録し壊れた行は飛ばす', async (t) =
   const blocked = new SendJournal(path.join(dir, 'sends.jsonl'));
   assert.equal(await blocked.appendRefused({ operationId: 'op', reason: 'busy' }), false);
   await assert.rejects(blocked.appendBefore(before()));
+});
+
+test('ENOENT 以外で読めなくても当該 ID のメモリーの結果だけで返し、なければ投げる', async (t) => {
+  const dir = await directory(t);
+  const journal = new SendJournal(dir);
+  await journal.appendBefore(before());
+  await journal.appendAfter({ operationId: 'op', outcome: 'submitted', detail: { code: 'saved' } });
+  await journal.appendCheck({ operationId: 'checked', outcome: 'input_accepted', detail: {} });
+  await journal.appendRefused({ operationId: 'refused', reason: 'busy' });
+  const file = path.join(dir, 'sends.jsonl');
+  await rm(file);
+  await mkdir(file);
+  assert.equal((await journal.read('op'))?.outcome, 'submitted');
+  assert.equal((await journal.read('op'))?.before, null);
+  assert.equal((await journal.read('checked'))?.outcome, 'input_accepted');
+  assert.equal((await journal.read('refused'))?.outcome, 'refused');
+  await assert.rejects(journal.read('absent'), { code: 'EISDIR' });
+  await assert.rejects(new SendJournal(dir).read('op'), { code: 'EISDIR' });
 });

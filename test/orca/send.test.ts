@@ -426,3 +426,49 @@ test('Chat の照会は記録の有無と同じ会話のカード・最新の su
   page = { ...page, sessionId: 'other' };
   assert.deepEqual(await check(), { ok: true, outcome: 'unknown', detail: { code: 'orca_recorded' } });
 });
+
+test('カードが消え queuedMessageId だけで当たった rejected の照会は card_gone にする', async () => {
+  const { SendRpc } = await import('../../src/orca/send-gates.ts');
+  const { chatTarget } = await import('../send/fixture.ts');
+  const page: Record<string, unknown> = {
+    sessionId: 'session-chat-test',
+    queuedMessages: [],
+    submissions: [
+      { queuedMessageId: 'op', dispatchState: 'accepted', submittedSequence: 1 },
+      { queuedMessageId: 'op', dispatchState: 'rejected', submittedSequence: 2 },
+    ],
+  };
+  const adapter = send.createSendAdapter({
+    rpc: new SendRpc({
+      async call<T>(method: string) {
+        assert.ok(['agentSession.sendRecorded', 'agentSession.history'].includes(method));
+        return ok(
+          method === 'agentSession.sendRecorded'
+            ? { recorded: true }
+            : {
+                ok: true,
+                page,
+              },
+        ) as RpcOutcome<T>;
+      },
+    }),
+  });
+  assert.deepEqual(await adapter.checkChat(chatTarget(), 'op'), {
+    ok: true,
+    outcome: 'unknown',
+    detail: { code: 'card_gone', dispatchState: 'rejected' },
+  });
+  page.queuedMessages = [{ messageId: 'op', state: 'returned' }];
+  assert.deepEqual(await adapter.checkChat(chatTarget(), 'op'), {
+    ok: true,
+    outcome: 'accepted',
+    detail: { queuedState: 'returned' },
+  });
+  page.queuedMessages = [];
+  page.submissions = [{ clientMessageId: 'op', queuedMessageId: 'other', dispatchState: 'rejected' }];
+  assert.deepEqual(await adapter.checkChat(chatTarget(), 'op'), {
+    ok: true,
+    outcome: 'accepted',
+    detail: { dispatchState: 'rejected', queuedState: 'card' },
+  });
+});

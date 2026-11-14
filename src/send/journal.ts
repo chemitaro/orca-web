@@ -159,7 +159,11 @@ export class SendJournal {
     try {
       raw = await readFile(path.join(this.#dir, 'sends.jsonl'), 'utf8');
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      if (
+        (error as NodeJS.ErrnoException).code !== 'ENOENT' &&
+        !this.#memory.some((row) => row.operationId === operationId)
+      )
+        throw error;
       raw = '';
     }
     const rows = raw
@@ -185,14 +189,13 @@ export class SendJournal {
       else if (row.kind === 'check') checks.push(row);
       else if (row.kind === 'refused') refused = row;
     }
-    const last = checks.at(-1);
-    const result: SendResult =
-      last && last.outcome !== 'unknown'
-        ? last
-        : (after ??
-          (before
-            ? { outcome: 'unknown', detail: { code: 'no_after_record' } }
-            : { outcome: 'refused', detail: { code: refused?.reason ?? 'not_sent' } }));
+    const last = checks.findLast((row) => row.outcome !== 'unknown');
+    const result: SendResult = last
+      ? last
+      : (after ??
+        (before
+          ? { outcome: 'unknown', detail: { code: 'no_after_record' } }
+          : { outcome: 'refused', detail: { code: refused?.reason ?? 'not_sent' } }));
     return { operationId, before, after, checks, refused, outcome: result.outcome, detail: result.detail };
   }
 }

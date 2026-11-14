@@ -167,6 +167,13 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
           rows
             .filter((row) => row.queuedMessageId === operationId && typeof row.submittedSequence === 'number')
             .sort((a, b) => Number(b.submittedSequence) - Number(a.submittedSequence))[0];
+        if (
+          !queued &&
+          submission &&
+          submission.clientMessageId !== operationId &&
+          submission.dispatchState === 'rejected'
+        )
+          return { ok: true, outcome: 'unknown', detail: { code: 'card_gone', dispatchState: 'rejected' } };
         if (queued || submission)
           return {
             ok: true,

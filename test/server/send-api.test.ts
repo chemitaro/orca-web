@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -354,4 +354,33 @@ test('意図だけが32文字の小文字16進の target を受けてサービ�
       assert.deepEqual(calls, [body]);
     },
   );
+});
+
+test('照会の record_unreadable は503で返し not_sent を示さない', async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'orca-web-unreadable-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await mkdir(path.join(dir, 'sends.jsonl'));
+  const rpc = new SendRpc({
+    async call() {
+      throw new Error('RPC must not be called');
+    },
+  });
+  const service = new SendService({
+    snapshotSync: () => state(),
+    capabilities: async () => {
+      throw new Error('preflight must not be called');
+    },
+    rpc,
+    adapter: createSendAdapter({ rpc }),
+    journal: new SendJournal(dir),
+    readSendEnabled: async () => false,
+  });
+  await withApp({ send: service }, async (send) => {
+    for (const query of ['', '?check=1']) {
+      const response = await send(`/api/send/${id}${query}`);
+      assert.equal(response.status, 503);
+      assert.deepEqual(response.body, { ok: false, error: 'record_unreadable' });
+      assert.equal(response.cors, undefined);
+    }
+  });
 });

@@ -66,6 +66,7 @@ const SEND_ERROR_STATUS: Record<SendFailure['error'], number> = {
   unknown_shape: 502,
   unreachable: 503,
   record_failed: 503,
+  record_unreadable: 503,
 };
 
 const DEFAULT_WEB_DIR = path.resolve(import.meta.dirname, '..', '..', 'web');
