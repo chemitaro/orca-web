@@ -81,7 +81,7 @@ design: {
 
 			- `renderAgentMarks`：container の中を `<span class="orca-marks orca-marks--sm">` で作り直す。印ごとに、onSelect があれば `<button type="button">`、なければ `<span role="img">`。class は `orca-mark orca-mark--<mark>`、`aria-label` と `title` は MarkView の label。中身は SVG のアイコン（`aria-hidden`）と、経過があれば `<span class="orca-mark-time">`。スリープは月の小さな SVG を重ねる。overflow は `orca-mark orca-mark--more` に「+N」。ボタンを押すと `onSelect({ id, detail })`。文字は textContent、SVG は createElementNS だけ。
 			- `watchWorktreeSummary`：`${base}/api/worktrees/summary` を `cache: 'no-store'` で読み、成功なら onDocument(JSON)、HTTP の誤りや例外なら onError(err)。すぐに1回読み、終わってから次を予約する（重ならない）。`doc.hidden` の間は読まずに予約だけを続け、`visibilitychange` で見えたらすぐ読む。stop の後は読まず、予約を消し、見え方の受け手を外す。
-			- CSS：色は `:root` でなく `.orca-marks` に置くカスタムプロパティ `--orca-mark-working`（緑）、`--orca-mark-blocked`（赤）、`--orca-mark-waiting`（琥珀）、`--orca-mark-done`（青）、`--orca-mark-sleeping`（灰）、`--orca-mark-unknown`（灰）と、前景の `--orca-mark-fg`。`prefers-color-scheme: dark` で暗い背景向けの値にする。小 16px・中 20px の高さ、角丸、間隔 2px、折り返しあり。unknown は破線の縁。ボタンは focus-visible の縁を持つ。
+			- CSS：色は `:root` でなく `.orca-marks` に置くカスタムプロパティ `--orca-mark-working`（緑）、`--orca-mark-blocked`（赤）、`--orca-mark-waiting`（琥珀）、`--orca-mark-done`（青）、`--orca-mark-sleeping`（灰）、`--orca-mark-unknown`（灰）と、前景の `--orca-mark-fg`、アイコンの台 `--orca-mark-icon-bg`（白）と `--orca-mark-icon-fg`（濃い色。OpenAI のロゴの currentColor）。`prefers-color-scheme: dark` で暗い背景向けの値にする。小 16px・中 20px の高さ、角丸、間隔 2px、折り返しあり。unknown は破線の縁。ボタンは focus-visible の縁を持つ。
 			"""
 		satisfies: ["R-02", "R-03", "F-01"]
 	}
