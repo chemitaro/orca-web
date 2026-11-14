@@ -94,3 +94,21 @@ export const APP_ICONS = {
     ],
   },
 };
+
+// spec-dock 67abbe6c1 の src/spec_dock/assets/dashboard/core/ui.js の ICONS.external（デザインシステムの新しいタブの印）。
+export const LINK_ICONS = {
+  external: {
+    label: '新しいタブで開く',
+    viewBox: '0 0 24 24',
+    paths: [
+      {
+        d: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: '1.9',
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+      },
+    ],
+  },
+};

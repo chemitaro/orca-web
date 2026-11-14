@@ -216,3 +216,24 @@ test('T-19：発言どうしの間は 12px、吹き出しと時刻の間は 2px�
   assert.equal(only('ol#log', (m) => m === null).get('gap'), '12px');
   assert.equal(only('li.row time', (m) => m === null).get('margin-top'), '2px');
 });
+
+test('T-03：新しいタブの印は文字の高さに合わせ、読み上げの文字だけを隠し、新しい色を足さない', () => {
+  const hidden = only('.vh', (m) => m === null);
+  assert.deepEqual(Object.fromEntries(hidden), {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    overflow: 'hidden',
+    clip: 'rect(0 0 0 0)',
+    'white-space': 'nowrap',
+  });
+  const icon = only('a.newtab .newtab-icon', (m) => m === null);
+  assert.deepEqual(Object.fromEntries(icon), {
+    width: '0.9em',
+    height: '0.9em',
+    'margin-left': '2px',
+    'vertical-align': '-0.1em',
+    flex: 'none',
+  });
+  for (const value of [...hidden.values(), ...icon.values()]) assert.doesNotMatch(value, /#|rgba?\s*\(/i);
+});
