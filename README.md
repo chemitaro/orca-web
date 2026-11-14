@@ -121,11 +121,13 @@ SpecDock の画面に1行のスクリプトを置く。スクリプトが自分�
 ```html
 <script src="http://127.0.0.1:8791/embed/open-button.js"
         data-worktree="<worktree の ID かパス>" data-agent="<paneKey（任意）>"
-        data-theme="dark" data-size="sm"></script>
+        data-theme="dark" data-size="sm" data-label="none"></script>
 ```
 
 - `data-worktree`（必須）：Orca の worktree の ID かパス。`data-agent`（任意）：エージェントの paneKey（`<parentTabId>:<leafId>`）。なければ最後に動いたエージェント、最後に見ていたタブ、worktree だけ、の順に選ぶ。
-- `data-theme`（`light`、`dark`、なければ親の色の明暗）、`data-size`（`sm`、`md`）、`data-width`（既定 260）。
+- `data-theme`（`light`、`dark`、なければ親の色の明暗）、`data-size`（`sm`、`md`。既定 `md`）、`data-label`（`none` ならアイコンだけの正方形）、`data-width`（幅の上書き）。
+- 見た目は Orca のロゴと `Open` の小さなボタン1つ（SpecDock の `.chip` の仲間。1px の線、角丸 `--ds-radius-s`、字の太さ 700、背景は透明）。iframe の既定の大きさは、文字ありで sm 72×24・md 82×28、アイコンだけで sm 24×24・md 28×28。読み上げの名前は「Open（Orca で開く）」（アイコンだけは「Orca で開く」）、title は「Orca で開く」。
+- 押すと、途中は回る印、開けたらチェックの印（2秒で戻る）、開けなかったら線とロゴが琥珀になり title に理由が出る（横に文字を出さない。読み上げには目に見えない status の領域で伝える）。
 - 置ける画面は `ORCA_WEB_READ_ORIGINS` のオリジンだけ（`frame-ancestors`）。
 - 親の画面の幅が 390px 以下の間は、ボタンを出さず、読み込まない（スマホでは出ない）。
 - 押すと、この Mac の Orca で既存のタブを前面に出す。新しいタブやファイルは作らない（スリープ中のエージェントの復元と、タブのない worktree を選んだときに Orca が作る最初の端末は、Orca の通常の動きとして起こりうる）。
@@ -140,7 +142,7 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 ```
 
 - `id`：状態の API のエージェントの `id`（端末のタブは paneKey、構造化 Chat は `chat:<タブの id>`）。`theme`（`light`、`dark`）も渡せる。
-- 上に題名と「Orca で開く」、その下に詳細（worktree、種類、状態、モデルと推論とその意味、親と子、PR と CI）。詳細は幅によらず畳んで始め、押すと開く。詳細の見出しには、稼働の印の部品（`agent-marks.js`）でこのエージェントの状態と種類の印を出す（経過は出さない）。下に会話。幅 390px 以下では Orca で開くを出さない。
+- 上に題名と「Orca で開く」（埋め込みのボタンと同じ Orca のロゴと `Open` の部品。md）、その下に詳細（worktree、種類、状態、モデルと推論とその意味、親と子、PR と CI）。詳細は幅によらず畳んで始め、押すと開く。詳細の見出しには、稼働の印の部品（`agent-marks.js`）でこのエージェントの状態と種類の印を出す（経過は出さない）。下に会話。幅 390px 以下では Orca で開くを出さない。
 - 見た目は SpecDock のダッシュボードのデザインシステムに合わせる（`--ds-*`・`--sd-*` を先に使い、なければ SpecDock の app.css と同じ値。明暗の両方と `?theme=`）。会話の時刻は `elapsed.js` の短い形（now・5m・3h・2d）で、元の時刻は `title` にある。
 - 会話は、指示と返答の吹き出し、折り畳んだツール、Orca の知らせの行。思考は出さない。画像や未知の部分は「表示できない」と示す。読めないときは、空の会話ではなく理由を示す。
 - 会話の下に入力欄と送るボタンがある（次の節）。送信が止まっている、送る経路が確かめられない、宛先が送れない状態のときは、欄を止めて理由を1行で示す。
@@ -206,6 +208,7 @@ SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に、workt
 - 経過の表記は `web/embed/elapsed.js` の1か所（`formatElapsed`：短い形、`describeElapsed`：読める形、`elapsedMs`）。受け箱、Run の木、チャットからも同じ関数を import する（`{ clampFuture: true }` で未来の時刻を now にする）。
 - アイコンは `web/embed/agent-marks-icons.js` の表 `AGENT_ICONS` の1か所だけで決まる。差し替えるときはこの表の値だけを変える。
 - Claude と Codex（OpenAI）のロゴの SVG は、stablyai/orca（MIT）の `src/renderer/src/components/status-bar/icons.tsx`（コミット `80a514c`）から写した。ロゴは Anthropic・OpenAI の商標。
+- 「Orca で開く」の Orca のロゴの SVG は、stablyai/orca（MIT）の `resources/logo.svg`（タグ v1.4.258、コミット `c91a7a6`）から写した。ロゴは Orca（Lovecast Inc.）の商標。
 - 状態の印は同じファイルの表 `STATE_ICONS` の1か所。監視中の脈の線は lucide（ISC、lucide-react 0.577.0 の `Activity`。Orca 1.4.258 の `AgentStateDot` の monitoring の印）から写した。
 
 ### 試しの画面で確かめる
