@@ -51,6 +51,46 @@ ID: "iss-00027"
   - `forbidden.png`（47901）：(1)〜(6) すべて拒まれ、(6) 部品の import も失敗した。
   - 実装担当の確かめ（S-04）：幅 1440px と 390px で箱・行・節それぞれ 55 の印が枠に収まり、横のスクロールなし。印を選ぶと詳細とチャットの iframe が開いた。送信と「Orca で開く」はしていない。
 
+## 追記：SpecDock のデザインシステムとの突き合わせ（2026-11-14、R-05・R-06）
+
+正本：spec-dock の main `928460f48` の `src/spec_dock/assets/dashboard/app.css`（`--ds-*`、`--sd-*`、`.chip`、`.st-ico`、`sd-next`）と `core/ui.js`（`STATES`、`stateIcon`、`progressRing`）。読むだけで、SpecDock のリポジトリは変えていない。
+
+### 状態ごとの色（主・背景・線・文字）
+
+| orca-web の状態 | SpecDock の状態（変数） | 明るい | 暗い | 理由 |
+|---|---|---|---|---|
+| working（作業中） | doing「作業中」（`--sd-doing*`） | #0b8a4a・#e7f6ee・#b3e0c6・#0a6b3a | #3ddc84・rgb(61 220 132 / 10%)・28%・#7ce8ab | 同じ意味 |
+| blocked（許可待ち） | blocked「止められている」（`--sd-blocked*`） | #a86e00・#fff6dc・#efd595・#7a5000 | #ffc93c・rgb(255 201 60 / 10%)・28%・#ffd978 | 同じ意味（進むのに許可が要る） |
+| waiting（入力待ち） | ready「着手できる」（`--sd-ready*`） | #2457c5・#edf2fc・#c3d3f3・#1d469f | #6f9dff・rgb(111 157 255 / 10%)・28%・#a8c3ff | SpecDock に同じ意味はない。利用者が動けば進む「こちらの番」で、SpecDock の『着手できる』と同じ意味の向きを持ち、blocked の琥珀と見分けられる |
+| done（完了） | done「終わった」（`--sd-done*` = `--ds-faint`・`--ds-tip-*`） | #7d8696・#f3f5f8・#d6dbe3・#343c4a | #7f889a・rgb(163 172 187 / 9%)・26%・#d0d6df | 同じ意味 |
+| unknown（不明） | unknown「不明」（`--sd-unknown*`） | #7048c0・#f3effc・#d6c8f2・#5b37a6 | #b79bff・rgb(183 155 255 / 10%)・28%・#d2c0ff | 同じ意味 |
+| sleeping（スリープ） | なし（`--sd-track` = `--ds-border-2`、文字 `--ds-muted`） | 線 #848d9c、背景なし、文字 #5a6372 | 線 #6f7889、背景なし、文字 #98a1b2 | SpecDock に同じ意味はない。SpecDock が「まだ進んでいない分」に使う track の灰で、背景を塗らず、終わった（塗りの灰）より控えめにし、休んでいることを示す。月の印を足す |
+| +N（ほか N 件） | done の組 | done と同じ | done と同じ | 中立の数の札 |
+
+### 形・太さ・角丸・字体
+
+| 項目 | SpecDock（`.chip`、`.st-ico`） | orca-web の印（前、PR #29） | orca-web の印（今） |
+|---|---|---|---|
+| 形 | 薄い背景・1px の線・濃い文字の札 | 状態の色で塗った丸い札、白い文字 | SpecDock の `.chip` と同じ（薄い背景・1px の線・濃い文字） |
+| 角丸 | 4px（`.chip`、`--ds-radius-s`） | 高さの半分（丸い札） | `var(--ds-radius-s, 4px)` |
+| 太さ | 700 | 600 | 700 |
+| 字体 | `--ds-font-sans`（BIZ UDPGothic ほか） | system-ui | `var(--ds-font-sans, "BIZ UDPGothic", …)`、数字は tabular-nums |
+| 大きさ | 札 12.5px、印 15px | 高さ 16px（中 20px）、字 10px（12px） | 変えない（狭い枠のため） |
+| アイコン | 状態の印（輪、塗りの丸） | 白い丸の台にロゴ | 台をやめ、薄い背景にロゴを直接置く（OpenAI のロゴは状態の文字の色） |
+| 不明の区別 | 紫と「?」の印 | 灰の破線 | 紫（破線はやめた） |
+| フォーカス | `--ds-focus` の 3px | 濃い色の 2px | `--ds-focus` の 2px（狭い枠のため細く） |
+| 作業中の動き | 次の区切りの点滅（`sd-next`、opacity、2 秒）。回る動きはない | なし | 本人の要望で、アイコンのまわりの静かな輪の上の 1/4 の弧が回る（transform の rotate、1.2 秒の等速）。動きを減らす設定で止まる |
+
+SpecDock の中では、印の色の変数が SpecDock の `--sd-*`・`--ds-*` を先に使うので、SpecDock の明暗の切り替えにそのまま従う。
+
+### 確かめ（追記）
+
+- 実装担当（style、S-06）：claude / claude-opus-5-5 / medium（dispatch ctx_47a2a0b67dd7、`launch.effective` は計画どおり）。コミット `6e101ad`。`npm test` 568 → 576 件 pass（CSS の文字のテスト 8 件）。
+- 並べた写し（`.workbench/trial-evidence/iss-00027/style/`、コミットしない）：`side-light.png`、`side-dark.png`（左 SpecDock のダッシュボード 127.0.0.1:47800、右 試しの画面 47900）。作業中の緑、止められている・許可待ちの琥珀、完了の灰、不明の紫が同じ系統に見える。単体の写し `specdock-{light,dark}.png`、`trial-{light,dark}.png`、`phone-{light,dark}.png`（幅 430px の窓の中の 390px の枠）。
+- 動き（ヘッドレスの Chrome、CDP、試しの画面の実データ）：working の印 12 個の弧の animation-name は `orca-mark-spin`、300ms で transform が変わる。ほかの印 168 個に動くものはない。`Emulation.setEmulatedMedia` で `prefers-reduced-motion: reduce` にすると、弧の animation-name は `none` で、transform は変わらない。
+- 実データに blocked・waiting・+N の印はなかった（CSS のテストで値を確かめた）。
+- 試しの画面は tailnet の IP でも待ち受けたまま（スマホ用）。
+
 ## Residual Risks / Follow-ups
 
 - 本人の確かめ：試しの画面（`http://127.0.0.1:47900/`、`/phone.html`、`http://127.0.0.1:47901/forbidden.html`）で、アイコン・色・経過の見え方を見てもらう。実物の iPhone の Safari は見ていない（Mac の上の 390px）。
