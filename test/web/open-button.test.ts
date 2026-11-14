@@ -77,9 +77,9 @@ function run(data: Record<string, string>, { narrow = false } = {}) {
 
 // 文字ありの既定の幅は、試しの画面で測って中のボタンが切れない最小の整数（S-02 の描画の確かめ）。
 const SIZES: Array<[Record<string, string>, string, string]> = [
-  [{ size: 'sm' }, '64', '24'],
-  [{ size: 'md' }, '73', '28'],
-  [{}, '73', '28'],
+  [{ size: 'sm' }, '72', '24'],
+  [{ size: 'md' }, '82', '28'],
+  [{}, '82', '28'],
   [{ size: 'sm', label: 'none' }, '24', '24'],
   [{ size: 'md', label: 'none' }, '28', '28'],
   [{ label: 'none' }, '28', '28'],

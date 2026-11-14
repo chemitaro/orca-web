@@ -9,6 +9,7 @@
   --orca-open-focus: var(--ds-focus, #1a56c4);
   --orca-open-height: 24px;
   --orca-open-icon: 14px;
+  --orca-open-icon-width: 22px;
   --orca-open-font: 12px;
   --orca-open-pad: 6px;
   position: relative;
@@ -37,6 +38,7 @@
 .orca-open[data-size="sm"] {
   --orca-open-height: 24px;
   --orca-open-icon: 14px;
+  --orca-open-icon-width: 22px;
   --orca-open-font: 12px;
   --orca-open-pad: 6px;
 }
@@ -44,8 +46,20 @@
 .orca-open[data-size="md"] {
   --orca-open-height: 28px;
   --orca-open-icon: 16px;
+  --orca-open-icon-width: 25px;
   --orca-open-font: 13px;
   --orca-open-pad: 8px;
+}
+
+/* アイコンだけの正方形のボタンでは、ロゴを一回り小さくする（統括の答え 2026-11-14）。 */
+.orca-open[data-size="sm"][data-label="none"] {
+  --orca-open-icon: 12px;
+  --orca-open-icon-width: 19px;
+}
+
+.orca-open[data-size="md"][data-label="none"] {
+  --orca-open-icon: 14px;
+  --orca-open-icon-width: 22px;
 }
 
 .orca-open-button {
@@ -110,11 +124,11 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: var(--orca-open-icon);
+  width: var(--orca-open-icon-width);
   height: var(--orca-open-icon);
 }
 
-/* ロゴは横長なので、正方形の箱に縦横比を保って収める（preserveAspectRatio の既定 meet）。 */
+/* 箱はロゴの比（約 1.57:1）の横長。回る印とチェックは正方形の形なので、箱の中央に高さで収まる（preserveAspectRatio の既定 meet）。 */
 .orca-open-icon svg {
   display: block;
   width: 100%;

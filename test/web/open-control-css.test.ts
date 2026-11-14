@@ -107,19 +107,28 @@ test('T-06：hover で線を border-2 に、フォーカスは --ds-focus の 2p
   assert.equal(focus.get('outline-offset'), '-2px');
 });
 
-test('T-06：sm は高さ 24px・アイコン 14px、md は高さ 28px・アイコン 16px、アイコンだけは正方形', () => {
-  for (const [size, height, icon] of [
-    ['sm', '24px', '14px'],
-    ['md', '28px', '16px'],
+test('T-06：sm は高さ 24px・アイコン 14px×22px、md は高さ 28px・アイコン 16px×25px（ロゴの比）、アイコンだけは正方形で中は 12px×19px・14px×22px', () => {
+  for (const [size, height, icon, iconWidth] of [
+    ['sm', '24px', '14px', '22px'],
+    ['md', '28px', '16px', '25px'],
   ]) {
     const decl = only(`.orca-open[data-size="${size}"]`, plain);
     assert.equal(decl.get('--orca-open-height'), height, size);
     assert.equal(decl.get('--orca-open-icon'), icon, size);
+    assert.equal(decl.get('--orca-open-icon-width'), iconWidth, size);
+  }
+  for (const [size, icon, iconWidth] of [
+    ['sm', '12px', '19px'],
+    ['md', '14px', '22px'],
+  ]) {
+    const decl = only(`.orca-open[data-size="${size}"][data-label="none"]`, plain);
+    assert.equal(decl.get('--orca-open-icon'), icon, size);
+    assert.equal(decl.get('--orca-open-icon-width'), iconWidth, size);
   }
   const button = only('.orca-open-button', plain);
   assert.equal(button.get('height'), 'var(--orca-open-height)');
   const icon = only('.orca-open-icon', plain);
-  assert.equal(icon.get('width'), 'var(--orca-open-icon)');
+  assert.equal(icon.get('width'), 'var(--orca-open-icon-width)');
   assert.equal(icon.get('height'), 'var(--orca-open-icon)');
   const square = only('.orca-open[data-label="none"] .orca-open-button', plain);
   assert.equal(square.get('width'), 'var(--orca-open-height)');

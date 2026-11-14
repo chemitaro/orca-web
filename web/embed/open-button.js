@@ -6,7 +6,7 @@
 //           data-agent="<paneKey>" data-theme="dark" data-size="sm" data-label="none"></script>
 (() => {
   // [大きさ] → [文字ありの幅, 高さ]。文字ありの幅は、試しの画面で測って中のボタンが切れない最小の整数。アイコンだけは高さの正方形。
-  const FRAME = { sm: [64, 24], md: [73, 28] };
+  const FRAME = { sm: [72, 24], md: [82, 28] };
   const script = document.currentScript;
   if (!(script instanceof HTMLScriptElement)) return;
   const origin = new URL(script.src).origin;
