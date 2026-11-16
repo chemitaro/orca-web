@@ -137,6 +137,7 @@ test('run-list と worker-list はカーソルを最後まで読む', async () =
     terminalHandle: 'term_uuid-52',
     terminalState: 'retained',
     worktreeId: WT1,
+    structuredSessionId: null,
   });
 });
 

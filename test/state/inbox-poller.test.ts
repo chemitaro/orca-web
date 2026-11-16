@@ -298,6 +298,7 @@ test('updatedAt が8日前でも生きている worker の Run の連絡を読�
         terminalHandle: null,
         terminalState: 'attached',
         worktreeId: null,
+        structuredSessionId: null,
       },
     ]);
   h.p.noteInboxViewer();
