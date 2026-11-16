@@ -122,6 +122,8 @@ export interface AgentState {
   state: Fact<string>;
   workingMode: Fact<string>;
   stateStartedAt: Fact<string>;
+  /** Orca が観測したセッションの始まり（端末のタブだけ）。並びのため。 */
+  sessionStartedAt: Fact<string>;
   lastOutputAt: Fact<string>;
   title: Fact<string>;
   parentPaneKey: Fact<string>;

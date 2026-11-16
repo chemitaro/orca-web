@@ -23,6 +23,7 @@ function worktree(overrides: Partial<WorktreeSummary> = {}): WorktreeSummary {
     branch: 'iss-1',
     project: { id: 'repo-a', name: 'プロジェクトA' },
     issue: 'iss-1',
+    main: false,
     counts: counts({ working: 1 }),
     agents: [
       {
@@ -34,6 +35,8 @@ function worktree(overrides: Partial<WorktreeSummary> = {}): WorktreeSummary {
         elapsedFrom: '2026-11-14T09:48:00.000Z',
         elapsedBasis: 'state',
         detail: '/embed/agent?id=tab-1%3Aleaf-1',
+        parent: null,
+        startedAt: null,
       },
     ],
     ...overrides,

@@ -16,6 +16,7 @@ import { checkSelection, FIELDS } from '../state/fields.ts';
 import type { StateDocument } from '../state/model.ts';
 import type { SettingsStore } from '../state/settings.ts';
 import { buildWorktreeSummary } from '../summary/build.ts';
+import { FirstSeenStartTimes } from '../summary/started.ts';
 import type { HubErrorCode, TranscriptEvent, TranscriptHub } from '../transcript/hub.ts';
 import { buildDocument, decodeBefore, normalizePage } from '../transcript/normalize.ts';
 import { checkHost, checkSameOriginWrite, checkToken, type GuardResult, TokenStore } from './guard.ts';
@@ -246,6 +247,7 @@ function pagePolicy(page: 'index' | 'embed', frameAncestors: string): string {
 
 export function createAppHandler(options: AppOptions = {}): (req: IncomingMessage, res: ServerResponse) => void {
   const readOrigins = new Set(options.readOrigins ?? []);
+  const firstSeen = new FirstSeenStartTimes();
   const frameAncestors = readOrigins.size > 0 ? [...readOrigins].join(' ') : "'none'";
   const webDir = options.webDir ?? DEFAULT_WEB_DIR;
   const tokens = options.tokens ?? new TokenStore();
@@ -605,7 +607,8 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
             return;
           }
           options.poller.noteViewer();
-          sendJson(res, 200, buildWorktreeSummary(await options.poller.snapshot()), access);
+          const snapshot = await options.poller.snapshot();
+          sendJson(res, 200, buildWorktreeSummary(snapshot, { firstSeen: firstSeen.observe(snapshot) }), access);
           return;
         }
         if (pathname === '/api/state') {

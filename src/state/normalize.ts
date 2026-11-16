@@ -399,6 +399,10 @@ export function normalizeState(input: NormalizeInput): StateDocument {
         [as?.stateStartedAt, 'tabs', 'agentStatus.stateStartedAt'],
         [ps?.stateStartedAt, 'worktreePs', 'agents.stateStartedAt'],
       ]),
+      sessionStartedAt: time([
+        [as?.firstStateStartedAt, 'tabs', 'agentStatus.firstStateStartedAt'],
+        [as?.historyStartedAt, 'tabs', 'agentStatus.stateHistory.startedAt'],
+      ]),
       lastOutputAt: lastOutput(tab.terminal),
       title: first([
         [clipTitle(o?.taskTitle ?? null), 'tabs', 'agentStatus.orchestration.taskTitle'],
@@ -467,6 +471,7 @@ export function normalizeState(input: NormalizeInput): StateDocument {
         [tab.chatStateStartedAt, 'tabs', 'chatStatus.mainAgent.stateStartedAt'],
         ...(ps ? [[ps.stateStartedAt, 'worktreePs', 'agents.stateStartedAt'] as const] : []),
       ]),
+      sessionStartedAt: missingFact(null, null, 'no-source'),
       lastOutputAt: missingFact(null, null, 'no-source'),
       title: first([
         [clipTitle(tab.customTitle), 'tabs', 'customTitle'],
@@ -518,6 +523,7 @@ export function normalizeState(input: NormalizeInput): StateDocument {
       state: first([[ps.state, 'worktreePs', 'agents.state']]),
       workingMode: first([[ps.workingMode, 'worktreePs', 'agents.workingMode']]),
       stateStartedAt: time([[ps.stateStartedAt, 'worktreePs', 'agents.stateStartedAt']]),
+      sessionStartedAt: missingFact(null, null, 'no-source'),
       lastOutputAt: missingFact('terminals', 'lastOutputAt', 'not-linked'),
       title: first([[clipTitle(ps.taskTitle), 'worktreePs', 'agents.taskTitle']]),
       parentPaneKey: first([[ps.parentPaneKey, 'worktreePs', 'agents.parentPaneKey']]),

@@ -50,6 +50,7 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
         branch: 'iss-17',
         project: { id: 'repo-a', name: '仮のプロジェクト' },
         issue: 'iss-00017',
+        main: false,
         counts: { working: 1, blocked: 1, waiting: 1, done: 1, sleeping: 0, unknown: 0, total: 4 },
         agents: [
           {
@@ -61,6 +62,8 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
             elapsedFrom: STARTED,
             elapsedBasis: 'state',
             detail: '/embed/agent?id=a%20%2F%3F',
+            parent: null,
+            startedAt: null,
           },
           {
             id: 'waiting',
@@ -71,6 +74,8 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
             elapsedFrom: STARTED,
             elapsedBasis: 'state',
             detail: '/embed/agent?id=waiting',
+            parent: null,
+            startedAt: null,
           },
           {
             id: 'working',
@@ -81,6 +86,8 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
             elapsedFrom: STARTED,
             elapsedBasis: 'state',
             detail: '/embed/agent?id=working',
+            parent: null,
+            startedAt: null,
           },
           {
             id: 'z',
@@ -91,6 +98,8 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
             elapsedFrom: STARTED,
             elapsedBasis: 'state',
             detail: '/embed/agent?id=z',
+            parent: null,
+            startedAt: null,
           },
         ],
       },
@@ -100,6 +109,7 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
         branch: null,
         project: null,
         issue: null,
+        main: false,
         counts: { working: 0, blocked: 0, waiting: 0, done: 0, sleeping: 1, unknown: 0, total: 1 },
         agents: [
           {
@@ -111,6 +121,8 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
             elapsedFrom: STARTED,
             elapsedBasis: 'state',
             detail: '/embed/agent?id=sleep',
+            parent: null,
+            startedAt: null,
           },
         ],
       },
@@ -120,6 +132,7 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
         branch: null,
         project: null,
         issue: null,
+        main: null,
         counts: { working: 0, blocked: 0, waiting: 0, done: 0, sleeping: 0, unknown: 1, total: 1 },
         agents: [
           {
@@ -131,6 +144,8 @@ test('エージェントのいる worktree の小さな要約を順に返す', (
             elapsedFrom: null,
             elapsedBasis: null,
             detail: '/embed/agent?id=lost',
+            parent: null,
+            startedAt: null,
           },
         ],
       },
@@ -229,4 +244,76 @@ test('monitoring は working として数え、同じ経過の起点を持つ', 
       ['ordinary', 'working', null, STARTED, STARTED, 'state'],
     ],
   );
+});
+
+test('parent は子の parentPaneKey と paneKey が完全に一致する別のエージェントがちょうど1つのときだけ結ぶ', () => {
+  const state = input({
+    worktrees: [worktree(), worktree({ id: 'wt-b', path: fact('/demo/b') })],
+    agents: [
+      agent('chat:coord', { kind: 'chat-tab', paneKey: 'structured-agent-session-s:leaf' }),
+      agent('child', { parentPaneKey: fact('structured-agent-session-s:leaf') }),
+      agent('remote', { worktreeId: 'wt-b', parentPaneKey: fact('structured-agent-session-s:leaf') }),
+      agent('root', { parentPaneKey: fact(null) }),
+      agent('unknown-parent', { parentPaneKey: fact('nobody:leaf') }),
+      agent('twin-1', { paneKey: 'twin:leaf' }),
+      agent('twin-2', { paneKey: 'twin:leaf' }),
+      agent('twin-child', { parentPaneKey: fact('twin:leaf') }),
+      agent('self', { paneKey: 'self:leaf', parentPaneKey: fact('self:leaf') }),
+      agent('no-pane', { paneKey: null, parentPaneKey: fact('no-pane') }),
+    ],
+  }).state;
+  const summary = buildWorktreeSummary(state);
+  const parents = Object.fromEntries(summary.worktrees.flatMap((w) => w.agents.map((a) => [a.id, a.parent])));
+  const coordinator = { id: 'chat:coord', worktreeId: 'wt-a' };
+  const unseen = { id: null, worktreeId: null };
+  assert.deepEqual(parents, {
+    'chat:coord': null,
+    child: coordinator,
+    remote: coordinator,
+    root: null,
+    'unknown-parent': unseen,
+    'twin-1': null,
+    'twin-2': null,
+    'twin-child': unseen,
+    self: unseen,
+    'no-pane': unseen,
+  });
+  const ids = new Set(summary.worktrees.map((w) => w.id));
+  assert.ok(ids.has(coordinator.worktreeId));
+  assert.notEqual(summary.worktrees.find((w) => w.agents.some((a) => a.id === 'remote'))?.id, coordinator.worktreeId);
+  const text = JSON.stringify(summary);
+  assert.doesNotMatch(text, /paneKey|structured-agent-session|twin:leaf/);
+});
+
+test('main は worktree の isMainWorktree、値がないか worktree がなければ null', () => {
+  const state = input({
+    worktrees: [
+      worktree({ id: 'main', isMainWorktree: fact(true) }),
+      worktree({ id: 'linked', isMainWorktree: fact(false) }),
+      worktree({ id: 'none', isMainWorktree: fact(null) }),
+    ],
+    agents: ['main', 'linked', 'none', 'missing'].map((id) => agent(id, { worktreeId: id })),
+  }).state;
+  assert.deepEqual(Object.fromEntries(buildWorktreeSummary(state).worktrees.map((w) => [w.id, w.main])), {
+    main: true,
+    linked: false,
+    none: null,
+    missing: null,
+  });
+});
+
+test('startedAt は sessionStartedAt が先、なければ初めて見た時刻、どちらもなければ null', () => {
+  const session = '2026-01-02T10:00:00.000Z';
+  const seen = '2026-01-02T10:30:00.000Z';
+  const state = input({
+    agents: [agent('session', { sessionStartedAt: fact(session) }), agent('seen'), agent('nothing')],
+  }).state;
+  const firstSeen = new Map([
+    ['session', seen],
+    ['seen', seen],
+  ]);
+  const startedAt = (options?: Parameters<typeof buildWorktreeSummary>[1]) =>
+    Object.fromEntries(buildWorktreeSummary(state, options).worktrees[0]?.agents.map((a) => [a.id, a.startedAt]) ?? []);
+  assert.deepEqual(startedAt({ firstSeen }), { session, seen, nothing: null });
+  assert.deepEqual(startedAt(), { session, seen: null, nothing: null });
 });
