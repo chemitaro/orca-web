@@ -1002,3 +1002,16 @@ test('再起動後 unknown の照会だけがメモリーにある読み取り�
   assert.equal(f.calls.filter((call) => call.method === 'orchestration.requestShow').length, 1);
   assert.equal(f.sends().length, 1);
 });
+
+test('まとめた構造化 Chat の古い id（ps の paneKey）の意図は送らず agent_not_found を返す', async (t) => {
+  const f = await fixture(t);
+  const legacy = 'structured-agent-session-session-chat-test:00000000-0000-4000-a000-000000000000';
+  const chat = f.snapshot.agents.find((a) => a.id === CHAT_AGENT);
+  assert.ok(chat);
+  chat.paneKey = legacy;
+  assert.deepEqual(await f.service.intent({ agent: legacy, text: 'hello' }), {
+    ok: false,
+    error: 'agent_not_found',
+  });
+  assert.equal(f.sends().length, 0);
+});
