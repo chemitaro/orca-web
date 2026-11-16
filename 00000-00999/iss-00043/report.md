@@ -60,3 +60,4 @@ ID: "iss-00043"
 
 - spec-review：合格 round 1（spec-reviewer、Claude Opus 5.5 / medium）。requirement.cue `17448496…05bb`、design.cue `065a92c8…2ff3`、plan.cue `8941f23f…bc86`。P0 0・P1 0・P2 0・P3 2（D-04 の startedAt は文字列だけを時刻として読む F-02 に従う／D-01 の stateHistory は先頭の要素だけを見る R-03 に従う。どちらも実装で要件の側に従う）。`.workbench/spec-review/iss-00043/round-1.json`
 - final-quality-gate：合格 c87e264（campaign `.workbench/final-quality-gate/iss-00043/`、試み 01 で review P0〜P3 0件・coverage 完全、test lane の lint 0・730/730・build 0）。詳細は closure.md。
+- PR：https://github.com/chemitaro/orca-web/pull/46（head c87e264）。CI：観測できる Actions が合格（`watch-pr-checks` の reason OBSERVED_CI_PASS、merge_readiness READY）。マージは統括が行う。
