@@ -43,3 +43,4 @@ ID: "iss-00044"
 ## レビュー記録
 
 - spec-review：合格 round 1（spec-reviewer、Claude Opus 5.5 / medium）。requirement.cue `bd496e52…291a`、design.cue `096194a9…9397`、plan.cue `b1772ce7…ed47`。P0 0・P1 0・P2 0・P3 0。`.workbench/spec-review/iss-00044/round-1.json`
+- final-quality-gate：合格 e43869d（campaign `.workbench/final-quality-gate/iss-00044/`、試み 01 で review P0〜P3 0件・coverage 完全、test lane の lint 0・713/713・build 0）。詳細は closure.md。
