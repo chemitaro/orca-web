@@ -296,8 +296,8 @@ test('T-22：monitoring の印は class に orca-mark--monitoring、種類のロ
   assert.equal(w.className, 'orca-mark orca-mark--working');
   assert.equal(d.className, 'orca-mark orca-mark--done');
 
-  // 並び：状態の印、種類のロゴ、経過（重ねない）。
-  const [state, icon, time] = m.children as [FakeElement, FakeElement, FakeElement];
+  // 並び：種類のロゴ、状態の印、経過（重ねない）。
+  const [icon, state, time] = m.children as [FakeElement, FakeElement, FakeElement];
   assert.equal(m.children.length, 3);
   assert.equal(state.tagName, 'svg');
   assert.equal(state.namespaceURI, SVG_NS);
