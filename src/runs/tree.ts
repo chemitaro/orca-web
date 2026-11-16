@@ -1,5 +1,6 @@
 import { agentWorkingMode, findIssue } from '../inbox/classify.ts';
 import type { AgentState, StateDocument, WorkerState } from '../state/model.ts';
+import { coordinatorAgent, workerAgent } from './links.ts';
 import {
   RUN_LIST_SCHEMA,
   RUN_SOURCES,
@@ -63,10 +64,7 @@ function makeNode(
 export function buildRunTree(state: StateDocument, runId: string): RunTreeDocument | null {
   const run = state.runs.find((r) => r.id === runId);
   if (!run) return null;
-  const coordinator =
-    run.activeCoordinatorHandle === null
-      ? undefined
-      : state.agents.find((a) => a.terminalHandle === run.activeCoordinatorHandle);
+  const coordinator = coordinatorAgent(state, run);
   const root = makeNode(
     state,
     `coordinator:${runId}`,
@@ -78,9 +76,7 @@ export function buildRunTree(state: StateDocument, runId: string): RunTreeDocume
   const workers = state.workers.filter((w) => w.runId === runId);
   const nodes = new Map(
     workers.map((w) => {
-      const agent =
-        state.agents.find((a) => a.worker?.dispatchId === w.dispatchId) ??
-        (w.terminalHandle === null ? undefined : state.agents.find((a) => a.terminalHandle === w.terminalHandle));
+      const agent = workerAgent(state, w);
       const title = w.taskId === null ? null : (tasks.get(w.taskId)?.title.value ?? null);
       const node = makeNode(state, w.dispatchId, title, w.worktreeId.value ?? agent?.worktreeId ?? null, agent, w);
       node.otherProject = root.project !== null && node.project !== null && root.project.id !== node.project.id;
