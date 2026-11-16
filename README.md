@@ -103,15 +103,19 @@ const state = await res.json();   // schema: "orca-web.state/v1"。worktree ご�
 ```js
 const res = await fetch('http://127.0.0.1:8791/api/worktrees/summary');
 const summary = await res.json();
-// summary.worktrees[i]: { id, path, branch, project: {id, name} | null, issue, counts, agents }
+// summary.worktrees[i]: { id, path, branch, project: {id, name} | null, issue, main, counts, agents }
 // counts: { working, blocked, waiting, done, sleeping, unknown, total }
-// agents[j]: { id, mark, workingMode, agentType, since, detail, elapsedFrom, elapsedBasis }   detail は /embed/agent?id=… の道
+// agents[j]: { id, mark, workingMode, agentType, since, detail, elapsedFrom, elapsedBasis, parent, startedAt }   detail は /embed/agent?id=… の道
+// parent: null | { id: string | null, worktreeId: string | null }
 ```
 
 - `mark` は `working`・`blocked`・`waiting`・`done`・`sleeping`（状態がなく、端末が復元待ち）・`unknown`（知らない値や欠け）。受け箱と同じ決め方。
 - `workingMode` は Orca の working の中の形。Orca が `state: working` かつ `workingMode: monitoring`（主エージェントの番は終わり、自分で起こしたシェルのコマンドや Monitor だけを待っている。Orca の画面では「バックグラウンドタスクを監視中」の脈の線の印）とするときだけ `"monitoring"`、ほかは null。`mark` は `working` のままで、`counts.working` に入る。`orca orchestration check --wait` で worker を待つ間は、Orca と同じくただの working。
 - `since` はその状態になった時刻（ISO 8601）。作業を終えてからの待ち時間の起点に使える。
 - `elapsedFrom` と `elapsedBasis` は経過の時間の起点。`since` があればそれ（`state`：その状態になってから）。スリープと不明で `since` がなければ、その worktree の最後の活動の時刻（`worktree-activity`）。どちらもなければ null。
+- `main` は、その worktree がリポジトリの main の worktree か（Orca の `isMainWorktree`）。分からなければ null。
+- `parent` は指揮の親。Orca の `worktree ps` の `parentPaneKey` が指すエージェント（その `paneKey` を持つ、自分でないエージェントがちょうど1つ）の `id` と、そのいる worktree の `worktreeId`（同じ要約の `worktrees[].id`）。Orca が親を出していなければ null。親を出しているのに見えない（一致がない、2つ以上ある）ときは `{ id: null, worktreeId: null }`。推測で結ばない。
+- `startedAt` は状態が変わっても動かない開始の時刻（ISO 8601）。Orca の端末のタブの `firstStateStartedAt`（なければ状態の履歴の先頭）、それがない構造化 Chat などは orca-web が初めて見たときの状態の始まりの時刻（orca-web を立て直すと覚え直す）。どちらもなければ null。
 - 会話や連絡の本文、タブの題名、最後の一言は返さない。Orca に届かないときも 200 で、`stale` と `connection.state` で示す。
 
 ### 「Orca で開く」のボタン
@@ -202,7 +206,8 @@ SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に、workt
 </script>
 ```
 
-- 種類はアイコン（Claude と Codex は各社のロゴ、ほかの種類は中立の丸、種類がなければ破線の丸）、状態は SpecDock のダッシュボードと同じ色（作業中 緑で、アイコンのまわりの弧が回る、許可待ち 琥珀、入力待ち 青（SpecDock の「着手できる」）、完了 灰、スリープ 薄い灰の線と月の印、不明 紫）、経過の時間は英語の短い形（1分未満 `now`、`5m`、`3h`、`2d`。週や月には上げない）。読み上げの名前と title は読める日本語の文（例「Claude、作業中、この状態になって 3時間」）。印は要対応・作業中・不明・完了・スリープの順に並ぶ。
+- 種類はアイコン（Claude と Codex は各社のロゴ、ほかの種類は中立の丸、種類がなければ破線の丸）、状態は SpecDock のダッシュボードと同じ色（作業中 緑で、アイコンのまわりの弧が回る、許可待ち 琥珀、入力待ち 青（SpecDock の「着手できる」）、完了 灰、スリープ 薄い灰の線と月の印、不明 紫）、経過の時間は英語の短い形（1分未満 `now`、`5m`、`3h`、`2d`。週や月には上げない）。読み上げの名前と title は読める日本語の文（例「Claude、作業中、この状態になって 3時間」）。印の並びは、同じ worktree の中で、指揮の関係のないエージェント（同じ worktree に親も子もいない）を左に `startedAt` の新しい順、関係のあるものを右に上流から下流（親 → 子 → 孫の深さ優先、兄弟は新しいものが左）。状態では並べない。`parent`・`startedAt` のない古い要約は要約の順。並びは `orderAgents(agents)`（`agent-marks.js` からも import できる純粋な関数）の1か所で決まる。
+- 各印の要素（`.orca-mark`）は、エージェントの id を `data-agent-id` に持つ（id のない印と「+N」にはない）。押した印とエージェントを結ぶのに使える。
 - バックグラウンドタスクを監視中（`workingMode: monitoring`）の印は、種類のロゴの右（経過の左）に脈の線の印（lucide の `Activity`）を置き、作業中の輪は出さない（回らない）。色は作業中と同じ緑、読み上げの名前と title の状態の言葉は Orca の日本語の画面と同じ「バックグラウンドタスクを監視中」、経過は作業中と同じ規則。受け箱と Run の木の行にも同じ印と言葉を出す。
 - 色だけに頼らないよう、各印は種類、状態、経過とその起点を読み上げの名前（aria-label）と title に持つ。
 - 形は SpecDock の `.chip` に合わせる（角丸 4px、1px の線、薄い背景、濃い文字、太さ 700、字体 `--ds-font-sans`）。
