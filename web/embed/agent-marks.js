@@ -83,11 +83,11 @@ function markElement(doc, view, onSelect) {
   node.className = `orca-mark orca-mark--${view.mark}${monitoring ? ' orca-mark--monitoring' : ''}`;
   node.setAttribute('aria-label', view.label);
   node.setAttribute('title', view.label);
-  // Orca の行の並び：状態の印を種類のロゴの左に置き、重ねない。
-  if (monitoring) node.append(stateIcon(doc, 'monitoring'));
+  // 並び：種類のロゴ、状態の印、経過の順。重ねない。
   const icon = span(doc, 'orca-mark-icon');
   icon.append(svg(doc, AGENT_ICONS[view.icon] ?? AGENT_ICONS.other));
   node.append(icon);
+  if (monitoring) node.append(stateIcon(doc, 'monitoring'));
   if (view.mark === 'sleeping') node.append(svg(doc, MOON, 'orca-mark-moon'));
   if (view.elapsed !== null) node.append(span(doc, 'orca-mark-time', view.elapsed));
   return node;

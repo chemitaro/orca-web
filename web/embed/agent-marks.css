@@ -211,13 +211,12 @@
   }
 }
 
-/* 電気の印（monitoring）。種類のロゴの左に並べ、色は状態の主の色（working の変数）。 */
+/* 電気の印（monitoring）。種類のロゴの右、経過の左に並べ、色は状態の主の色（working の変数）。 */
 .orca-mark-state {
   display: block;
   flex: none;
   width: 11px;
   height: 11px;
-  margin-left: 1px;
   color: var(--orca-mark-st);
 }
 
