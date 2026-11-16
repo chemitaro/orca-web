@@ -117,6 +117,10 @@ export interface OrcaAgentStatus {
   state: string | null;
   workingMode: string | null;
   stateStartedAt: number | null;
+  /** `agentStatus.firstStateStartedAt`（Orca が観測したセッションの始まり。あるタブとないタブがある）。 */
+  firstStateStartedAt: number | null;
+  /** `agentStatus.stateHistory` の先頭の要素の `startedAt`。 */
+  historyStartedAt: number | null;
   /** `agentStatus.model`（エージェントが報告した最後の値。今の Orca では出ない）。 */
   model: string | null;
   /** `agentStatus.providerSession.effort`（Claude Code の今の推論レベル）。 */
@@ -330,6 +334,8 @@ function pickAgentStatus(v: unknown): OrcaAgentStatus | null {
     state: str(a.state),
     workingMode: str(a.workingMode),
     stateStartedAt: num(a.stateStartedAt),
+    firstStateStartedAt: num(a.firstStateStartedAt),
+    historyStartedAt: Array.isArray(a.stateHistory) ? num(rec(a.stateHistory[0])?.startedAt) : null,
     model: str(a.model),
     effort: str(rec(a.providerSession)?.effort),
     paneKey: str(a.paneKey),

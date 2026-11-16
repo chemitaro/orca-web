@@ -5,7 +5,7 @@ import { AGENT_ICONS, APP_ICONS, STATE_ICONS } from './agent-marks-icons.js';
 import { buildMarks } from './agent-marks-view.js';
 
 export { AGENT_ICONS, APP_ICONS, iconKey, LINK_ICONS, STATE_ICONS } from './agent-marks-icons.js';
-export { buildMarks, findWorktree, formatElapsed, MARK_LABELS, MARKS } from './agent-marks-view.js';
+export { buildMarks, findWorktree, formatElapsed, MARK_LABELS, MARKS, orderAgents } from './agent-marks-view.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SIZES = ['sm', 'md'];
@@ -83,6 +83,7 @@ function markElement(doc, view, onSelect) {
   node.className = `orca-mark orca-mark--${view.mark}${monitoring ? ' orca-mark--monitoring' : ''}`;
   node.setAttribute('aria-label', view.label);
   node.setAttribute('title', view.label);
+  if (view.id !== null) node.setAttribute('data-agent-id', view.id);
   // 並び：種類のロゴ、状態の印、経過の順。重ねない。
   const icon = span(doc, 'orca-mark-icon');
   icon.append(svg(doc, AGENT_ICONS[view.icon] ?? AGENT_ICONS.other));

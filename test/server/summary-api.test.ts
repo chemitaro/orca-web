@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import { type AppOptions, createAppServer } from '../../src/server/app.ts';
 import type { WorktreeSummaryDocument } from '../../src/summary/model.ts';
-import { agent, input } from '../inbox/fixture.ts';
+import { agent, fact, input } from '../inbox/fixture.ts';
 
 async function withApp(
   options: AppOptions,
@@ -136,4 +136,30 @@ test('poller がなければ CORS つきの summary_unavailable を返す', asyn
     assert.equal(reply.headers['access-control-allow-origin'], origin);
     assert.equal(reply.headers.vary, 'Origin');
   });
+});
+
+test('要約の道は初めて見た状態の始まりの時刻を覚え、次に読んでも startedAt を動かさない', async () => {
+  const first = '2026-01-02T10:00:00.000Z';
+  const later = '2026-01-02T11:30:00.000Z';
+  let stateStartedAt = first;
+  await withApp(
+    {
+      poller: {
+        noteViewer() {},
+        async snapshot() {
+          return input({ agents: [agent('chat:a', { kind: 'chat-tab', stateStartedAt: fact(stateStartedAt) })] }).state;
+        },
+      },
+    },
+    async (send) => {
+      const read = async () => {
+        const doc = (await send()).json<WorktreeSummaryDocument>();
+        const entry = doc.worktrees[0]?.agents[0];
+        return [entry?.since, entry?.startedAt];
+      };
+      assert.deepEqual(await read(), [first, first]);
+      stateStartedAt = later;
+      assert.deepEqual(await read(), [later, first]);
+    },
+  );
 });

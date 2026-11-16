@@ -98,6 +98,8 @@ function terminalWorker(parentPaneKey: string): OrcaTab {
     state: 'working',
     workingMode: null,
     stateStartedAt: T(5),
+    firstStateStartedAt: null,
+    historyStartedAt: null,
     model: null,
     effort: null,
     paneKey: null,

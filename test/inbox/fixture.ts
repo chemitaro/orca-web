@@ -60,6 +60,7 @@ export function agent(id = 'agent-a', patch: Partial<AgentState> = {}): AgentSta
     state: fact('working'),
     workingMode: fact(null),
     stateStartedAt: fact(STARTED),
+    sessionStartedAt: fact(null),
     lastOutputAt: fact(null),
     title: fact('仮のエージェント'),
     parentPaneKey: fact(null),

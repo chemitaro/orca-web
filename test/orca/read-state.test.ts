@@ -95,6 +95,8 @@ test('read-state は取得元ごとの記録を返し、本文や transcript の
     state: 'working',
     workingMode: null,
     stateStartedAt: ms(21),
+    firstStateStartedAt: null,
+    historyStartedAt: null,
     model: null,
     effort: 'high',
     paneKey: 'uuid-10:uuid-11',
@@ -291,5 +293,49 @@ test('Run の full 応答から統括、task から作成端末を拾い、な�
   assert.deepEqual(
     tasks.data.map((task) => task.createdByTerminalHandle),
     ['term-b', null],
+  );
+});
+
+test('agentStatus の firstStateStartedAt と stateHistory の先頭の startedAt を拾い、ないか形が違えば null にする', async () => {
+  const rpc = rpcRecording();
+  const entry = rpc.exchanges.find((e) => e.method === 'session.tabs.listAll');
+  assert.ok(entry);
+  const statuses: unknown[] = [
+    { firstStateStartedAt: ms(1), stateHistory: [{ startedAt: ms(2) }] },
+    { stateHistory: [{ startedAt: ms(3) }, { startedAt: ms(4) }] },
+    { firstStateStartedAt: 'x', stateHistory: 'not-array' },
+    { stateHistory: [] },
+    { stateHistory: ['not-object', { startedAt: ms(5) }] },
+    { stateHistory: [{ startedAt: 'x' }, { startedAt: ms(6) }] },
+    { firstStateStartedAt: Number.NaN, stateHistory: [null] },
+    {},
+  ];
+  const result = {
+    snapshots: [
+      {
+        worktree: WT1,
+        tabs: statuses.map((agentStatus, i) => ({ type: 'terminal', id: `tab${i}`, agentStatus })),
+      },
+    ],
+  };
+  entry.chunks = [`${JSON.stringify({ id: '$ID', ok: true, result })}\n`];
+  const r = createStateReader(
+    new ReadOnlyOrcaCli(new OrcaCli(new ReplayCliRunner({ version: 1, kind: 'cli', entries: [] }))),
+    new ReadOnlyRpc(new ReplayRpcTransport(rpc)),
+  );
+  const tabs = await r.tabs();
+  assert.ok(tabs.ok);
+  assert.deepEqual(
+    tabs.data[0]?.tabs.map((tab) => [tab.agentStatus?.firstStateStartedAt, tab.agentStatus?.historyStartedAt]),
+    [
+      [ms(1), ms(2)],
+      [null, ms(3)],
+      [null, null],
+      [null, null],
+      [null, null],
+      [null, null],
+      [null, null],
+      [null, null],
+    ],
   );
 });

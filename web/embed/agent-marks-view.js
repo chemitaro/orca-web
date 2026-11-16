@@ -21,8 +21,6 @@ export const MARK_LABELS = {
 const SCHEMA = 'orca-web.worktree-summary/v1';
 const DETAIL_PREFIX = '/embed/agent?id=';
 const TYPE_LABEL_MAX = 40;
-// 並びの順：要対応（blocked、waiting）、working、unknown、done、sleeping。
-const ORDER = { blocked: 0, waiting: 0, working: 1, unknown: 2, done: 3, sleeping: 4 };
 
 const str = (value) => (typeof value === 'string' && value !== '' ? value : null);
 
@@ -89,13 +87,73 @@ function markView(agent, now) {
   };
 }
 
+// startedAt は文字列で、Date.parse が有限のときだけ時刻とする。
+function startedTime(value) {
+  if (typeof value !== 'string') return null;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : null;
+}
+
+// 新しい順。時刻が両方あれば大きい方、片方だけなら時刻のある方、ほかは要約の順。
+function newer(a, b) {
+  if (a.time !== null && b.time !== null && a.time !== b.time) return b.time - a.time;
+  if (a.time !== null && b.time === null) return -1;
+  if (a.time === null && b.time !== null) return 1;
+  return a.index - b.index;
+}
+
+/**
+ * 同じ worktree のエージェントを指揮の関係の順に並べ直した写しを返す。
+ * 関係なし（startedAt の新しい順）→ 関係あり（根から親 → 子 → 孫の深さ優先、根どうしと兄弟は新しい順）→ 輪で根から届かないもの。
+ * 関係ありは、parent.id がこの worktree の別のエージェントを指すか、別のエージェントの parent.id に指されるもの。
+ * id が null か重複（2つ目から）のエージェントは表に入れず、関係なしとして扱う。
+ * @param {any} agents 要約の worktree の agents（配列でなければ空）
+ * @returns {any[]}
+ */
+export function orderAgents(agents) {
+  const entries = (Array.isArray(agents) ? agents : []).map((agent, index) => ({
+    agent,
+    index,
+    id: str(agent?.id),
+    time: startedTime(agent?.startedAt),
+    parentId: null,
+  }));
+  const byId = new Map();
+  for (const entry of entries) if (entry.id !== null && !byId.has(entry.id)) byId.set(entry.id, entry);
+  const listed = (entry) => entry.id !== null && byId.get(entry.id) === entry;
+  const children = new Map();
+  for (const entry of entries) {
+    if (!listed(entry)) continue;
+    const parent = entry.agent?.parent;
+    const parentId = parent !== null && typeof parent === 'object' ? str(parent.id) : null;
+    if (parentId === null || parentId === entry.id || !byId.has(parentId)) continue;
+    entry.parentId = parentId;
+    const siblings = children.get(parentId);
+    if (siblings) siblings.push(entry);
+    else children.set(parentId, [entry]);
+  }
+  const related = (entry) => listed(entry) && (entry.parentId !== null || children.has(entry.id));
+  const result = entries.filter((entry) => !related(entry)).sort(newer);
+  const seen = new Set();
+  const visit = (entry) => {
+    if (seen.has(entry)) return;
+    seen.add(entry);
+    result.push(entry);
+    for (const child of [...(children.get(entry.id) ?? [])].sort(newer)) visit(child);
+  };
+  const linked = entries.filter(related);
+  for (const root of linked.filter((entry) => entry.parentId === null).sort(newer)) visit(root);
+  result.push(...linked.filter((entry) => !seen.has(entry)).sort(newer));
+  return result.map((entry) => entry.agent);
+}
+
 /**
  * @typedef {{ id: string | null, mark: string, workingMode: 'monitoring' | null, icon: 'claude' | 'codex' | 'other' | 'none', typeLabel: string,
  *   elapsed: string | null, label: string, detail: string | null }} MarkView
  */
 
 /**
- * worktree のエージェントを印の並びにする。max を超えたら先頭の max−1 個と、残りの数の overflow。
+ * worktree のエージェントを印の並び（orderAgents の順）にする。max を超えたら先頭の max−1 個と、残りの数の overflow。
  * @param {any} worktree 要約の worktrees の1つ
  * @param {{ now?: number, max?: number }} [options]
  * @returns {{ marks: MarkView[], overflow: { count: number, label: string } | null }}
@@ -103,10 +161,7 @@ function markView(agent, now) {
 export function buildMarks(worktree, { now, max = 4 } = {}) {
   const agents = Array.isArray(worktree?.agents) ? worktree.agents : [];
   const limit = Number.isInteger(max) && max >= 1 ? max : 4;
-  const all = agents
-    .map((agent, index) => ({ view: markView(agent, now), index }))
-    .sort((a, b) => ORDER[a.view.mark] - ORDER[b.view.mark] || a.index - b.index)
-    .map((entry) => entry.view);
+  const all = orderAgents(agents).map((agent) => markView(agent, now));
   if (all.length <= limit) return { marks: all, overflow: null };
   const shown = all.slice(0, limit - 1);
   const count = all.length - shown.length;
