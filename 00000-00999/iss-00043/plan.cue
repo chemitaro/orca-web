@@ -3,13 +3,13 @@ package spec
 goal: "読み取りと状態の文書に Orca の開始の時刻を足し、要約に親・main・開始の時刻を組み、部品の並びと data-agent-id を改め、文書と実物の確かめで閉じる。"
 
 steps: {
-	"S-01": {title: "開始の時刻の読み取りと要約の親・main・startedAt（D-01、D-02、D-03）", realizes: ["R-01", "R-02", "R-03", "F-01"], status: "todo", session: "impl"
+	"S-01": {title: "開始の時刻の読み取りと要約の親・main・startedAt（D-01、D-02、D-03）", realizes: ["R-01", "R-02", "R-03", "F-01"], status: "done", session: "impl"
 		text: "対象：`src/orca/read-state.ts`（OrcaAgentStatus と pickAgentStatus だけ）、`src/state/model.ts`・`normalize.ts`・`fields.ts`（sessionStartedAt）、`src/summary/model.ts`・`build.ts`・`started.ts`（新規）、`src/server/app.ts`（要約の道だけ）、`test/` の下（read-state、状態の正規化、`test/summary/build.test.ts`、新しい `test/summary/started.test.ts`、要約の道のテスト。手書きの AgentState には sessionStartedAt を足すだけで、既存の期待値を変えない）。確かめ：T-01、T-02、T-03、T-04。完了：`npm run lint`、`npm test`、`npm run build` が通り、コミットする"
 	}
-	"S-02": {title: "部品の並びと data-agent-id（D-04、D-05）", realizes: ["R-04", "R-05", "F-02"], status: "todo", after: ["S-01"], session: "impl"
+	"S-02": {title: "部品の並びと data-agent-id（D-04、D-05）", realizes: ["R-04", "R-05", "F-02"], status: "done", after: ["S-01"], session: "impl"
 		text: "対象：`web/embed/agent-marks-view.js`（buildMarks と新しい orderAgents）、`web/embed/agent-marks.js`（markElement）、`test/web/agent-marks-view.test.ts`・`agent-marks-dom.test.ts`（ORDER の並びを前提にした既存のテストは、新しい規則の期待に直す）。確かめ：T-05、T-06。完了：`npm run lint`、`npm test`、`npm run build` が通り、コミットして止まり HEAD を報告する"
 	}
-	"S-03": {title: "文書と実物の確かめ（D-06、D-07）", realizes: ["R-06", "R-07"], status: "todo", after: ["S-02"], session: "doc"
+	"S-03": {title: "文書と実物の確かめ（D-06、D-07）", realizes: ["R-06", "R-07"], status: "done", after: ["S-02"], session: "doc"
 		text: "タスク担当が行う。README.md と AGENTS.md を D-06 のとおり直す。D-07 のとおり読み、report.md に表と写しを書く。送らない、Orca で開くを押さない、統括の連絡を既読にしない。確かめ：T-07、T-08。完了：`npm run lint`、`npm test`、`npm run build` が通り、コミットする"
 	}
 }
