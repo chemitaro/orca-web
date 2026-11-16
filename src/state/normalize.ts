@@ -1,5 +1,6 @@
 // 取得元ごとの最後に読めた記録から、正規化した状態の文書を作る純粋な関数。
 // 値は取得元と Orca の項目の名前を付けて返し、取れない値は別の値で埋めずに null と欠けた理由で返す。
+import { createHash } from 'node:crypto';
 import type {
   OrcaLaunch,
   OrcaPsAgent,
@@ -76,6 +77,13 @@ export function terminalTabIdentity(tab: Pick<OrcaTab, 'parentTabId' | 'leafId' 
 } {
   const paneKey = tab.parentTabId && tab.leafId ? `${tab.parentTabId}:${tab.leafId}` : null;
   return { paneKey, id: paneKey ?? tab.id };
+}
+
+/** 構造化 Chat のセッションの ps の paneKey。Orca v1.4.259 の src/shared/agent-session/view/structured-agent-session-projection.ts と同じ式。 */
+function structuredPaneKey(sessionId: string): string {
+  const hex = createHash('sha256').update(sessionId, 'utf8').digest('hex').slice(0, 32);
+  const leaf = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+  return `structured-agent-session-${sessionId}:${leaf}`;
 }
 
 /** 鮮度の判定：最後の成功から、間隔のこの倍を過ぎたら古い。 */
@@ -409,25 +417,53 @@ export function normalizeState(input: NormalizeInput): StateDocument {
     readings: [],
   });
 
+  /** 同じ worktree で、タブの sessionId から作った paneKey と完全に一致し、まだ使われていない ps の行。 */
+  const structuredPs = (worktreeId: string, tab: OrcaTab): { paneKey: string; agent: OrcaPsAgent } | null => {
+    if (!tab.sessionId) return null;
+    const paneKey = structuredPaneKey(tab.sessionId);
+    const row = psByPane.get(paneKey);
+    if (!row || row.worktreeId !== worktreeId || usedPanes.has(paneKey)) return null;
+    usedPanes.add(paneKey);
+    return { paneKey, agent: row.agent };
+  };
+
   const chatTab = (worktreeId: string, tab: OrcaTab): AgentState | null => {
     if (!tab.id) return null;
+    const matched = structuredPs(worktreeId, tab);
+    const ps = matched?.agent;
+    const state = first([
+      [tab.chatState, 'tabs', 'chatStatus.state'],
+      ...(ps ? [[ps.state, 'worktreePs', 'agents.state'] as const] : []),
+    ]);
     return {
       id: `chat:${tab.id}`,
       kind: 'chat-tab',
       worktreeId,
-      paneKey: null,
+      paneKey: matched?.paneKey ?? null,
       tabId: tab.id,
       terminalHandle: null,
-      agentType: first([[tab.agent, 'tabs', 'agent']]),
-      state: first([[tab.chatState, 'tabs', 'chatStatus.state']]),
-      workingMode: first([[tab.chatWorkingMode, 'tabs', 'chatStatus.workingMode']]),
-      stateStartedAt: time([[tab.chatStateStartedAt, 'tabs', 'chatStatus.mainAgent.stateStartedAt']]),
+      agentType: first([
+        [tab.agent, 'tabs', 'agent'],
+        ...(ps ? [[ps.agentType, 'worktreePs', 'agents.agentType'] as const] : []),
+      ]),
+      state,
+      workingMode:
+        state.source === 'worktreePs'
+          ? first([[ps?.workingMode, 'worktreePs', 'agents.workingMode']])
+          : first([[tab.chatWorkingMode, 'tabs', 'chatStatus.workingMode']]),
+      stateStartedAt: time([
+        [tab.chatStateStartedAt, 'tabs', 'chatStatus.mainAgent.stateStartedAt'],
+        ...(ps ? [[ps.stateStartedAt, 'worktreePs', 'agents.stateStartedAt'] as const] : []),
+      ]),
       lastOutputAt: missingFact(null, null, 'no-source'),
       title: first([
         [clipTitle(tab.customTitle), 'tabs', 'customTitle'],
         [clipTitle(tab.title), 'tabs', 'title'],
+        ...(ps ? [[clipTitle(ps.taskTitle), 'worktreePs', 'agents.taskTitle'] as const] : []),
       ]),
-      parentPaneKey: missingFact(null, null, 'no-source'),
+      parentPaneKey: ps
+        ? first([[ps.parentPaneKey, 'worktreePs', 'agents.parentPaneKey']])
+        : missingFact(null, null, 'no-source'),
       terminal: missingFact(null, null, 'no-source'),
       worker: null,
       model: noSource(),

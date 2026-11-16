@@ -479,6 +479,23 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
     res.on('close', stop);
   }
 
+  /** 古い id（構造化 Chat の ps の paneKey）を、状態でまとめたエージェントの id に置き換えた転送先。転送しないときは null。 */
+  async function mergedAgentLocation(url: URL): Promise<string | null> {
+    const id = url.searchParams.get('id');
+    if (!id?.startsWith('structured-agent-session-') || !options.poller) return null;
+    let state: StateDocument;
+    try {
+      state = await options.poller.snapshot();
+    } catch {
+      return null;
+    }
+    const merged = state.agents.find((a) => a.kind === 'chat-tab' && a.paneKey === id);
+    if (!merged) return null;
+    const params = new URLSearchParams(url.search);
+    params.set('id', merged.id);
+    return `/embed/agent?${params.toString()}`;
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const pathname = url.pathname;
     const method = req.method ?? 'GET';
@@ -676,6 +693,14 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
     if (method !== 'GET' && method !== 'HEAD') {
       sendError(res, 405, 'method_not_allowed', access);
       return;
+    }
+    if (pathname === '/embed/agent') {
+      const location = await mergedAgentLocation(url);
+      if (location !== null) {
+        res.writeHead(302, baseHeaders({ location, 'content-length': '0' }));
+        res.end();
+        return;
+      }
     }
     const content = await readFile(path.join(webDir, asset.file));
     const headers = baseHeaders({ ...access, 'content-type': asset.type, 'content-length': String(content.length) });
