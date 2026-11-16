@@ -3,13 +3,13 @@ package spec
 goal: "読み取りと正規化と探し方の1か所で構造化 Chat の作業者と統括を結び、テストで端末の結び付けを固め、実物の数で直す前と後を残す。"
 
 steps: {
-	"S-01": {title: "構造化のセッションの読み取りと、chat-tab の担当（D-01、D-02）", realizes: ["R-01", "R-04", "F-01", "F-02"], status: "todo", session: "impl"
+	"S-01": {title: "構造化のセッションの読み取りと、chat-tab の担当（D-01、D-02）", realizes: ["R-01", "R-04", "F-01", "F-02"], status: "done", session: "impl"
 		text: "対象：`src/orca/read-state.ts`（OrcaWorker と pickWorker だけ）、`src/state/normalize.ts`（chatTab の worker と、そのための Map）、`test/` の下（read-state の読み取りのテスト、正規化のテスト。新しいファイルは `test/state/structured-worker.test.ts`）。確かめ：T-01、T-02、T-05。完了：`npm run lint`、`npm test`、`npm run build` が通り、コミットする"
 	}
-	"S-02": {title: "探し方の1か所と、統括の結び付け（D-03）", realizes: ["R-01", "R-02", "R-03", "F-01"], status: "todo", after: ["S-01"], session: "impl"
+	"S-02": {title: "探し方の1か所と、統括の結び付け（D-03）", realizes: ["R-01", "R-02", "R-03", "F-01"], status: "done", after: ["S-01"], session: "impl"
 		text: "対象：`src/runs/links.ts`（新規）、`src/runs/tree.ts`（探し方を links.ts に置き換えるだけ）、`test/runs/` の下（新しいファイル `test/runs/links.test.ts`）。確かめ：T-03、T-04。完了：`npm run lint`、`npm test`、`npm run build` が通り、コミットして止まり HEAD を報告する"
 	}
-	"S-03": {title: "文書と実物の数（D-04、D-05）", realizes: ["R-05", "R-02", "R-04"], status: "todo", after: ["S-02"], session: "doc"
+	"S-03": {title: "文書と実物の数（D-04、D-05）", realizes: ["R-05", "R-02", "R-04"], status: "done", after: ["S-02"], session: "doc"
 		text: "タスク担当が行う。README.md と AGENTS.md を D-04 のとおり直す。D-05 のとおり直す前と後を読み、report.md に表を書く。送らない、Orca で開くを押さない。確かめ：T-06、T-07。完了：`npm run lint`、`npm test`、`npm run build` が通り、コミットする"
 	}
 }
