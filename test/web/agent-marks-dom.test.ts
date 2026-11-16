@@ -173,7 +173,8 @@ test('renderAgentMarks：置き場の中を作り直し、印ごとに class・�
 
   const els = markEls(root);
   assert.equal(els.length, 3);
-  const [w, u, s] = els as [FakeElement, FakeElement, FakeElement];
+  // 並びは要約の順（関係も startedAt もない）。
+  const [w, s, u] = els as [FakeElement, FakeElement, FakeElement];
   assert.equal(w.tagName, 'SPAN');
   assert.equal(w.getAttribute('role'), 'img');
   assert.equal(w.className, 'orca-mark orca-mark--working');
@@ -262,6 +263,29 @@ test('renderAgentMarks：大きさの値が知らないものなら sm、max を
   assert.equal(more.textContent, '+3');
   assert.equal(more.getAttribute('aria-label'), 'ほか 3 件');
   assert.equal(more.getAttribute('title'), 'ほか 3 件');
+});
+
+test('renderAgentMarks：各印の data-agent-id が並びの順の id、id のない印と「+N」には付けない', () => {
+  for (const onSelect of [undefined, () => {}]) {
+    const doc = new FakeDocument();
+    const container = doc.createElement('div');
+    const agents = [
+      agent({ id: 'kid', parent: { id: 'boss', worktreeId: 'wt' }, startedAt: '2026-01-02T09:30:00.000Z' }),
+      agent({ id: 'boss', startedAt: '2026-01-02T09:00:00.000Z' }),
+      agent({ id: 'free', startedAt: '2026-01-02T09:10:00.000Z' }),
+      agent({ id: null, startedAt: '2026-01-02T09:20:00.000Z' }),
+      agent({ id: 'last' }),
+      agent({ id: 'hidden' }),
+    ];
+    renderAgentMarks(container, worktree(agents), { now: NOW, max: 5, ...(onSelect ? { onSelect } : {}) });
+    const els = markEls(container.children[0] as FakeElement);
+    assert.equal(els[0]?.tagName, onSelect ? 'BUTTON' : 'SPAN');
+    assert.deepEqual(
+      els.map((el) => el.getAttribute('data-agent-id')),
+      [null, 'free', 'last', 'hidden', null],
+    );
+    assert.equal(els[4]?.className, 'orca-mark orca-mark--more');
+  }
 });
 
 test('renderAgentMarks：worktree がなければ空の置き場', () => {

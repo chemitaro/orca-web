@@ -4,7 +4,14 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { AGENT_ICONS, iconKey, STATE_ICONS } from '../../web/embed/agent-marks-icons.js';
-import { buildMarks, findWorktree, formatElapsed, MARK_LABELS, MARKS } from '../../web/embed/agent-marks-view.js';
+import {
+  buildMarks,
+  findWorktree,
+  formatElapsed,
+  MARK_LABELS,
+  MARKS,
+  orderAgents,
+} from '../../web/embed/agent-marks-view.js';
 import { formatElapsed as sharedFormatElapsed } from '../../web/embed/elapsed.js';
 
 const NOW = Date.parse('2026-01-02T10:00:00.000Z');
@@ -293,40 +300,139 @@ test('buildMarks：agents が配列でない、worktree がないときは空', 
   assert.deepEqual(buildMarks({}, { now: NOW }), { marks: [], overflow: null });
 });
 
-test('buildMarks：いつも要対応・working・unknown・done・sleeping の順に安定に並べる', () => {
-  const wt = {
-    agents: [
-      agent({ id: 's1', mark: 'sleeping' }),
-      agent({ id: 'd1', mark: 'done' }),
-      agent({ id: 'w1', mark: 'working' }),
-      agent({ id: 'q1', mark: 'waiting' }),
-      agent({ id: 'u1', mark: 'unknown' }),
-      agent({ id: 'b1', mark: 'blocked' }),
-      agent({ id: 'w2', mark: 'working' }),
-      agent({ id: 'q2', mark: 'waiting' }),
-    ],
-  };
-  const ids = buildMarks(wt, { now: NOW, max: 20 }).marks.map((m) => m.id);
-  assert.deepEqual(ids, ['q1', 'b1', 'q2', 'w1', 'w2', 'u1', 'd1', 's1']);
-  // max 以下でも並べ替える
-  const two = buildMarks(
-    { agents: [agent({ id: 's', mark: 'sleeping' }), agent({ id: 'b', mark: 'blocked' })] },
-    { now: NOW },
-  );
+const at = (minute: number) => `2026-01-02T09:${String(minute).padStart(2, '0')}:00.000Z`;
+const child = (id: string, parent: string | null, minute: number | null, patch: Record<string, unknown> = {}) =>
+  agent({
+    id,
+    parent: parent === null ? null : { id: parent, worktreeId: 'wt' },
+    startedAt: minute === null ? null : at(minute),
+    ...patch,
+  });
+const order = (agents: unknown[]) => buildMarks({ agents }, { now: NOW, max: 50 }).marks.map((m) => m.id);
+
+test('buildMarks：関係のない2人は startedAt の新しい順、時刻のないものは最後で要約の順', () => {
   assert.deepEqual(
-    two.marks.map((m) => m.id),
-    ['b', 's'],
+    order([child('old', null, 1), child('none-1', null, null), child('new', null, 9), child('none-2', null, null)]),
+    ['new', 'old', 'none-1', 'none-2'],
   );
+  // 同じ時刻は要約の順
+  assert.deepEqual(order([child('b', null, 5), child('a', null, 5)]), ['b', 'a']);
 });
 
-test('buildMarks：max を超えたら並べ替えた後に先頭の max−1 個と overflow', () => {
+test('buildMarks：親 → 子 → 孫、兄弟は新しい順、別の worktree の親と見えない親の子は関係なし', () => {
+  const agents = [
+    child('grandchild', 'child-old', 8),
+    child('child-old', 'root', 2),
+    child('lonely-old', null, 1),
+    child('remote-child', null, 30, { parent: { id: 'elsewhere', worktreeId: 'other-wt' } }),
+    child('child-new', 'root', 6),
+    child('unseen-child', null, 40, { parent: { id: null, worktreeId: null } }),
+    child('root', null, 0),
+    child('lonely-new', null, 20),
+  ];
+  assert.deepEqual(order(agents), [
+    'unseen-child',
+    'remote-child',
+    'lonely-new',
+    'lonely-old',
+    'root',
+    'child-new',
+    'child-old',
+    'grandchild',
+  ]);
+});
+
+test('buildMarks：関係なしが左、関係ありが右。状態（blocked、sleeping など）は並びを変えない', () => {
+  const agents = [
+    child('kid', 'boss', 50, { mark: 'blocked' }),
+    child('boss', null, 0, { mark: 'sleeping' }),
+    child('free', null, 1, { mark: 'done' }),
+    child('waiting', null, 2, { mark: 'waiting' }),
+  ];
+  assert.deepEqual(order(agents), ['waiting', 'free', 'boss', 'kid']);
+});
+
+test('buildMarks：輪と自分を指す親で止まらず、各エージェントが1回だけ出る', () => {
+  const agents = [
+    child('a', 'b', 1),
+    child('b', 'a', 5),
+    child('self', 'self', 3),
+    child('root', null, 0),
+    child('leaf', 'root', 2),
+    child('c-child', 'a', 9),
+  ];
+  const ids = order(agents);
+  assert.deepEqual(ids, ['self', 'root', 'leaf', 'c-child', 'b', 'a']);
+  assert.equal(new Set(ids).size, agents.length);
+});
+
+test('buildMarks：parent・startedAt のない古い要約は要約の順', () => {
+  const agents = ['z', 'b', 'q', 'a'].map((id, i) => agent({ id, mark: MARKS[i] }));
+  assert.deepEqual(order(agents), ['z', 'b', 'q', 'a']);
+});
+
+test('buildMarks：形の違う parent・startedAt はないものとして並べる', () => {
+  const agents = [
+    agent({ id: 'p', startedAt: at(1) }),
+    agent({ id: 'str-parent', parent: 'p', startedAt: at(30) }),
+    agent({ id: 'num-id', parent: { id: 42 }, startedAt: 'not a date' }),
+    agent({ id: 'arr', parent: ['p'], startedAt: 1_767_340_800_000 }),
+    agent({ id: 'empty', parent: { id: '' }, startedAt: {} }),
+    agent({ id: 'nul', parent: { id: null } }),
+    null,
+    'text',
+  ];
+  assert.deepEqual(order(agents), ['str-parent', 'p', 'num-id', 'arr', 'empty', 'nul', null, null]);
+});
+
+test('orderAgents：id が null と重複のものは表に入れず関係なし、元の配列を変えない', () => {
+  const agents = [
+    agent({ id: 'dup', startedAt: at(1) }),
+    agent({ id: 'dup', parent: { id: 'p' }, startedAt: at(2) }),
+    agent({ id: null, parent: { id: 'p' }, startedAt: at(3) }),
+    agent({ id: 'p', startedAt: at(0) }),
+    agent({ id: 'kid', parent: { id: 'dup' }, startedAt: at(4) }),
+  ];
+  const before = structuredClone(agents);
+  const sorted = orderAgents(agents);
+  assert.deepEqual(agents, before);
+  assert.deepEqual(
+    sorted.map((a) => [a.id, a.startedAt]),
+    [
+      [null, at(3)],
+      ['dup', at(2)],
+      ['p', at(0)],
+      ['dup', at(1)],
+      ['kid', at(4)],
+    ],
+  );
+  assert.deepEqual(orderAgents('x'), []);
+});
+
+test('buildMarks：上限を越えたら新しい並びの先頭から max−1 人と残りの overflow', () => {
+  const agents = [
+    child('kid', 'boss', 9),
+    child('boss', null, 0),
+    child('a', null, 1),
+    child('b', null, 2),
+    child('c', null, 3),
+  ];
+  const { marks, overflow } = buildMarks({ agents }, { now: NOW, max: 4 });
+  assert.deepEqual(
+    marks.map((m) => m.id),
+    ['c', 'b', 'a'],
+  );
+  assert.deepEqual(overflow, { count: 2, label: 'ほか 2 件' });
+});
+
+test('buildMarks：max を超えたら並べた後に先頭の max−1 個と overflow', () => {
   const agents = ['sleeping', 'sleeping', 'done', 'working', 'blocked', 'sleeping'].map((mark, i) =>
     agent({ id: `a${i}`, mark }),
   );
   const { marks, overflow } = buildMarks({ agents }, { now: NOW });
   assert.deepEqual(
     marks.map((m) => m.id),
-    ['a4', 'a3', 'a2'],
+    ['a0', 'a1', 'a2'],
   );
   assert.deepEqual(overflow, { count: 3, label: 'ほか 3 件' });
 
@@ -409,10 +515,10 @@ test('T-22：monitoring は mark working・workingMode monitoring、状態の言
   assert.equal(byId.d.workingMode, null);
   assert.equal(byId.d.label, 'Claude、完了');
   assert.equal(byId.missing.workingMode, null);
-  // 並びは working の仲間のまま（入れた順）。
+  // 状態は並びを変えない（要約の順）。
   assert.deepEqual(
     buildMarks(wt, { now: NOW, max: 10 }).marks.map((m) => m.id),
-    ['m', 'w', 'odd', 'missing', 'd'],
+    ['m', 'w', 'odd', 'd', 'missing'],
   );
 });
 
