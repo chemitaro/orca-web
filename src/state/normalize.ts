@@ -187,6 +187,12 @@ export function normalizeState(input: NormalizeInput): StateDocument {
   const workersByHandle = new Map(
     (sources.workers.data ?? []).filter((w) => w.terminalHandle !== null).map((w) => [w.terminalHandle, w]),
   );
+  /** 構造化 Chat のセッションごとの worker の行。同じセッションの行が2つ以上なら null（結ばない）。 */
+  const workersBySession = new Map<string, OrcaWorker | null>();
+  for (const w of sources.workers.data ?? []) {
+    if (w.structuredSessionId === null) continue;
+    workersBySession.set(w.structuredSessionId, workersBySession.has(w.structuredSessionId) ? null : w);
+  }
 
   const launchReadings = (dispatchId: string, key: 'model' | 'effort'): Reading[] => {
     const launch = launches.get(dispatchId);
@@ -427,6 +433,12 @@ export function normalizeState(input: NormalizeInput): StateDocument {
     return { paneKey, agent: row.agent };
   };
 
+  /** タブの sessionId を持つ worker の行がちょうど1つのときだけ、その担当。タブの id の形には頼らない。 */
+  const structuredWorker = (tab: OrcaTab): WorkerLink | null => {
+    const w = tab.sessionId ? workersBySession.get(tab.sessionId) : undefined;
+    return w ? { dispatchId: w.dispatchId, taskId: w.taskId, runId: w.runId } : null;
+  };
+
   const chatTab = (worktreeId: string, tab: OrcaTab): AgentState | null => {
     if (!tab.id) return null;
     const matched = structuredPs(worktreeId, tab);
@@ -465,7 +477,7 @@ export function normalizeState(input: NormalizeInput): StateDocument {
         ? first([[ps.parentPaneKey, 'worktreePs', 'agents.parentPaneKey']])
         : missingFact(null, null, 'no-source'),
       terminal: missingFact(null, null, 'no-source'),
-      worker: null,
+      worker: structuredWorker(tab),
       model: noSource(),
       effort: noSource(),
     };

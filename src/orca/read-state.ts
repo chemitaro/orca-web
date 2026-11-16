@@ -181,6 +181,8 @@ export interface OrcaWorker {
   terminalHandle: string | null;
   terminalState: string | null;
   worktreeId: string | null;
+  /** 構造化 Chat の作業者のセッション（`resource.endpointIncarnation` の `structured:<S>` の S）。内部だけに持ち、状態の文書に出さない。 */
+  structuredSessionId: string | null;
 }
 
 export interface OrcaLaunchValues {
@@ -381,10 +383,19 @@ function pickTask(r: Rec): OrcaTask | null {
   };
 }
 
+const STRUCTURED_INCARNATION = 'structured:';
+
+/** Orca の sessionIdFromStructuredWorkerIncarnation と同じ解き方。`structured:` の後ろが空なら null。 */
+function structuredSessionId(incarnation: unknown): string | null {
+  if (typeof incarnation !== 'string' || !incarnation.startsWith(STRUCTURED_INCARNATION)) return null;
+  return incarnation.slice(STRUCTURED_INCARNATION.length) || null;
+}
+
 function pickWorker(r: Rec): OrcaWorker | null {
   const dispatchId = str(r.dispatchId);
   if (!dispatchId) return null;
   const p = rec(r.projection);
+  const resource = rec(r.resource);
   return {
     dispatchId,
     taskId: str(r.taskId),
@@ -394,7 +405,8 @@ function pickWorker(r: Rec): OrcaWorker | null {
     liveness: str(rec(p?.liveness)?.verdict),
     terminalHandle: str(r.agentTerminalHandle),
     terminalState: str(r.terminalState),
-    worktreeId: str(rec(p?.workspace)?.id) ?? str(rec(r.resource)?.worktreeId),
+    worktreeId: str(rec(p?.workspace)?.id) ?? str(resource?.worktreeId),
+    structuredSessionId: structuredSessionId(resource?.endpointIncarnation),
   };
 }
 
