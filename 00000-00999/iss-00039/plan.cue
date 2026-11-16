@@ -4,7 +4,7 @@ package spec
 
 goal: "正規化の1か所で構造化 Chat の1人をまとめ、古い id の埋め込みを転送で受け、実物の要約の件数で直す前と後を残す。"
 
-// 開始のコミット：373a2c7（main、PR #38 のマージ）。worktree は iss-00039、ブランチ chemitaro/iss-00039。
+// 開始のコミット：373a2c7（main、PR #38 のマージ）。worktree は iss-00039、ブランチ chemitaro/iss-00039。前の作業のコードは捨て、この開始のコミットから作り直す（2026-11-16、統括の依頼書）。
 // 実装担当は tdd で、まず失敗するテストを書いてから作る。テストは Orca を起動しない。
 // 実装担当は requirement.cue・design.cue・plan.cue と epic の文書を変えない。読み方に迷ったら直さずにタスク担当に問う。送信と Orca で開く操作を実物で呼ばない。
 // 変えてよいファイル：S-01 は src/orca/read-state.ts、src/state/normalize.ts、test/ の下。S-02 は src/server/app.ts、test/ の下。ほかの src/ と web/ は変えない。

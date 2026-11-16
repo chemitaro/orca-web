@@ -9,10 +9,12 @@ assurance: {
 	reason: "数え方と並べ方だけを変え、送信と開く操作は変えない"
 }
 
-purpose: "Orca の構造化のセッション（構造化 Chat）1人を、orca-web の状態の API・要約・受け箱・稼働の印・`/embed/agent` で1人のエージェントとして出す。今は同じ1人が `chat:agent-session:<X>`（chat-tab）と `structured-agent-session-<X>:<leaf>`（untabbed）の2つに出て、印の数と受け箱の行が二重になる。"
+purpose: "Orca の構造化のセッション（構造化 Chat）1人を、orca-web の状態の API・要約・受け箱・Run の木・稼働の印・`/embed/agent`（SpecDock のエージェントのタブ）で、操作できる1人のエージェント（chat-tab）として出す。今は同じ1人が `chat:agent-session:<X>`（chat-tab、会話・送信ができる）と `structured-agent-session-<X>:<leaf>`（untabbed、会話がつながらず送信もできない）の2つに出て、印の数と受け箱の行が二重になり、片方は操作できない。操作できないほうはどこにも出さない。"
 
 background: """
+	本人の報告（2026-11-16、統括の依頼書）：Claude Code のエージェントは1体なのに2つ表示される。SpecDock の詳細の欄のエージェントのタブで片方を選ぶと、チャットの接続ができないという誤りになり、送信もできない。もう片方は表示できる。操作できる1つだけを出すよう求めた（一度は不要としたが撤回）。
 	事実（タスク担当が 2026-11-16 に確かめた）：
+	- 実機（常駐の orca-web、読むだけ。会話の API の GET と送れるかの GET だけで、送信と Orca で開くは呼ばない）：状態の API に chat-tab 4・terminal-tab 51・untabbed 3（3つとも `structured-agent-session-…`）があり、3つの untabbed は同じ worktree の chat-tab と対になる。要約では、その3つの worktree が total 2（chat-tab 1 と untabbed 1）。対の2組で `GET /api/send/status` を読むと、chat-tab の1つは available true・route chat・agentType claude、untabbed はどちらも available false。会話の API はこの時刻、Orca の応答が遅く、どちらの id も unreachable（503）で、実機では差を確かめられなかった。コードでは会話（`read-transcript.ts` の `resolveFromTabs`）は `chat:<タブの id>` だけを解き、untabbed は `no_session`（本人が見た「チャットの接続ができない」）。送信の意図も untabbed は `not_sendable`（理由 untabbed）。Orca で開くは、受け箱の開く口が chat-tab に worktree を開き、untabbed には開く口がない。よって操作できるのは chat-tab（`.workbench/iss-00039/probe2.mjs`、識別子は記録に出さない）
 	- 常駐の orca-web（main の 373a2c7 相当）の `GET /api/worktrees/summary` で、構造化 Chat のある3つの worktree が、それぞれ total 2（chat-tab 1 と untabbed 1）を数える。同じ時刻の状態の API で、untabbed の `structured-agent-session-…` の3つすべてが、同じ worktree の agent-session のタブの `sessionId` から Orca の式で作った paneKey と一致した（読むだけの確かめ、`.workbench/iss-00039/probe-sessions.ts`。識別子は記録に出さない）。
 	- Orca v1.4.259（この Mac の版、タグ 980c0024）のソース：`src/shared/agent-session/view/structured-agent-session-projection.ts` の `structuredAgentSessionTabId(sessionId)` は `structured-agent-session-<sessionId>`、`structuredAgentSessionPaneKey(tabId, sessionId)` は `<tabId>:<leaf>`（leaf は sessionId の UTF-8 の sha256 の先頭16バイトの16進を `8-4-4-4-12` に分け、3つ目の先頭を `4`、4つ目の先頭を `a` に置き換えた形）。`structured-agent-session-host-tab-id.ts` の `structuredAgentSessionHostTabId(sessionId)` は `agent-session:<sessionId>`（ほかに再び開いたタブの `agent-chat-tab-v1-…` がある）。`structured-session-notification-pane.ts` は paneKey から sessionId を、この式で作り直して一致するときだけ解く。つまり Orca にとって、タブ（`session.tabs.listAll` の type agent-session、`sessionId`）と `worktree ps` の行（paneKey）は同じ1つのセッション。Orca の画面は、タブ1つと、サイドバーの ps の行1つで示す（`runtime-worktree-sidebar-status.ts` は ps の行を paneKey ごとに1つ数える）。
 	- orca-web の `src/state/normalize.ts` は、タブから chat-tab を作り、どのタブにも使われなかった ps の行を untabbed にする。構造化 Chat の ps の paneKey は端末のタブ（`parentTabId:leafId`）と一致しないので、untabbed として2つ目が出る。
@@ -104,6 +106,7 @@ constraints: [
 ]
 
 decisions: [
+	"本人の再判断（2026-11-16、統括の依頼書）：この重複は重大な点として直す。操作できる1つだけを出し、操作できないほうは要約・状態・受け箱・Run の木・稼働の印・エージェントのタブのどこにも出さない",
 	"1人のエージェントは、要約・状態の API・受け箱・Run の木・稼働の印のどこでも1つにする。Orca の画面が1つとして示すならそれに合わせる。もう一方の id で来た要求が動いていたなら壊さない（同じ相手として受けるか、理由を示す）。端末のエージェントの数え方は変えない（統括の決定、依頼書 2026-11-16）",
 	"正の id は `chat:<タブの id>`：送信・会話の API が解けるのはこの id だけで、受け箱の開く口と今の埋め込みの URL もこれを使う。Orca の画面はタブ1つ・サイドバーの行1つで示し、両者は Orca の式で同じ sessionId を指す（タスク担当 2026-11-16、Orca v1.4.259 のソースと実機）",
 	"古い id は、今まで動いていた `/embed/agent` の画面だけを転送で受ける。会話（`no_session`）と送信（`not_sendable`/`untabbed`）は古い id では前から動いていなかったので、`agent_not_found` で理由を示す（タスク担当 2026-11-16）",
