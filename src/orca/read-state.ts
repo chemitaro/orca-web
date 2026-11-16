@@ -137,6 +137,8 @@ export interface OrcaTab {
   customTitle: string | null;
   /** 構造化 Chat のタブのエージェントの種類。 */
   agent: string | null;
+  /** 構造化 Chat のタブのセッション。状態の文書には出さず、ps の行とまとめるのにだけ使う。 */
+  sessionId: string | null;
   chatState: string | null;
   chatWorkingMode: string | null;
   chatStateStartedAt: number | null;
@@ -354,6 +356,7 @@ function pickTab(r: Rec): OrcaTab {
     title: str(r.title),
     customTitle: str(r.customTitle),
     agent: str(r.agent),
+    sessionId: str(r.sessionId),
     chatState: str(chat?.state),
     chatWorkingMode: str(chat?.workingMode),
     chatStateStartedAt: num(rec(chat?.mainAgent)?.stateStartedAt),
