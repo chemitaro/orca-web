@@ -103,7 +103,8 @@ design: {
 			`answererFor(part, answerers)` を answerVia で選ぶ：rpc は今の chat、keys は `answerers.keys`、message は `answerers.message`（answerVia がない古い物は今の source の規則）。`terminalAnswerer` は残し、answerers の表で keys に `createCallAnswerer({agentId, writer, read?, mode: 'keys'})`、message に `createCallAnswerer({…, mode: 'message'})` を入れる。
 			`createCallAnswerer`：availability は status の `answerKeys`・`answerMessage`（enabled が偽なら send_disabled、項目がなければ unknown_shape、available が偽ならその reason）。mode keys で status.agentType が codex のとき、multiSelect か preview の問いがあれば `{ok: false, reason: prompt_unsupported の言葉, open: true}`。keys で答えられないときは `open: true`（「Orca で開く」を出す）。submit は `/api/answer/intent` に `{agent, callId, answers}` を送り、続けて confirm を1回（今の chat の流れと同じ）。確定の結果：DELIVERED（submitted・accepted・input_accepted）は done、refused は理由、mode keys の unknown（unconfirmed・partial_sent・応答の欠け）は `{kind: 'partial', operationId, note}`、mode message の unknown は今の unknown（照会できる）。check は今の chat と同じ。
 			流れ：意図か確定の拒みの理由が already_sent・question_answered・prompt_mismatch・prompt_unsupported・agent_keys_unknown なら、結果を `{kind: 'blocked', reason}` にし、phase `blocked`（押し直し・選択の変更を受けず、理由と「Orca で開く」を出し、送るボタンを出さない）にする。prompt_unverified ほかは今の refused（押し直せる）。`partial` の結果は phase `partial` にし、押し直し・閉じる・照会を受けない（送り直さない）。カードは「途中まで送りました。Orca で確かめてください」（sentGroups が 0 か分からなければ「届いたか分かりません。Orca で確かめてください」）と「Orca で開く」を出し、送るボタンを出さない。keys の done は「答えを送りました。エージェントの返事を待っています」。
-			理由の言葉の表に、already_sent（「この質問には一度答えを送りました。Orca で確かめてください」）、question_answered（「ほかの画面で答え済みです」）、prompt_unverified（「端末がこの質問を出しているか確かめられません」）、prompt_mismatch（「端末の質問が変わりました」）、prompt_unsupported（「この形の質問は、ここからは答えられません」）、agent_keys_unknown（「このエージェントの質問は、ここからは答えられません」）、chat_route、partial_sent、unconfirmed、keys_sent を足す。
+			keys の質問の buildAnswers は、その他の文に Tab・改行を含む C0・DEL・C1 があれば送れない（`{ok: false}`）とし、カードに理由 control_character（「その他の文は1行で、制御文字を含めないでください」）を示す（R-02、F-04）。
+			理由の言葉の表に、control_character、already_sent（「この質問には一度答えを送りました。Orca で確かめてください」）、question_answered（「ほかの画面で答え済みです」）、prompt_unverified（「端末がこの質問を出しているか確かめられません」）、prompt_mismatch（「端末の質問が変わりました」）、prompt_unsupported（「この形の質問は、ここからは答えられません」）、agent_keys_unknown（「このエージェントの質問は、ここからは答えられません」）、chat_route、partial_sent、unconfirmed、keys_sent を足す。
 			答え済みの判定（`agent-view.js` の buildChat）：同じ callId の tool-result と結びつけるのは answerVia keys の質問だけにする（message の質問の受付の tool-result では答え済みにしない。answerVia のない古い物は今の source の規則）。keys の質問は、同じ callId の tool-result が isError なら state を `declined` にし（閉じた形、題は「答えずに閉じられた質問」、要約は結果の文）、isError でなければ今のとおり answered。message の質問は、後の role user の件の text が、どれかの問いの引用（`> ` と、改行の続きを空白1つにした問いの文と空行）で始まるか空行の後に含めば answered にし、answerText はその文。`buildQuestionCard` は declined を閉じた形として扱う。
 			keys の未回答のカードには、送るボタンの近くに1行の注「Orca の画面で途中まで答えた質問は、Orca で続けてください」を出す（F-02）。truncated の message の質問は `{ok: false, reason: prompt_unsupported の言葉, open: true}`。
 			`question-dom.js` は partial の帯と「Orca で開く」（今の `createOpenControl`）を描く。`agent.css` は帯の見た目（`--ds-*` を先に、明暗、390px で折り返す）。
@@ -126,7 +127,7 @@ compatibility: """
 	"""
 
 risks: [
-	"タブの agentStatus に interactivePrompt と toolName が出ない Orca では、keys の答えはいつも prompt_unverified で送れない（安全側。S-04 で確かめる）",
+	"タブの agentStatus に interactivePrompt と toolName が出ない Orca では、keys の答えはいつも prompt_unverified で送れない（安全側。実機の確かめは本人の確かめに残す）",
 	"送る前に利用者が Orca の画面で同じ質問を途中まで進めていると（複数問の1問目だけ答えた、行を矢印で動かした、文を書きかけた）、ツールの結果も interactivePrompt も変わらないので確かめで見分けられず、列が先頭からの前提でずれて届きうる。Orca 自身のカードも同じ前提で送る。カードに注を出して知らせる（F-02）",
 	"組の間に利用者が Orca の画面でも操作すると、列が途中から食い違う。送る前の確かめは最初の組の前だけ（Orca と同じ）。途中の失敗は止めて知らせる",
 	"keys の答えは数秒（組の数×1秒）かかり、その間は SendService の busy でほかの送信を受けない",

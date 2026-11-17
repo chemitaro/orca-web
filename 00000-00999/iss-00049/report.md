@@ -17,6 +17,8 @@ ID: "iss-00049"
 - 仕様レビュー（spec-reviewer、Opus 5.5 / high、standard なので1人）：合格。round-2 で P0・P1・P2 が0、P3 1件（`.workbench/spec-review/iss-00049/round-2.json`、検査 `round-2.check.json`）。
   - 合格した文書の sha256：requirement.cue `4fc503ef5afe96f1ffb30c2f4c0d6894f9ae42ad62f1a8ddaea77080e86ea386`、design.cue `214047d0c04f0b43579dfc176fe4442a538e236eb6b826c7ed7b5200ac243ebb`、plan.cue `d107b1893a134e13881b77efd0c3e2dfca83a895a835223c030421eb5a136917`（コードの HEAD は 3b7aece）。
   - round-1：合格（P2 7件、P3 1件）。直す価値があるので全部直して確かめ直した（status の agentType、async の受付の結果で閉じる誤り、preview の判定、キーの文の制御文字、Orca の画面で途中まで進めた質問の残る危険、確かめの拒みの押し直せない形、S-02 の完了条件、切った async の問い）。応答は `review-response.md`。
+  - 仕様の変更（統括の判断 2026-11-18、案 C：端末のキーの組の実機は本人の確かめに残す。最終品質ゲート attempt 1 の P1 による）の後の再レビュー：round-3（照合の失敗の後の round-3b、HEAD 2e4a9d4）合格（P2 1、P3 2）、round-4 合格（P2 1、P3 1）、round-5 合格（P3 1：R-08 の受け入れが S-03 に求める帯と 44px の確かめが S-03 の手順にない。情報）。どの round の P2・P3 も直して確かめ直した（round-5 の P3 を除く）。
+  - 今の合格（round-5、`.workbench/spec-review/iss-00049/round-5.json`）の sha256：requirement.cue `4826732e7782a86b09830c8a1582494ea217e9d2a30c59cbd67ee6af008b7097`、design.cue `994554e0b2ec015a68a716e8e082579713b11de4e5a66633da04dad8ffbe504f`、plan.cue `052c0611e3decf77ebfbc80a6d28f02d5aedfba90d440025fa816bb5b4aa00b0`（コードの HEAD は 2e4a9d4）。
   - round-2：合格（P3 1件：画面の buildAnswers が keys のその他の文の Tab・改行を許し、サーバーだけが拒む）。文書は変えず、F-04 の読みとして S-03 の実装担当に画面でも同じ条件と理由の言葉を入れるよう伝える（逸脱と判断に記録）。
 
 - 区切りのレビュー CP-1（code-reviewer、Opus 5.5 / medium、standards と spec の両方）：範囲 `3b7aece..b86a91f`、合格。

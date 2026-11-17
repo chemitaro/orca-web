@@ -58,13 +58,13 @@ tests: {
 	"T-10": {title: "記録：keys・message の答えの before・after・refused の行に、ラベル、番号の列、その他の文、キーの文字、発言の文が入らず、mode・callId・questionCount・digest・totalGroups・sentGroups が入る。hasAnswer が before の行から答えを見つける。今の送信と rpc の答えの行は変わらない", verifies: ["R-04"]}
 	"T-11": {title: "照会：mode keys の結果不明の記録で、check が会話の今の状態から unknown（resolved_unverified・prompt_pending・question_not_found）か refused（cancelled）を返し、送り直さない。after の行のない keys の記録は no_after_record。mode message は今の照会を使う", verifies: ["R-04", "F-01"]}
 	"T-12": {title: "HTTP と status：`/api/answer/intent` が callId の物を受け、prompt と callId の両方・どちらもない・余分な鍵・長すぎる callId を 400 で拒み、守りは今のまま。status が answerKeys・answerMessage を返し、端末の Claude で answerKeys が available、status.agentType が質問を待つ（permission の）端末でも宛先の種類を返し、構造化 Chat で answerKeys が chat_route になり、読みの RPC の回数が今の status より増えない", verifies: ["R-06"]}
-	"T-13": {title: "answererFor が answerVia で rpc・keys・message の手段を選び、answerVia のない物は今の規則。createCallAnswerer が意図と確定を1回ずつ送り、callId の物を送る。availability が status の answerKeys・answerMessage と、codex の複数選択・preview・truncated の async で押せない理由と open を返し、keys の未回答のカードに途中まで答えた質問の注が出る", verifies: ["R-02", "R-05", "R-06"]}
+	"T-13": {title: "answererFor が answerVia で rpc・keys・message の手段を選び、answerVia のない物は今の規則。createCallAnswerer が意図と確定を1回ずつ送り、callId の物を送る。availability が status の answerKeys・answerMessage と、codex の複数選択・preview・truncated の async で押せない理由と open を返し、keys の未回答のカードに途中まで答えた質問の注が出る。keys のその他の文に Tab か改行があると送るボタンを押せず control_character の理由が出る（message と rpc は今の条件のまま）", verifies: ["R-02", "R-05", "R-06"]}
 	"T-14": {title: "流れ：keys の partial_sent・unconfirmed・応答の欠けで phase partial になり、押し直し・閉じる・照会を受けず、カードが途中まで送った知らせと「Orca で開く」を出し、送るボタンを出さない。keys の done が「答えを送りました…」。message の unknown は今の照会の帯。意図の拒みが already_sent・question_answered・prompt_mismatch・prompt_unsupported・agent_keys_unknown なら phase blocked で、選択と押し直しを受けず、理由と「Orca で開く」を出す。prompt_unverified の拒みは押し直せる", verifies: ["R-04", "R-06"]}
 	"T-15": {title: "buildChat：keys の質問が isError の tool-result で declined（答えずに閉じた形、結果の文）、そうでなければ answered。message の質問（端末）が、すぐ続く同じ callId の受付の tool-result では pending のままで、後の利用者の発言の引用で answered（答えはその文）、引用でない発言では pending", verifies: ["R-05", "R-07"]}
 	"T-16": {title: "question-dom.js が partial の帯と declined の閉じた形を textContent だけで描き、`<script>` や `<img onerror>` を含む文を文字のまま描く", verifies: ["R-04", "R-07"]}
 	"T-17": {title: "agent.css の帯の規則が `var(--ds-…, 既定)` を使い、折り返しの規則がある（CSS を読むテスト）", verifies: ["R-08"]}
 	"T-18": {title: "試しのエージェント（構造化 Chat の Codex）の request_user_input_async に小窓から答え、エージェントが答えを受け取ったことと、カードが答え済みの閉じた形になったことを確かめる（タスク担当、実機）。端末の Claude へのキーの組の答えとタブの agentStatus の interactivePrompt・toolName の鍵の確かめは本人の確かめに残し、report.md に手順を書く。interactivePrompt・toolName がないとき1組も送らず prompt_unverified で止まることは T-08 のテストで確かめる", verifies: ["R-02", "R-05", "R-06"]}
-	"T-19": {title: "試しの画面で、Mac の幅と 390px、明暗の写しを撮り、カードが横にはみ出さないことを DOM で数える（タスク担当、実機）", verifies: ["R-08"]}
+	"T-19": {title: "試しの画面で、後の発言の質問のカードの Mac の幅と 390px、明暗の写しを撮り、横にはみ出さないことを DOM で数える（タスク担当、実機）。端末の質問のカードの写しは S-03 の描画の確かめ（偽の会話）のものを report.md に挙げる", verifies: ["R-08"]}
 }
 
 verification: """
