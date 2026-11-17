@@ -28,6 +28,8 @@ ID: "iss-00050"
 
 - 区切りのレビュー CP-1（code-reviewer、Opus 5.5 / medium、standards と spec の両方）：範囲 `3b7aece..81fff5b`、合格（P0〜P3 すべて0、`.workbench/code-review/iss-00050-cp1/round-1.json`）。実装担当の報告の lint 0、test 860/860、build 0 を、タスク担当が同じコミットで再び確かめた。
 
+- 最終品質ゲート（キャンペーン `.workbench/final-quality-gate/iss-00050-fqg/`、範囲 `3b7aece..1185813`）：attempt 1 で合格。合格のコミット `11858131434bb6b1817d6c53df6b8d5bd1fe092b`。主のレビュー（quality-gate-reviewer、Opus 5.5 / medium、観点 functional-correctness・requirements-closure・test-adequacy・security-baseline・reliability-recovery・e2e-user-flow）pass、P0/P1 0、P3 1。2人目 ChatGPT GPT-6 / Extra High（chatgpt-code-review-strict、GitHub の SHA の一致を確かめた）pass、P0/P1 0、P2 2。テスト lint 0・test 886/886・build 0。closure：`.workbench/final-quality-gate/iss-00050-fqg/closure.md`（写し `artifacts/closure.md`）。記録だけのコミットはない。PR の直前に `origin/main` を取り込み直す要はなかった（main に新しいコミットがない）。
+
 ## Verification
 
 ### 実機の確かめ（S-04、2026-11-18、タスク担当）
@@ -58,6 +60,11 @@ ID: "iss-00050"
 - 事実（Orca v1.4.261）：端末のエージェントの許可は agentStatus の state が blocked・waiting で `interactivePrompt` が `{"approval": {"tool", "summary"}}`。Orca の `readAgentPromptAnswers` は選択肢を `allow_once`（Allow once）と `reject_once`（Reject）の2つにし、キーは許すが `nativeChatApprovalAcceptKey(agent)`（Claude は Enter など、エージェントごと）、拒むが Escape。答える RPC はなく、Orca 自身も `terminal.send` で打ち込む。
 - 案：承認のカードの `approverFor` が source terminal に返す手段を、iss-00049 の端末へのキーの組の口（送る前の状態の確かめ、1回だけの送信、途中まで届いた状態の扱い、照会）に差し替える。サーバーは `/api/approval/*` に端末の経路を足し、送る前に agentStatus の interactivePrompt が同じ（tool と summary の digest）で state が blocked・waiting なことを確かめ、選択肢は allow_once・reject_once の2つだけを受ける（常に許可は出さない）。結果は agentStatus が待ちから抜けたかで照会し、自動で送り直さない。
 - 危険：キーは画面の今の状態に効くので、確かめと送信の間に別の確認に変わると、別の操作を許しうる。送る直前の読みと、Orca の terminal.send の前面のプロセスの確かめを必ず入れる。
+
+### 残る P2/P3（最終品質ゲートの情報。直していない）
+
+- P2-a：同じ端末タブでセッションが切り替わった直後（見張りが古い target を使う最大5秒）、新しいセッションの許可の確認が古いセッションの会話の末尾に付きうる。タブの providerSession.id と target.sessionId の一致を確かめてから付けるのがよい。
+- P2-b（主の P3 と同じ根）：常に許可の確かめの段にいる間に送れなくなっても、確かめのボタンが押せる形で残る（押しても送らないので安全側）。
 
 ### 残る確かめと危険
 
