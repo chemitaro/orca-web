@@ -66,6 +66,8 @@ ID: "iss-00049"
 
 - 仕様レビュー round-2 の P3（keys のその他の文の制御文字を画面でも拒む）：F-04 の意味を変えない読みとして、S-03 で画面の条件と理由の言葉（control_character）を足す（タスク担当の判断、2026-11-18）。
 
+- PR #56（https://github.com/chemitaro/orca-web/pull/56、head 9607c93）：CI 合格（observer OBSERVED_CI_PASS、merge_readiness READY）。試しの画面 http://127.0.0.1:47940/ は動かしたまま（試しの orca-web 8796 は sendEnabled を偽に戻した）。
+
 ## Residual Risks / Follow-ups
 
 - 端末のキーの組の実機の確かめは本人の確かめに残した（Verification の手順）。`session.tabs.listAll` のタブの agentStatus に interactivePrompt・toolName が出なければ、端末の質問にはいつも答えられない（prompt_unverified で送らず止まる）。出ないと分かれば後の Issue で設計を直す。
