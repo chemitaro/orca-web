@@ -23,6 +23,8 @@ ID: "iss-00049"
 
 ## 逸脱と判断
 
+- 逸脱（実装担当の切り替え）：Codex GPT-6.1 Sol / medium の実装担当（dispatch ctx_6a5fea160dad）が、最初の読みのコマンドで、書き込みの許された根の Orca の Application Support の symlink を拒まれ（symlinked writable roots are not supported）、何もせずに止まった（変更なし）。統括の依頼書の補足に従い worker-stop し、Claude Opus 5.5 / medium（dispatch ctx_0b314dede454）で S-01〜S-02 を始め直した。
+
 - 仕様レビュー round-2 の P3（keys のその他の文の制御文字を画面でも拒む）：F-04 の意味を変えない読みとして、S-03 で画面の条件と理由の言葉（control_character）を足す（タスク担当の判断、2026-11-18）。
 
 ## Residual Risks / Follow-ups
