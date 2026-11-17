@@ -1,0 +1,566 @@
+[
+  {
+    "scene": "pushable",
+    "width": 1280,
+    "theme": "light",
+    "card": true,
+    "cardWidth": 1256,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": false
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": false
+      }
+    ],
+    "band": null,
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "scene": "pushable",
+    "width": 1280,
+    "theme": "dark",
+    "card": true,
+    "cardWidth": 1256,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": false
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": false
+      }
+    ],
+    "band": null,
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "scene": "pushable",
+    "width": 390,
+    "theme": "light",
+    "card": true,
+    "cardWidth": 366,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": false
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": false
+      }
+    ],
+    "band": null,
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 390,
+    "innerWidth": 390
+  },
+  {
+    "scene": "pushable",
+    "width": 390,
+    "theme": "dark",
+    "card": true,
+    "cardWidth": 366,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": false
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": false
+      }
+    ],
+    "band": null,
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 390,
+    "innerWidth": 390
+  },
+  {
+    "scene": "unpushable",
+    "width": 1280,
+    "theme": "light",
+    "card": true,
+    "cardWidth": 1256,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": null,
+    "notice": null,
+    "reason": "このエージェントの許可の確認は、ここからは答えられません",
+    "open": true,
+    "query": false,
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "scene": "unpushable",
+    "width": 1280,
+    "theme": "dark",
+    "card": true,
+    "cardWidth": 1256,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": null,
+    "notice": null,
+    "reason": "このエージェントの許可の確認は、ここからは答えられません",
+    "open": true,
+    "query": false,
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "scene": "unpushable",
+    "width": 390,
+    "theme": "light",
+    "card": true,
+    "cardWidth": 366,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": null,
+    "notice": null,
+    "reason": "このエージェントの許可の確認は、ここからは答えられません",
+    "open": true,
+    "query": false,
+    "scrollWidth": 390,
+    "innerWidth": 390
+  },
+  {
+    "scene": "unpushable",
+    "width": 390,
+    "theme": "dark",
+    "card": true,
+    "cardWidth": 366,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": null,
+    "notice": null,
+    "reason": "このエージェントの許可の確認は、ここからは答えられません",
+    "open": true,
+    "query": false,
+    "scrollWidth": 390,
+    "innerWidth": 390
+  },
+  {
+    "scene": "done",
+    "width": 1280,
+    "theme": "light",
+    "card": true,
+    "cardWidth": 1256,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": null,
+    "notice": "答えを送りました。エージェントの続きを待っています",
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "scene": "done",
+    "width": 1280,
+    "theme": "dark",
+    "card": true,
+    "cardWidth": 1256,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": null,
+    "notice": "答えを送りました。エージェントの続きを待っています",
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "scene": "done",
+    "width": 390,
+    "theme": "light",
+    "card": true,
+    "cardWidth": 366,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": null,
+    "notice": "答えを送りました。エージェントの続きを待っています",
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 390,
+    "innerWidth": 390
+  },
+  {
+    "scene": "done",
+    "width": 390,
+    "theme": "dark",
+    "card": true,
+    "cardWidth": 366,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": null,
+    "notice": "答えを送りました。エージェントの続きを待っています",
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 390,
+    "innerWidth": 390
+  },
+  {
+    "scene": "partial",
+    "width": 1280,
+    "theme": "light",
+    "card": true,
+    "cardWidth": 1256,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": {
+      "kind": "partial",
+      "text": "届いたか分かりません。Orca で確かめてください"
+    },
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "scene": "partial",
+    "width": 1280,
+    "theme": "dark",
+    "card": true,
+    "cardWidth": 1256,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": {
+      "kind": "partial",
+      "text": "届いたか分かりません。Orca で確かめてください"
+    },
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "scene": "partial",
+    "width": 390,
+    "theme": "light",
+    "card": true,
+    "cardWidth": 366,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": {
+      "kind": "partial",
+      "text": "届いたか分かりません。Orca で確かめてください"
+    },
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 390,
+    "innerWidth": 390
+  },
+  {
+    "scene": "partial",
+    "width": 390,
+    "theme": "dark",
+    "card": true,
+    "cardWidth": 366,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": {
+      "kind": "partial",
+      "text": "届いたか分かりません。Orca で確かめてください"
+    },
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 390,
+    "innerWidth": 390
+  },
+  {
+    "scene": "blocked",
+    "width": 1280,
+    "theme": "light",
+    "card": true,
+    "cardWidth": 1256,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": {
+      "kind": "blocked",
+      "text": "送っていません。この許可の確認には、ここからはもう送れません。Orca で答えてください"
+    },
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "scene": "blocked",
+    "width": 1280,
+    "theme": "dark",
+    "card": true,
+    "cardWidth": 1256,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": {
+      "kind": "blocked",
+      "text": "送っていません。この許可の確認には、ここからはもう送れません。Orca で答えてください"
+    },
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "scene": "blocked",
+    "width": 390,
+    "theme": "light",
+    "card": true,
+    "cardWidth": 366,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": {
+      "kind": "blocked",
+      "text": "送っていません。この許可の確認には、ここからはもう送れません。Orca で答えてください"
+    },
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 390,
+    "innerWidth": 390
+  },
+  {
+    "scene": "blocked",
+    "width": 390,
+    "theme": "dark",
+    "card": true,
+    "cardWidth": 366,
+    "overflowing": [],
+    "options": [
+      {
+        "id": "allow_once",
+        "h": 44,
+        "disabled": true
+      },
+      {
+        "id": "reject_once",
+        "h": 44,
+        "disabled": true
+      }
+    ],
+    "band": {
+      "kind": "blocked",
+      "text": "送っていません。この許可の確認には、ここからはもう送れません。Orca で答えてください"
+    },
+    "notice": null,
+    "reason": null,
+    "open": true,
+    "query": false,
+    "scrollWidth": 390,
+    "innerWidth": 390
+  }
+]

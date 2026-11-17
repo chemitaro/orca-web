@@ -16,7 +16,7 @@ steps: {
 		title:    "端末の許可の確認の同一性と正規化、承認のキー、門・アダプター・サービス・記録・HTTP の口（D-01〜D-05）"
 		text:     "対象：`src/transcript/terminal-approval.ts`（新）、`src/transcript/normalize.ts`、`src/send/keys.ts`、`src/send/target.ts`、`src/orca/send-gates.ts`、`src/orca/send.ts`、`src/send/service.ts`、`src/send/ticket.ts`、`src/send/journal.ts`、`src/send/model.ts`（要れば）、`src/server/app.ts` と、`test/transcript/terminal-approval.test.ts`（新）、`test/transcript/normalize.test.ts`、`test/send/keys.test.ts`、`test/send/target.test.ts`、`test/orca/send-gates.test.ts`、`test/orca/send.test.ts`、`test/send/service.test.ts`（または承認の答えのテスト）、`test/send/journal.test.ts`、`test/server/*.test.ts`（承認の HTTP の口のテスト）。確かめ：T-01〜T-08。完了：`npm run lint`、`npm test`、`npm run build` が通り、T-01〜T-08 のテストがあり、今の端末の承認の正規化のテストは、promptId・options・answerable の期待値を変えるほかは変えずに通る。実装担当 impl の手順で、区切りのレビュー CP-1 の最後の手順。止まって HEAD を報告する"
 		realizes: ["R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "F-01", "F-02", "F-03", "F-04"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -24,7 +24,7 @@ steps: {
 		text:     "対象：`web/embed/approval-view.js`、`web/embed/approval-dom.js`、`web/embed/agent-view.js`、`web/embed/agent-frame.js`、`web/embed/agent.css` と、`test/web/approval-view.test.ts`、`test/web/approval-dom.test.ts`、`test/web/agent-view.test.ts`、`test/web/agent-css.test.ts`。`web/embed/question-view.js` の契約と export、`open-control*.js`、`agent-marks*.js` は使うだけで変えない。確かめ：T-09〜T-12。完了：`node --test test/web/*.test.ts`、`npm run lint`、`npm test`、`npm run build` が通り、T-09〜T-12 のテストがある。描画の確かめは、実装担当が自分で起動した orca-web（一時の port、一時の settings、偽の Orca の会話と偽の送信の口。実物の Orca には書き込まない）とヘッドレスの Chrome（`--disable-features=MacAppCodeSignClone`、CDP の Browser.close で閉じる）で、幅 1280px と 390px、明暗で、端末の承認のカード（押せる形、押せない形と理由、送った後、結果不明の帯、押し直せない形）が横にはみ出さず、選択肢の高さが 44px 以上であることを DOM で数え、写しを `.workbench/implement/iss-00054/render/` に置く。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-02", "R-03", "R-04", "R-05", "R-06", "R-07"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "ui"
 	}
 	"S-03": {
@@ -32,7 +32,7 @@ steps: {
 		text:     "タスク担当が行う。D-07 のとおり。確かめ：T-13。完了：README.md と AGENTS.md に端末の承認の答えがあり、report.md の Verification に描画の写しの場所、試しの画面での確かめ、本人の確かめの手順と残る危険があり、`npm run lint`、`npm test`、`npm run build` が通る。試しの画面は本人が見られるように動かしたまま報告する"
 		realizes: ["R-02", "R-07"]
 		after:    ["S-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }
