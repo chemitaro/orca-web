@@ -126,7 +126,7 @@ export function renderApprovalCard(doc, view, { open = false, detailOpen = false
     band.dataset.option = view.confirm.optionId;
     band.append(make(doc, 'p', view.confirm.note, 'approval-confirm-note'));
     const actions = make(doc, 'div', null, 'question-actions');
-    const yes = button(doc, 'persist-confirm', 'approval-confirm-yes', false);
+    const yes = button(doc, 'persist-confirm', 'approval-confirm-yes', view.confirm.disabled === true);
     yes.textContent = `${view.confirm.label}で答える`;
     const no = button(doc, 'persist-cancel', 'approval-confirm-no', false);
     no.textContent = 'やめる';

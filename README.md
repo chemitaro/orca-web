@@ -191,7 +191,7 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 - カード：見出し、問い、選択肢（ラベルと説明）、複数選べるかの印、その他の自由入力の欄、「答える」。複数問は1枚に並ぶ。答え済みは選んだ答えを示して閉じ、取り消された質問は「取り消されました」と示して閉じる。選択肢は縦に並ぶ全幅のボタンで、狭い枠や 390px でも押せる。
 - 構造化 Chat（Orca のチャットのタブ）の質問は、カードから答えられる。Orca のチャットの画面と同じ RPC `agentSession.respondToQuestion`（項目の itemId と revision の比較つき）で1回だけ送る。単一選択は1つ（その他の文を選ぶと選択を外す）、複数選択は1つ以上、全部の問いに答えがあるときだけ「答える」が押せる。
 - 端末のエージェント（Claude と Codex）の質問は、Orca 自身（デスクトップとモバイル）が打ち込むのと同じキーの列（数字、矢印、Enter、Tab、その他の文の貼り付け）を、Orca と同じ間（1組ごとに 1000ms）で `terminal.send` で1組ずつ送って答える。列は Orca v1.4.261 の `buildAskAnswerKeys`（Claude）と `buildCodexAskAnswerKeys`（Codex）を写した `src/send/keys.ts`。全部の問いに答えがあるときだけ送る。Codex の複数選択と preview の問い、2桁の番号になる問いは答えない（理由と「Orca で開く」）。その他の文は1行で、制御文字を含められない。
-  - 送る前に確かめる：会話の記録で同じ callId のツールの結果がないこと、タブの agentStatus（state が waiting か blocked、toolName、interactivePrompt）が同じ質問を出していること、前面のプロセスがそのエージェントであること、同じ質問に前に送り始めた記録がないこと。どれかが外れたら1組も送らない。
+  - 送る前に確かめる：会話の記録で同じ callId のツールの結果がないこと、タブの agentStatus（state が waiting か blocked、toolName、interactivePrompt）が同じ質問を出していること、前面のプロセスがそのエージェントであること、同じ質問に前に送り始めた記録がないこと。どれかが外れたら1組も送らない。1組目を含む各組の直前にも、前面のプロセスと画面の質問を読み直し、外れたらそこで止める。
   - 送る途中で組が受けられないか届いたか分からなければ、それ以上送らず、「途中まで送りました（届いたか分かりません）。Orca で確かめてください」と「Orca で開く」を出す。送り始めた質問には、結果によらず二度と送らない（記録から分かるので、起動し直しても同じ）。
   - Orca の画面で同じ質問を途中まで答えた（1問目だけ答えた、行を動かした、文を書きかけた）ことは見分けられない。カードの注に従い、その質問は Orca で続ける。
   - 実機で未確認の前提：画面がその質問を出しているかは、`session.tabs.listAll` のタブの agentStatus の `interactivePrompt` と `toolName`（Orca のソースの型にある）で確かめる。質問を待つ端末のタブでこれが出ることは、実機ではまだ確かめていない。出ない Orca では、端末の質問にはいつも「端末がこの質問を出しているか確かめられません」（`prompt_unverified`）と示し、1組も送らずに止まる（送ったと示さない）。
@@ -199,6 +199,8 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 - Codex の `request_user_input_async`（すぐ受付を返し、答えを後の発言で受ける質問。端末と構造化 Chat の両方）は、Orca の `formatAskAnswer` と同じ形の発言（答えた問いごとに『> 問い』、空行、答え）を、今の送信の経路で1回送って答える。後の利用者の発言にその引用が現れたら答え済みにする。
 - 承認は次の節。
 - 答えられないとき（`sendEnabled` が偽、Orca が答えの能力 `agent-session.question-answers.v1` を持たない、宛先が送れない状態）は、カードは読めるが押せず、理由を1行で示す。
+- 送る流れ：意図は 30 秒、確定は 60 秒（キーの列は組の間を空けるので 5 分）で時間切れにする。意図の時間切れは送っていないとして押し直せ、確定の時間切れは結果不明（キーの列は「途中まで送りました」の形）にする。確定の応答が 5xx で、送る前の拒みと分かる識別子（`unsupported`・`unknown_shape`・`unreachable`・`record_failed`・`record_unreadable`）でなければ（`internal_error` など）、押し直せる形にせず結果不明にする。
+- その他の文は1つ 64KiB まで（Orca と同じ）。答えの口の本文は 640KiB まで受け、画面は答えの JSON が 512KiB を超えるときは送らず「答えが長すぎます（その他の文の合計を短くしてください）」と示す。
 - 答える手段は `answerVia` で選ぶ（`web/embed/question-view.js` の `answererFor`：構造化 Chat の手段、キーの列と後の発言の手段 `createCallAnswerer`）。
 
 答えの API（送信と同じ守り：同じオリジンの JSON と短期のトークン、CORS なし、`sendEnabled`）：
@@ -207,7 +209,7 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
   端末と後の発言の質問は `{agent, callId, answers, target?}`（prompt と callId はちょうど片方）。会話の記録から callId の質問を読み、上の確かめを通ったら票を返す。拒みの理由は `question_gone`・`question_answered`・`prompt_mismatch`（409 `target_changed`）、`already_sent`・`prompt_unverified`・`prompt_unsupported`・`agent_keys_unknown`・`chat_route`（409 `not_sendable`）など。
 - `POST /api/answer/confirm`：`{ticket, answers}`。宛先、質問、答えの digest を確かめ直し、送る前の記録を書いてから1回だけ送る。結果は送信と同じ5つ（Orca が答えを付けたら submitted、`agent_session_already_resolved` などで拒めば refused）。
 - 照会は送信と同じ `GET /api/send/<操作の ID>?check=1`。質問の今の状態を読み、記録の答えと同じ答えが付いていれば submitted、別の答えなら refused（`resolved_by_other`）、まだ未回答なら unknown（`prompt_pending`）。自動で送り直さない。
-- 送れるかの口 `GET /api/send/status` は `answer`（構造化 Chat の RPC）、`answerKeys`（キーの列）、`answerMessage`（後の発言）をそれぞれ `{available, reason}` で返す。
+- 送れるかの口 `GET /api/send/status` は `answer`（構造化 Chat の RPC）、`answerKeys`（キーの列）、`answerMessage`（後の発言）をそれぞれ `{available, reason}` で返す。`answerKeys` は、Orca が method_not_found を返した RPC のうち、キーの列が使うもの（`terminal.send`・`terminal.agentStatus`・`terminal.inspectProcess` など）だけで止まる（今の送信の照会の `orchestration.requestShow` では止まらない）。
 - キーの列の結果：全部の組が受けられたら `input_accepted`（`keys_sent`）、1組目が拒まれたら refused（`not_sent`）、1組目が届いたか分からなければ unknown（`unconfirmed`）、途中で止まれば unknown（`partial_sent`）。detail に送った組の数 `sentGroups` と全部の数 `totalGroups` が付く。照会は会話の記録の今の状態だけを読み（答え済みなら `resolved_unverified`）、送り直さない。
 - 記録：答えの送る前の行は `action: "answer"`、`mode`（keys・message。構造化 Chat の rpc の行は mode を持たない）、itemId と revision か callId、問いの数、答えの digest、組の数だけを持ち、答えの中身（選んだ id、ラベル、その他の文、キー、発言の文）を書かない。
 
@@ -217,8 +219,8 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 
 - カード：題、道具、説明、理由、要るパス、計画の本文と計画のファイル、操作の中身（長ければ下見と「詳しく」）、選択肢のボタン（ラベルと説明、最初の選択肢が主）。答え済みは選んだ選択肢を示して閉じ、取り消されたものは「取り消されました」と示して閉じる。
 - 構造化 Chat の承認は、カードから答えられる。Orca のチャットの画面と同じ RPC `agentSession.respondToApproval`（itemId と revision の比較つき、optionId）で1回だけ送る。
-- 「常に許可」「常に拒否」のように後の確認を省く選択（intent が `allow_always`・`reject_always`）は、押すと確かめの段（何が以後省かれるかの1行と「<ラベル> で答える」「やめる」）を出し、確かめて初めて送る。サーバーも `confirmPersistent: true` のない意図ではその選択肢を受けない。
-- 端末のエージェントの許可の確認（Claude Code の permission prompt など）は、タブの agentStatus の `interactivePrompt` から道具と要約を読み、会話の最後にカードで出す（待っている間だけ）。答えるボタンは出さず、「端末のエージェントの許可は、Orca で答えてください」と「Orca で開く」を出す。端末への答え（キーの列）は後の Issue。
+- 「常に許可」「常に拒否」のように後の確認を省く選択（intent が `allow_always`・`reject_always`）は、押すと確かめの段（何が以後省かれるかの1行と「<ラベル> で答える」「やめる」）を出し、確かめて初めて送る。サーバーも `confirmPersistent: true` のない意図ではその選択肢を受けない。確かめの段にいる間に送れなくなれば（`sendEnabled` が偽など）、「<ラベル> で答える」は押せず理由を示す（「やめる」は押せる）。
+- 端末のエージェントの許可の確認（Claude Code の permission prompt など）は、タブの agentStatus の `interactivePrompt` から道具と要約を読み、会話の最後にカードで出す（待っている間だけ。タブの今のセッションが読んでいる会話のセッションと同じときだけ付け、切り替え直後の古い会話には付けない）。答えるボタンは出さず、「端末のエージェントの許可は、Orca で答えてください」と「Orca で開く」を出す。端末への答え（キーの列）は後の Issue。
 - URL を開く承認と、この版の知らない種類の承認は読むだけ（「Orca で答えてください」と「Orca で開く」）。
 - 答えられないとき（`sendEnabled` が偽、Orca が承認の能力を持たない、宛先が送れない状態）は、カードは読めるが押せず、理由を1行で示す。
 

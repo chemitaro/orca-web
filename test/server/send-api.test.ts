@@ -523,7 +523,7 @@ test('T-10 答えの口は、同じオリジンの JSON とトークンのない
         ['POST', JSON.stringify(good), { 'content-type': 'text/plain' }, 415, 'unsupported_media_type'],
         ['POST', JSON.stringify(good), { origin: 'http://evil.example' }, 403, 'origin_rejected'],
         ['POST', JSON.stringify(good), { 'x-orca-web-token': 'bad' }, 401, 'token_invalid'],
-        ['POST', 'x'.repeat(131073), {}, 413, 'payload_too_large'],
+        ['POST', 'x'.repeat(640 * 1024 + 1), {}, 413, 'payload_too_large'],
         ['POST', '{', {}, 400, 'invalid_request'],
         ['POST', JSON.stringify({ ...good, extra: true }), {}, 400, 'invalid_request'],
         ['POST', JSON.stringify({ ...good, text: 'x' }), {}, 400, 'invalid_request'],
@@ -552,6 +552,51 @@ test('T-10 答えの口は、同じオリジンの JSON とトークンのない
     }
     for (const bad of [{ ticket: '', answers: [] }, { ticket: 't' }, { answers: [] }]) {
       assert.equal((await send('/api/answer/confirm', 'POST', JSON.stringify(bad))).status, 400);
+    }
+  });
+  assert.deepEqual(calls, []);
+});
+
+// ---- 答えの口の本文の上限（iss-00055 D-04、T-02） ----
+
+/** 64KiB（逃がしで長くなる `"` を多く含む）のその他を4つ持つ答え。JSON で 128KiB を超え 640KiB 以下。 */
+function longAnswers() {
+  const other = '"'.repeat(16 * 1024) + 'あ'.repeat(16 * 1024);
+  return [1, 2, 3, 4].map((n) => ({ questionId: `q${n}`, optionIds: [], other }));
+}
+
+test('T-02 答えの意図と確定は、64KiB のその他を4つ持つ本文を 413 にせずサービスに渡し、640KiB を超える本文を 413 にする', async () => {
+  const calls: unknown[] = [];
+  const answers = longAnswers();
+  const intentBody = JSON.stringify({ ...answerBody, answers });
+  const confirmBody = JSON.stringify({ ticket: 'ticket', answers });
+  for (const body of [intentBody, confirmBody]) {
+    const bytes = Buffer.byteLength(body);
+    assert.ok(bytes > 128 * 1024 && bytes <= 640 * 1024, String(bytes));
+  }
+  await withApp({ send: answerService(calls) }, async (send) => {
+    assert.equal((await send('/api/answer/intent', 'POST', intentBody)).status, 200);
+    assert.equal((await send('/api/answer/confirm', 'POST', confirmBody)).status, 200);
+    for (const path of ['/api/answer/intent', '/api/answer/confirm']) {
+      const over = await send(path, 'POST', JSON.stringify({ pad: 'x'.repeat(640 * 1024) }));
+      assert.equal(over.status, 413, path);
+      assert.equal(over.body.error, 'payload_too_large');
+    }
+  });
+  assert.deepEqual(
+    calls.map((c) => (c as unknown[])[0]),
+    ['answerIntent', 'answerConfirm'],
+  );
+});
+
+test('T-02 送信と承認の口は、128KiB を超える本文を今のとおり 413 にする', async () => {
+  const calls: unknown[] = [];
+  const body = JSON.stringify({ ...answerBody, answers: longAnswers() });
+  await withApp({ send: { ...answerService(calls), ...approvalService(calls) } }, async (send) => {
+    for (const path of ['/api/send/intent', '/api/send/confirm', '/api/approval/intent', '/api/approval/confirm']) {
+      const result = await send(path, 'POST', body);
+      assert.equal(result.status, 413, path);
+      assert.equal(result.body.error, 'payload_too_large');
     }
   });
   assert.deepEqual(calls, []);

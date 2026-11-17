@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createTranscriptReader, sessionKey, type TranscriptTarget } from '../../src/orca/read-transcript.ts';
+import {
+  createTranscriptReader,
+  sessionKey,
+  type TranscriptTarget,
+  terminalPromptFromTabs,
+} from '../../src/orca/read-transcript.ts';
 import { READ_METHODS, ReadOnlyRpc } from '../../src/orca/rpc.ts';
 import {
   CHAT_TAB,
@@ -366,5 +371,46 @@ test('T-02 agentStatus のないタブは3つの値を undefined にせず null 
   };
   const read = await r.read(t, { limit: 40 });
   assert.ok(read.ok);
+  assert.equal(read.page.terminalPrompt, null);
+});
+
+// ---- 端末の承認の付け先は今のセッションだけ（iss-00055 D-01、T-01） ----
+
+test('T-01 terminalPromptFromTabs は、タブの providerSession.id が sessionId と同じときだけ3つの項目を返す', () => {
+  const inv = waitingInventory({ state: 'blocked', interactivePrompt: APPROVAL_PROMPT, stateStartedAt: 7 });
+  assert.deepEqual(terminalPromptFromTabs(inv, PANE_CLAUDE, SESSION_CLAUDE), {
+    state: 'blocked',
+    interactivePrompt: APPROVAL_PROMPT,
+    stateStartedAt: 7,
+  });
+  assert.equal(terminalPromptFromTabs(inv, PANE_CLAUDE, SESSION_CODEX), null, '違うセッション');
+  const tab = () => inv.snapshots[0]?.tabs[0] as { agentStatus: Record<string, unknown> };
+  tab().agentStatus.providerSession = { key: 'session_id' };
+  assert.equal(terminalPromptFromTabs(inv, PANE_CLAUDE, SESSION_CLAUDE), null, 'id がない');
+  tab().agentStatus.providerSession = { id: 42 };
+  assert.equal(terminalPromptFromTabs(inv, PANE_CLAUDE, SESSION_CLAUDE), null, 'id が文字でない');
+  delete tab().agentStatus.providerSession;
+  assert.equal(terminalPromptFromTabs(inv, PANE_CLAUDE, SESSION_CLAUDE), null, 'providerSession がない');
+});
+
+test('T-01 nativeChat の最新のページは、タブが別のセッションに移っていると terminalPrompt を添えない', async () => {
+  const rpc = fakeOrca();
+  let now = 0;
+  const r = createTranscriptReader({
+    rpc: new ReadOnlyRpc(rpc),
+    capabilities: async () => capabilities(),
+    now: () => now,
+  });
+  const t = await target(r, PANE_CLAUDE);
+  now += 5_000;
+  rpc.handlers['session.tabs.listAll'] = () => {
+    const inv = tabsInventory({ claudeSession: 'dddddddd-4444-4444-8444-444444444444' });
+    const tab = inv.snapshots[0]?.tabs[0] as { agentStatus: Record<string, unknown> };
+    tab.agentStatus = { ...tab.agentStatus, state: 'blocked', interactivePrompt: APPROVAL_PROMPT, stateStartedAt: 1 };
+    return ok(inv);
+  };
+  const read = await r.read(t, { limit: 40 });
+  assert.ok(read.ok);
+  assert.equal(t.sessionId, SESSION_CLAUDE);
   assert.equal(read.page.terminalPrompt, null);
 });

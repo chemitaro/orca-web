@@ -73,9 +73,14 @@ function terminalAgentId(tab: Record<string, unknown>): string | null {
 
 /**
  * タブの集合の中から、agentId の端末のタブの agentStatus の state・interactivePrompt・stateStartedAt の3つだけを取る。
- * タブも agentStatus もなければ、また一覧の形が違えば null。ほかの項目は写さない。
+ * タブも agentStatus もなければ、タブの `providerSession.id` が sessionId と違うか読めなければ（別のセッションに移った）、
+ * また一覧の形が違えば null。ほかの項目は写さない。
  */
-export function terminalPromptFromTabs(listAll: unknown, agentId: string): TerminalPromptStatus | null {
+export function terminalPromptFromTabs(
+  listAll: unknown,
+  agentId: string,
+  sessionId: string,
+): TerminalPromptStatus | null {
   if (!isRecord(listAll) || !Array.isArray(listAll.snapshots)) return null;
   for (const snap of listAll.snapshots) {
     if (!isRecord(snap) || !Array.isArray(snap.tabs)) return null;
@@ -83,6 +88,7 @@ export function terminalPromptFromTabs(listAll: unknown, agentId: string): Termi
       if (!isRecord(tab) || tab.type !== 'terminal' || terminalAgentId(tab) !== agentId) continue;
       const status = tab.agentStatus;
       if (!isRecord(status)) return null;
+      if (!isRecord(status.providerSession) || status.providerSession.id !== sessionId) return null;
       return {
         state: status.state,
         interactivePrompt: status.interactivePrompt,
@@ -243,7 +249,7 @@ export function createTranscriptReader(deps: {
         if (!o.ok) return { ok: false, error: rpcError(o) };
         const parsed = parseNativePage(o.result);
         if (!parsed.ok || tabs === null) return parsed;
-        const terminalPrompt = tabs.ok ? terminalPromptFromTabs(tabs.result, target.agentId) : null;
+        const terminalPrompt = tabs.ok ? terminalPromptFromTabs(tabs.result, target.agentId, target.sessionId) : null;
         return { ok: true, page: { ...parsed.page, terminalPrompt } };
       }
       const params: Record<string, unknown> = {
