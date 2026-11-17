@@ -28,6 +28,7 @@ ID: "iss-00055"
   - 合格した文書の sha256：requirement.cue `b3e9d3581cf364a512834855242a265f20acd64b1256be6c831e5c99f9f056e5`、design.cue `168fa2588ba9b812207878977be9426b8a40e96d9d73bf3fc3c49e15948937a7`、plan.cue `4fe2066835a226004444ec64548fdbb51de0f4b5bf767465d9607dad5b546382`（コードの HEAD は 253a1a6）。
   - round-1：合格（P2 2件：新しい長さの確かめが後の発言の 16KB の言葉を出す、T-10 が実機で出せないカードを前提にする。P3 2件）。P2 を直して確かめ直した（`review-response.md`）。
   - round-2：合格、指摘なし。
+- 最終品質ゲート（キャンペーン `.workbench/final-quality-gate/iss-00055-fqg/`、範囲 `253a1a6..9bb76fa`）：attempt 1 で合格。合格のコミット `9bb76fa6c2a608392db89c41a4061fa5b0811b01`。主のレビュー（quality-gate-reviewer、Opus 5.5 / medium）pass、P0〜P3 0、coverage_complete。2人目 ChatGPT GPT-6 / Extra High（chatgpt-code-review-strict、GitHub の SHA の一致を確かめた）pass、findings 0。テスト lint 0・test 1027/1027・build 0。closure：`artifacts/closure.md`。記録だけのコミットはない。
 - 範囲の知らせ：iss-00048 の P3（FQG-01）と P2-d は範囲外として外す。統括の了承（2026-11-18、msg_ba0601d1f97d）。
 
 ## Verification
@@ -44,3 +45,8 @@ ID: "iss-00055"
 - S-01・S-02 のコミットの文は git-autocommit の生成のまま。
 
 ## Residual Risks / Follow-ups
+
+- iss-00048 の P3（FQG-01：空を許すその他に空の文で答えた質問の要約が「（答えなし）」）は扱っていない（範囲外、統括の了承）。
+- 端末のキーの列の確定の時間切れ 5 分を超えて Orca の読みが遅いとき、届いたのに「途中まで送りました」と示しうる（押し直せない形なので安全側）。
+- 並行の iss-00054 が approval-view.js と src/send/ を触る。先にマージされたら、こちらを取り込み直してテストとゲートをやり直す。
+- 承認の確かめの段の押せない形は、実物の Orca では出せず、偽の会話の試しの orca-web で確かめた（iss-00050 と同じ理由）。
