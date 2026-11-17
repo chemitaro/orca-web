@@ -1,0 +1,212 @@
+{
+  "1280-light": {
+    "viewport": 1280,
+    "docScrollWidth": 1280,
+    "docClientWidth": 1280,
+    "pageOverflowX": 0,
+    "mdBubbles": 2,
+    "plainUserBubbles": 1,
+    "links": [
+      {
+        "href": "https://github.com/stablyai/orca",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      },
+      {
+        "href": "https://example.com/a/very/long/path/that/keeps/going/and/going/without/any/break/at/all",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      }
+    ],
+    "scripts": 0,
+    "tags": {
+      "h1": 1,
+      "h2": 1,
+      "h3": 1,
+      "h4": 1,
+      "p": 12,
+      "ul": 4,
+      "ol": 1,
+      "li": 9,
+      "blockquote": 1,
+      "pre": 1,
+      "table": 1,
+      "th": 6,
+      "td": 12,
+      "hr": 1,
+      "strong": 1,
+      "em": 1,
+      "del": 1,
+      "code": 2,
+      "input": 2
+    },
+    "scrollers": [
+      "pre 1917>1118"
+    ],
+    "nonScrollingOverflow": [],
+    "preOverflowX": "auto",
+    "tableOverflowX": "auto",
+    "preUserSelect": "auto",
+    "bubbleBg": "rgb(244, 246, 248)",
+    "textColor": "rgb(28, 34, 48)",
+    "bodyBg": "rgb(255, 255, 255)"
+  },
+  "1280-dark": {
+    "viewport": 1280,
+    "docScrollWidth": 1280,
+    "docClientWidth": 1280,
+    "pageOverflowX": 0,
+    "mdBubbles": 2,
+    "plainUserBubbles": 1,
+    "links": [
+      {
+        "href": "https://github.com/stablyai/orca",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      },
+      {
+        "href": "https://example.com/a/very/long/path/that/keeps/going/and/going/without/any/break/at/all",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      }
+    ],
+    "scripts": 0,
+    "tags": {
+      "h1": 1,
+      "h2": 1,
+      "h3": 1,
+      "h4": 1,
+      "p": 12,
+      "ul": 4,
+      "ol": 1,
+      "li": 9,
+      "blockquote": 1,
+      "pre": 1,
+      "table": 1,
+      "th": 6,
+      "td": 12,
+      "hr": 1,
+      "strong": 1,
+      "em": 1,
+      "del": 1,
+      "code": 2,
+      "input": 2
+    },
+    "scrollers": [
+      "pre 1917>1118"
+    ],
+    "nonScrollingOverflow": [],
+    "preOverflowX": "auto",
+    "tableOverflowX": "auto",
+    "preUserSelect": "auto",
+    "bubbleBg": "rgb(29, 33, 42)",
+    "textColor": "rgb(230, 233, 239)",
+    "bodyBg": "rgb(17, 19, 24)"
+  },
+  "390-light": {
+    "viewport": 390,
+    "docScrollWidth": 390,
+    "docClientWidth": 390,
+    "pageOverflowX": 0,
+    "mdBubbles": 2,
+    "plainUserBubbles": 1,
+    "links": [
+      {
+        "href": "https://github.com/stablyai/orca",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      },
+      {
+        "href": "https://example.com/a/very/long/path/that/keeps/going/and/going/without/any/break/at/all",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      }
+    ],
+    "scripts": 0,
+    "tags": {
+      "h1": 1,
+      "h2": 1,
+      "h3": 1,
+      "h4": 1,
+      "p": 12,
+      "ul": 4,
+      "ol": 1,
+      "li": 9,
+      "blockquote": 1,
+      "pre": 1,
+      "table": 1,
+      "th": 6,
+      "td": 12,
+      "hr": 1,
+      "strong": 1,
+      "em": 1,
+      "del": 1,
+      "code": 2,
+      "input": 2
+    },
+    "scrollers": [
+      "pre 1917>313",
+      "div.md-table 948>315"
+    ],
+    "nonScrollingOverflow": [],
+    "preOverflowX": "auto",
+    "tableOverflowX": "auto",
+    "preUserSelect": "auto",
+    "bubbleBg": "rgb(244, 246, 248)",
+    "textColor": "rgb(28, 34, 48)",
+    "bodyBg": "rgb(255, 255, 255)"
+  },
+  "390-dark": {
+    "viewport": 390,
+    "docScrollWidth": 390,
+    "docClientWidth": 390,
+    "pageOverflowX": 0,
+    "mdBubbles": 2,
+    "plainUserBubbles": 1,
+    "links": [
+      {
+        "href": "https://github.com/stablyai/orca",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      },
+      {
+        "href": "https://example.com/a/very/long/path/that/keeps/going/and/going/without/any/break/at/all",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      }
+    ],
+    "scripts": 0,
+    "tags": {
+      "h1": 1,
+      "h2": 1,
+      "h3": 1,
+      "h4": 1,
+      "p": 12,
+      "ul": 4,
+      "ol": 1,
+      "li": 9,
+      "blockquote": 1,
+      "pre": 1,
+      "table": 1,
+      "th": 6,
+      "td": 12,
+      "hr": 1,
+      "strong": 1,
+      "em": 1,
+      "del": 1,
+      "code": 2,
+      "input": 2
+    },
+    "scrollers": [
+      "pre 1917>313",
+      "div.md-table 948>315"
+    ],
+    "nonScrollingOverflow": [],
+    "preOverflowX": "auto",
+    "tableOverflowX": "auto",
+    "preUserSelect": "auto",
+    "bubbleBg": "rgb(29, 33, 42)",
+    "textColor": "rgb(230, 233, 239)",
+    "bodyBg": "rgb(17, 19, 24)"
+  }
+}

@@ -1,0 +1,190 @@
+{
+  "1280-light": {
+    "viewport": 1280,
+    "docScrollWidth": 1265,
+    "docClientWidth": 1265,
+    "pageOverflowX": 0,
+    "mdBubbles": 2,
+    "plainUserBubbles": 1,
+    "links": [
+      {
+        "href": "https://example.com/",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      }
+    ],
+    "scripts": 0,
+    "tags": {
+      "h1": 0,
+      "h2": 1,
+      "h3": 3,
+      "h4": 0,
+      "p": 19,
+      "ul": 5,
+      "ol": 1,
+      "li": 14,
+      "blockquote": 1,
+      "pre": 1,
+      "table": 1,
+      "th": 4,
+      "td": 12,
+      "hr": 0,
+      "strong": 1,
+      "em": 1,
+      "del": 1,
+      "code": 2,
+      "input": 4
+    },
+    "scrollers": [
+      "pre 2110>1104"
+    ],
+    "nonScrollingOverflow": [],
+    "preOverflowX": "auto",
+    "tableOverflowX": "auto",
+    "preUserSelect": "auto",
+    "bubbleBg": "rgb(244, 246, 248)",
+    "textColor": "rgb(28, 34, 48)",
+    "bodyBg": "rgb(255, 255, 255)"
+  },
+  "1280-dark": {
+    "viewport": 1280,
+    "docScrollWidth": 1265,
+    "docClientWidth": 1265,
+    "pageOverflowX": 0,
+    "mdBubbles": 2,
+    "plainUserBubbles": 1,
+    "links": [
+      {
+        "href": "https://example.com/",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      }
+    ],
+    "scripts": 0,
+    "tags": {
+      "h1": 0,
+      "h2": 1,
+      "h3": 3,
+      "h4": 0,
+      "p": 19,
+      "ul": 5,
+      "ol": 1,
+      "li": 14,
+      "blockquote": 1,
+      "pre": 1,
+      "table": 1,
+      "th": 4,
+      "td": 12,
+      "hr": 0,
+      "strong": 1,
+      "em": 1,
+      "del": 1,
+      "code": 2,
+      "input": 4
+    },
+    "scrollers": [
+      "pre 2110>1104"
+    ],
+    "nonScrollingOverflow": [],
+    "preOverflowX": "auto",
+    "tableOverflowX": "auto",
+    "preUserSelect": "auto",
+    "bubbleBg": "rgb(29, 33, 42)",
+    "textColor": "rgb(230, 233, 239)",
+    "bodyBg": "rgb(17, 19, 24)"
+  },
+  "390-light": {
+    "viewport": 390,
+    "docScrollWidth": 390,
+    "docClientWidth": 390,
+    "pageOverflowX": 0,
+    "mdBubbles": 2,
+    "plainUserBubbles": 1,
+    "links": [
+      {
+        "href": "https://example.com/",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      }
+    ],
+    "scripts": 0,
+    "tags": {
+      "h1": 0,
+      "h2": 1,
+      "h3": 3,
+      "h4": 0,
+      "p": 19,
+      "ul": 5,
+      "ol": 1,
+      "li": 14,
+      "blockquote": 1,
+      "pre": 1,
+      "table": 1,
+      "th": 4,
+      "td": 12,
+      "hr": 0,
+      "strong": 1,
+      "em": 1,
+      "del": 1,
+      "code": 2,
+      "input": 4
+    },
+    "scrollers": [
+      "pre 2110>313"
+    ],
+    "nonScrollingOverflow": [],
+    "preOverflowX": "auto",
+    "tableOverflowX": "auto",
+    "preUserSelect": "auto",
+    "bubbleBg": "rgb(244, 246, 248)",
+    "textColor": "rgb(28, 34, 48)",
+    "bodyBg": "rgb(255, 255, 255)"
+  },
+  "390-dark": {
+    "viewport": 390,
+    "docScrollWidth": 390,
+    "docClientWidth": 390,
+    "pageOverflowX": 0,
+    "mdBubbles": 2,
+    "plainUserBubbles": 1,
+    "links": [
+      {
+        "href": "https://example.com/",
+        "target": "_blank",
+        "rel": "noopener noreferrer"
+      }
+    ],
+    "scripts": 0,
+    "tags": {
+      "h1": 0,
+      "h2": 1,
+      "h3": 3,
+      "h4": 0,
+      "p": 19,
+      "ul": 5,
+      "ol": 1,
+      "li": 14,
+      "blockquote": 1,
+      "pre": 1,
+      "table": 1,
+      "th": 4,
+      "td": 12,
+      "hr": 0,
+      "strong": 1,
+      "em": 1,
+      "del": 1,
+      "code": 2,
+      "input": 4
+    },
+    "scrollers": [
+      "pre 2110>313"
+    ],
+    "nonScrollingOverflow": [],
+    "preOverflowX": "auto",
+    "tableOverflowX": "auto",
+    "preUserSelect": "auto",
+    "bubbleBg": "rgb(29, 33, 42)",
+    "textColor": "rgb(230, 233, 239)",
+    "bodyBg": "rgb(17, 19, 24)"
+  }
+}
