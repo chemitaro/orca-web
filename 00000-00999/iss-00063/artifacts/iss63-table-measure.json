@@ -1,0 +1,54 @@
+{
+  "1280-light": {
+    "found": true,
+    "cols": 3,
+    "rows": 3,
+    "cellsHavePipe": true,
+    "cellsHaveBackslashPipe": false,
+    "codeTexts": [
+      5,
+      2,
+      2
+    ],
+    "docOverflow": 0
+  },
+  "1280-dark": {
+    "found": true,
+    "cols": 3,
+    "rows": 3,
+    "cellsHavePipe": true,
+    "cellsHaveBackslashPipe": false,
+    "codeTexts": [
+      5,
+      2,
+      2
+    ],
+    "docOverflow": 0
+  },
+  "390-light": {
+    "found": true,
+    "cols": 3,
+    "rows": 3,
+    "cellsHavePipe": true,
+    "cellsHaveBackslashPipe": false,
+    "codeTexts": [
+      5,
+      2,
+      2
+    ],
+    "docOverflow": 0
+  },
+  "390-dark": {
+    "found": true,
+    "cols": 3,
+    "rows": 3,
+    "cellsHavePipe": true,
+    "cellsHaveBackslashPipe": false,
+    "codeTexts": [
+      5,
+      2,
+      2
+    ],
+    "docOverflow": 0
+  }
+}
