@@ -675,6 +675,142 @@ li.row.question {
   margin-top: 8px;
 }
 
+/* 承認のカード（iss-00050 D-06）。枠と選択肢は質問のカードの規則を使い、ここでは差分だけを足す：
+   題、文脈（説明・理由・要るパス）、detail と計画の等幅の塊（折り返し、長ければ枠の中で送る）、主の選択肢、常に許可の確かめの段。
+   色は --chat-*（SpecDock の --ds-*・--sd-* を先に使う）、角丸と等幅の字は var(--ds-…, 既定)。 */
+li.row.approval {
+  align-items: stretch;
+}
+
+.approval-title {
+  flex: 1 1 100%;
+  min-width: 0;
+  margin: 0;
+  font-weight: 700;
+  white-space: pre-wrap;
+}
+
+.approval-context {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--chat-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.approval-context > p,
+.approval-plan > p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.approval-label {
+  color: var(--chat-text);
+  font-weight: 600;
+}
+
+.approval-mono,
+.approval-detail,
+.approval-plan-text {
+  font-family: var(--ds-font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+}
+
+.approval-detail,
+.approval-plan-text {
+  max-width: 100%;
+  margin: 0;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow: auto;
+  color: var(--chat-text);
+  background: var(--chat-surface);
+  border: 1px solid var(--chat-border);
+  border-radius: var(--ds-radius-s, 4px);
+  font-size: 12px;
+}
+
+.approval-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.approval-more-summary {
+  cursor: pointer;
+  color: var(--chat-accent);
+  font-size: 12px;
+}
+
+.approval-more[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.approval-more[open] + .approval-detail-preview {
+  display: none;
+}
+
+.approval-card .question-option[data-primary="true"] {
+  border-color: var(--chat-accent);
+}
+
+.approval-card .question-option[data-primary="true"] .question-option-label {
+  color: var(--chat-accent);
+}
+
+.approval-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--chat-accent);
+  border-radius: var(--ds-radius, 6px);
+  background: var(--chat-user-bg);
+}
+
+.approval-confirm-note {
+  margin: 0;
+  color: var(--chat-text);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.approval-confirm-yes,
+.approval-confirm-no {
+  flex: 1 1 10em;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 14px;
+  white-space: normal;
+  border-radius: var(--ds-radius, 6px);
+  font-weight: 700;
+}
+
+.approval-confirm-yes {
+  color: var(--chat-on-accent);
+  background: var(--chat-accent);
+  border: 1px solid var(--chat-accent);
+}
+
+.approval-confirm-no {
+  color: var(--chat-text);
+  background: var(--chat-bg);
+  border: 1px solid var(--chat-border-strong);
+}
+
+.question-closed > .approval-context,
+.question-closed > .approval-options {
+  margin-top: 8px;
+}
+
 /* 送る欄（D-05）。知らせの欄の下に、角の丸い入力の箱（入力欄と送るボタン）。幅 390px でも横にはみ出さない。 */
 #send {
   flex: none;

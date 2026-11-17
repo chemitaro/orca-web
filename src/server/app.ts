@@ -158,6 +158,8 @@ const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?:
     '/embed/send-dom.js': { file: 'embed/send-dom.js', type: 'text/javascript; charset=utf-8' },
     '/embed/question-view.js': { file: 'embed/question-view.js', type: 'text/javascript; charset=utf-8' },
     '/embed/question-dom.js': { file: 'embed/question-dom.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/approval-view.js': { file: 'embed/approval-view.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/approval-dom.js': { file: 'embed/approval-dom.js', type: 'text/javascript; charset=utf-8' },
     '/embed/agent-marks.js': { file: 'embed/agent-marks.js', type: 'text/javascript; charset=utf-8', cors: 'read' },
     '/embed/agent-marks-view.js': {
       file: 'embed/agent-marks-view.js',
