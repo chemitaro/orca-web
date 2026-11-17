@@ -1,0 +1,58 @@
+[
+  {
+    "width": 1280,
+    "scheme": "light",
+    "file": "terminal-approval-partial-500-1280-light.png",
+    "exceptions": 0,
+    "consoleErrors": 0,
+    "bandText": "届いたか分かりません。Orca で確かめてください",
+    "openButtons": 1,
+    "optionsDisabled": true,
+    "unknownBand": 0,
+    "overflow": 0,
+    "docScroll": false,
+    "cardWidth": 1256
+  },
+  {
+    "width": 1280,
+    "scheme": "dark",
+    "file": "terminal-approval-partial-500-1280-dark.png",
+    "exceptions": 0,
+    "consoleErrors": 0,
+    "bandText": "届いたか分かりません。Orca で確かめてください",
+    "openButtons": 1,
+    "optionsDisabled": true,
+    "unknownBand": 0,
+    "overflow": 0,
+    "docScroll": false,
+    "cardWidth": 1256
+  },
+  {
+    "width": 390,
+    "scheme": "light",
+    "file": "terminal-approval-partial-500-390-light.png",
+    "exceptions": 0,
+    "consoleErrors": 0,
+    "bandText": "届いたか分かりません。Orca で確かめてください",
+    "openButtons": 1,
+    "optionsDisabled": true,
+    "unknownBand": 0,
+    "overflow": 0,
+    "docScroll": false,
+    "cardWidth": 366
+  },
+  {
+    "width": 390,
+    "scheme": "dark",
+    "file": "terminal-approval-partial-500-390-dark.png",
+    "exceptions": 0,
+    "consoleErrors": 0,
+    "bandText": "届いたか分かりません。Orca で確かめてください",
+    "openButtons": 1,
+    "optionsDisabled": true,
+    "unknownBand": 0,
+    "overflow": 0,
+    "docScroll": false,
+    "cardWidth": 366
+  }
+]
