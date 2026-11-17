@@ -803,3 +803,19 @@ test('iss-00049：keys のその他の文に Tab・改行などの制御文字�
   const rpc = chatPart([question({ allowOther: true })]);
   assert.equal(buildAnswers(rpc, typed(rpc, 'a\tb')).ok, true, 'rpc は Tab を許す');
 });
+
+test('FQG3-2 createCallAnswerer：callId が空でない文字でない質問は unknown_shape の言葉と「Orca で開く」で押せない', () => {
+  const writer = { send: async () => ({ status: 500, body: {} }) };
+  for (const mode of ['keys', 'message'] as const) {
+    const answerer = createCallAnswerer({ agentId: 'a1', writer, mode });
+    const part = mode === 'keys' ? keysPart : messagePart;
+    for (const callId of [null, '', 3]) {
+      assert.deepEqual(
+        answerer.availability(part({ callId }), keysStatus()),
+        { ok: false, reason: QUESTION_REASONS.unknown_shape, open: true },
+        `${mode} ${JSON.stringify(callId)}`,
+      );
+    }
+    assert.deepEqual(answerer.availability(part(), keysStatus()), { ok: true });
+  }
+});

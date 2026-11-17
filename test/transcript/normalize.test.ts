@@ -1209,3 +1209,20 @@ test('FQG3 端末の role user の件のうち、Orca の from.kind が agent �
   const assistant = normalizeNativeMessages([{ ...user({ from: { kind: 'agent' } }), role: 'assistant' }])?.[0];
   assert.equal(assistant && 'fromAgent' in assistant, false);
 });
+
+test('FQG3-2 構造化 Chat の message の role user で body.from.kind が agent の件に fromAgent: true を付ける', () => {
+  const item = (from: unknown, role = 'user') => ({
+    itemId: 'm',
+    sequence: 1,
+    body: { kind: 'message', role, blocks: [{ type: 'text', text: 'x' }], ...(from === undefined ? {} : { from }) },
+  });
+  assert.equal(normalizeJournalItems([item({ kind: 'agent', id: 'a' })])?.[0]?.fromAgent, true);
+  for (const [from, role] of [
+    [undefined, 'user'],
+    [{ kind: 'user' }, 'user'],
+    [{ kind: 'agent' }, 'assistant'],
+  ] as const) {
+    const m = normalizeJournalItems([item(from, role)])?.[0];
+    assert.equal(m && 'fromAgent' in m, false, JSON.stringify([from, role]));
+  }
+});

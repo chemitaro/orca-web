@@ -566,6 +566,8 @@ export function createCallAnswerer(deps) {
   return {
     /** status は GET /api/send/status の本体、読めなければ 'failed'、まだなら null。 */
     availability(part, status) {
+      // callId のない質問は、答えの口（/api/answer/intent の callId）で指せない。
+      if (!isText(part?.callId)) return { ok: false, reason: QUESTION_REASONS.unknown_shape, open: true };
       if (status === null || status === undefined) return { ok: false, reason: QUESTION_REASONS.loading };
       if (!isRecord(status)) return cannot(QUESTION_REASONS.status_unavailable);
       if (status.enabled !== true) return cannot(QUESTION_REASONS.send_disabled);

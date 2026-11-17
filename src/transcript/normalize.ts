@@ -136,7 +136,7 @@ export interface TranscriptMessage {
   parts: TranscriptPart[];
   /** 端末の利用者の発言で、まだ届いていないもの（Orca の isDeliveredNativeChatUserMessage に当たらない）。後の発言の質問の答えに数えない。 */
   undelivered?: true;
-  /** 端末の role user の件のうち、Orca の from.kind が agent のもの（ほかのエージェントからの発言）。利用者の答えに数えない。 */
+  /** role user の件のうち、Orca の from.kind が agent のもの（ほかのエージェントからの発言。端末と構造化 Chat）。利用者の答えに数えない。 */
   fromAgent?: true;
 }
 
@@ -855,7 +855,9 @@ export function normalizeJournalItems(items: readonly unknown[]): TranscriptMess
     if (kind === 'message') {
       if (body.role === 'reasoning') continue;
       const { role, parts } = messageOf(body.role, Array.isArray(body.blocks) ? body.blocks : [], shortened);
-      if (parts.length) out.push({ id, role, at, parts });
+      // ほかのエージェントからの発言（from.kind agent）は利用者の答えに数えない。
+      const fromAgent = role === 'user' && isRecord(body.from) && body.from.kind === 'agent';
+      if (parts.length) out.push({ id, role, at, parts, ...(fromAgent ? { fromAgent: true as const } : {}) });
       continue;
     }
     if (kind === 'tool-call') {

@@ -855,7 +855,12 @@ export class SendService {
     // 送り始めた答えは、結果によらず二度と送らない（起動し直した後は記録の before の行から分かる）。
     this.#startedCalls.add(`${target.agentId}\u0000${call.callId}`);
     const result = plan.groups
-      ? await this.#deps.adapter.answerKeys(target as TerminalSendTarget, plan.groups, this.#deps.sleep ?? realSleep)
+      ? await this.#deps.adapter.answerKeys(
+          target as TerminalSendTarget,
+          plan.groups,
+          question.part.questions,
+          this.#deps.sleep ?? realSleep,
+        )
       : target.route === 'terminal'
         ? await this.#deps.adapter.sendTerminal(target, plan.text as string, operationId)
         : await this.#deps.adapter.sendChat(target, plan.text as string, operationId, plan.checked.fence as number);

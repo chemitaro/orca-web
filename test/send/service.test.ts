@@ -2596,3 +2596,30 @@ test('FQG3 ほかのエージェントからの引用の発言は利用者の答
   assert.ok(confirmed.ok);
   assert.equal(f.writes().length, 1);
 });
+
+test('FQG3-2 構造化 Chat の request_user_input_async の後の、ほかのエージェントの引用の発言では拒まず送る', async (t) => {
+  const c = await callFixture(t);
+  const items = normalizeJournalItems([
+    {
+      itemId: 't',
+      sequence: 1,
+      body: { kind: 'tool-call', name: 'request_user_input_async', input: ASYNC_INPUT, callId: CALL },
+    },
+    {
+      itemId: 'u',
+      sequence: 2,
+      body: {
+        kind: 'message',
+        role: 'user',
+        from: { kind: 'agent', id: 'other-agent' },
+        blocks: [{ type: 'text', text: '> 仮の後の問い\n\nラベル秘密A' }],
+      },
+    },
+  ]);
+  assert.ok(items);
+  c.setTranscript({ ok: true, messages: items });
+  const intent = await c.service.answerIntent({ agent: CHAT_AGENT, callId: CALL, answers: PICK_ANSWERS });
+  assert.ok(intent.ok, JSON.stringify(intent));
+  assert.ok((await c.service.answerConfirm({ ticket: intent.ticket, answers: PICK_ANSWERS })).ok);
+  assert.equal(c.writes().length, 1);
+});

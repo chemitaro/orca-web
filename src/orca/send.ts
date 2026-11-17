@@ -4,6 +4,8 @@ import { answerForm, digestAnswers, type QuestionAnswer } from '../send/answer.t
 import { digestOption } from '../send/approval.ts';
 import { ANSWER_STEP_MS } from '../send/keys.ts';
 import type { ChatSendTarget, TerminalSendTarget } from '../send/model.ts';
+import { promptMatches } from '../send/question-state.ts';
+import { terminalPromptOf } from '../send/target.ts';
 import {
   type ApprovalOptionView,
   type JournalQuestionAnswer,
@@ -360,20 +362,25 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
     async answerKeys(
       target: TerminalSendTarget,
       groups: readonly string[],
+      questions: readonly QuestionView[],
       sleep: (ms: number) => Promise<void>,
     ): Promise<SendResult> {
       const totalGroups = groups.length;
       let sentGroups = 0;
+      const stopped = (): SendResult =>
+        sentGroups > 0
+          ? { outcome: 'unknown', detail: { code: 'partial_sent', sentGroups, totalGroups } }
+          : { outcome: 'refused', detail: { code: 'not_sent', sentGroups, totalGroups } };
       for (const [index, bytes] of groups.entries()) {
         if (index > 0) {
           await sleep(ANSWER_STEP_MS);
           // 組の間にエージェントが終わると、残りの文と Enter がシェルに届く。送る直前に前面を読み直し、違えば止める。
           const foreground = await readForeground(target.handle, target.incarnationId, target.agentType);
-          if (!foreground.ok || foreground.isShell || !foreground.matchesAgent)
-            return sentGroups > 0
-              ? { outcome: 'unknown', detail: { code: 'partial_sent', sentGroups, totalGroups } }
-              : { outcome: 'unknown', detail: { code: 'unconfirmed', sentGroups, totalGroups } };
+          if (!foreground.ok || foreground.isShell || !foreground.matchesAgent) return stopped();
         }
+        // 各組の直前に、宛先のペインがまだ同じ質問を出しているかを読み直す（答えられた・取り消された・変わったら止める）。
+        const tabs = await rpc.call('session.tabs.listAll', {});
+        if (!tabs.ok || promptMatches(terminalPromptOf(tabs.result, target), questions) !== 'match') return stopped();
         const { ack, code } = await sendGroup(target, bytes);
         if (ack === 'accepted') {
           sentGroups += 1;

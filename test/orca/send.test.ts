@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { RpcOutcome } from '../../src/orca/rpc.ts';
 import * as send from '../../src/orca/send.ts';
-import { terminalTarget } from '../send/fixture.ts';
+import { parseTerminalQuestions } from '../../src/transcript/normalize.ts';
+import { inventory, terminalTab, terminalTarget } from '../send/fixture.ts';
 
 const ok = (result: unknown): RpcOutcome => ({ ok: true, result, runtimeId: 'runtime-test' });
 test('つながる前の失敗だけは送っていないと分かる', () => {
@@ -710,8 +711,29 @@ test('T-05 checkAnswer は今の状態を読むだけで結果を返し、送ら
 
 // ---- キーの組の送信（iss-00049 D-04、T-07） ----
 
-/** outcomes は terminal.send の結果の順。前面の読み（terminal.inspectProcess）は foregrounds の順、なければ宛先と同じ codex。 */
-function keyRpc(outcomes: RpcOutcome[], foregrounds: RpcOutcome[] = []) {
+const KEY_PROMPT = JSON.stringify({ questions: [{ question: '仮の問い', options: ['甲', '乙'] }] });
+const KEY_QUESTIONS = parseTerminalQuestions(KEY_PROMPT)?.questions ?? [];
+const promptTabs = (status: Record<string, unknown> = {}) =>
+  ok(
+    inventory([
+      {
+        ...terminalTab(),
+        agentStatus: {
+          agentType: 'codex',
+          providerSession: { id: 'session-terminal-test' },
+          state: 'waiting',
+          toolName: 'AskUserQuestion',
+          interactivePrompt: KEY_PROMPT,
+          ...status,
+        },
+      },
+    ]),
+  );
+/**
+ * outcomes は terminal.send の結果の順。前面の読み（terminal.inspectProcess）は foregrounds の順、なければ宛先と同じ codex。
+ * タブの読み（session.tabs.listAll）は listAlls の順、なければ宛先のペインが KEY_QUESTIONS を出している一覧。
+ */
+function keyRpc(outcomes: RpcOutcome[], foregrounds: RpcOutcome[] = [], listAlls: RpcOutcome[] = []) {
   const calls: { method: string; params: unknown; options: unknown }[] = [];
   const inspects: unknown[] = [];
   const order: string[] = [];
@@ -722,6 +744,7 @@ function keyRpc(outcomes: RpcOutcome[], foregrounds: RpcOutcome[] = []) {
         inspects.push(params);
         return foregrounds.shift() ?? ok({ process: { foregroundProcess: 'codex' } });
       }
+      if (method === 'session.tabs.listAll') return listAlls.shift() ?? promptTabs();
       calls.push({ method, params, options });
       const next = outcomes.shift();
       assert.ok(next, 'no more outcomes');
@@ -785,7 +808,7 @@ test('T-07 answerKeys：組の間に 1000ms を待ち、前の結果の後に次
   const { adapter, calls } = keyRpc(outcomes);
   const rpc = (adapter as unknown as { sendKeyGroup: unknown }).sendKeyGroup;
   assert.ok(rpc);
-  const result = await adapter.answerKeys(terminalTarget(), ['1', '仮', '\r'], async (ms) => {
+  const result = await adapter.answerKeys(terminalTarget(), ['1', '仮', '\r'], KEY_QUESTIONS, async (ms) => {
     log.push(`sleep:${ms}:${calls.length}`);
   });
   assert.deepEqual(result, { outcome: 'input_accepted', detail: { code: 'keys_sent', sentGroups: 3, totalGroups: 3 } });
@@ -819,7 +842,10 @@ test('T-07 answerKeys：1組目 refused は refused（not_sent）、1組目 unkn
   ] as [RpcOutcome, send.SendResult][]) {
     const log: string[] = [];
     const { adapter, calls } = keyRpc([first]);
-    assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], sleeper(log)), expected);
+    assert.deepEqual(
+      await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], KEY_QUESTIONS, sleeper(log)),
+      expected,
+    );
     assert.equal(calls.length, 1);
     assert.deepEqual(log, []);
   }
@@ -833,14 +859,14 @@ test('T-07 answerKeys：2組目以降で止まれば unknown（partial_sent）�
     { ok: false, kind: 'unavailable', message: 'private' } as RpcOutcome,
   ]) {
     const { adapter, calls } = keyRpc([settled('accepted'), second]);
-    assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '2', '3', '\r'], sleeper([])), {
+    assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '2', '3', '\r'], KEY_QUESTIONS, sleeper([])), {
       outcome: 'unknown',
       detail: { code: 'partial_sent', sentGroups: 1, totalGroups: 4 },
     });
     assert.equal(calls.length, 2);
   }
   const { adapter, calls } = keyRpc([settled('accepted'), settled('accepted'), settled('refused', false)]);
-  assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '2', '3', '\r'], sleeper([])), {
+  assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '2', '3', '\r'], KEY_QUESTIONS, sleeper([])), {
     outcome: 'unknown',
     detail: { code: 'partial_sent', sentGroups: 2, totalGroups: 4 },
   });
@@ -1034,7 +1060,7 @@ test('T-05 checkApproval は今の状態を読むだけで結果を返し、送�
 
 test('D-04 answerKeys：writeSettlement のない受け取りは1組目で unconfirmed として止め、次を送らない', async () => {
   const { adapter, calls } = keyRpc([ok({ send: { accepted: true } }), settled('accepted')]);
-  assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '\r'], sleeper([])), {
+  assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '\r'], KEY_QUESTIONS, sleeper([])), {
     outcome: 'unknown',
     detail: { code: 'unconfirmed', sentGroups: 0, totalGroups: 2 },
   });
@@ -1044,7 +1070,7 @@ test('D-04 answerKeys：writeSettlement のない受け取りは1組目で uncon
 test('FQG3 answerKeys：2組目からは待ちの後、送る直前に前面を読み直し、同じなら全部送る', async () => {
   const log: string[] = [];
   const { adapter, calls, inspects, order } = keyRpc([settled('accepted'), settled('accepted'), settled('accepted')]);
-  const result = await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], async (ms) => {
+  const result = await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], KEY_QUESTIONS, async (ms) => {
     log.push(`sleep:${ms}`);
     order.push('sleep');
   });
@@ -1055,12 +1081,15 @@ test('FQG3 answerKeys：2組目からは待ちの後、送る直前に前面を�
     { terminal: 'term_test', expectedIncarnationId: 'inc-test' },
   ]);
   assert.deepEqual(order, [
+    'session.tabs.listAll',
     'terminal.send',
     'sleep',
     'terminal.inspectProcess',
+    'session.tabs.listAll',
     'terminal.send',
     'sleep',
     'terminal.inspectProcess',
+    'session.tabs.listAll',
     'terminal.send',
   ]);
 });
@@ -1078,7 +1107,7 @@ test('FQG3 answerKeys：2組目の前に前面がシェル・別のプロセス�
   ]) {
     const { adapter, calls } = keyRpc([settled('accepted'), settled('accepted'), settled('accepted')], [foreground]);
     assert.deepEqual(
-      await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], sleeper([])),
+      await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], KEY_QUESTIONS, sleeper([])),
       { outcome: 'unknown', detail: { code: 'partial_sent', sentGroups: 1, totalGroups: 3 } },
       JSON.stringify(foreground),
     );
@@ -1089,9 +1118,38 @@ test('FQG3 answerKeys：2組目の前に前面がシェル・別のプロセス�
     [settled('accepted'), settled('accepted'), settled('accepted')],
     [ok({ process: { foregroundProcess: 'codex' } }), ok({ process: { foregroundProcess: 'zsh' } })],
   );
-  assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], sleeper([])), {
+  assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], KEY_QUESTIONS, sleeper([])), {
     outcome: 'unknown',
     detail: { code: 'partial_sent', sentGroups: 2, totalGroups: 3 },
   });
   assert.equal(calls.length, 2);
+});
+
+test('FQG3-2 answerKeys：各組の前に宛先のペインの問いを読み直し、2組目の前に外れたら、その組から先を送らず partial_sent', async () => {
+  for (const changed of [
+    promptTabs({ interactivePrompt: undefined }),
+    promptTabs({ interactivePrompt: JSON.stringify({ questions: [{ question: '別の問い', options: ['a'] }] }) }),
+    promptTabs({ state: 'working' }),
+    { ok: false, kind: 'timeout', message: 'private' } as RpcOutcome,
+    ok({ nope: 1 }),
+  ]) {
+    const { adapter, calls } = keyRpc([settled('accepted'), settled('accepted')], [], [promptTabs(), changed]);
+    assert.deepEqual(
+      await adapter.answerKeys(terminalTarget(), ['1', '\r'], KEY_QUESTIONS, sleeper([])),
+      { outcome: 'unknown', detail: { code: 'partial_sent', sentGroups: 1, totalGroups: 2 } },
+      JSON.stringify(changed).slice(0, 80),
+    );
+    assert.equal(calls.length, 1, '2組目以降の terminal.send は0回');
+  }
+});
+
+test('FQG3-2 answerKeys：1組目の前に問いが外れたら1組も送らず refused（not_sent）', async () => {
+  for (const changed of [promptTabs({ interactivePrompt: undefined }), promptTabs({ state: 'done' })]) {
+    const { adapter, calls } = keyRpc([settled('accepted')], [], [changed]);
+    assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1'], KEY_QUESTIONS, sleeper([])), {
+      outcome: 'refused',
+      detail: { code: 'not_sent', sentGroups: 0, totalGroups: 1 },
+    });
+    assert.equal(calls.length, 0);
+  }
 });
