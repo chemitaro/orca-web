@@ -336,3 +336,23 @@ test('iss-00054 T-11：押せる端末の承認のカードは2つの選択肢�
   assert.ok(openControl);
   assert.equal(byClass(root, 'approval-band').length, 0);
 });
+
+test('iss-00055 T-05：送れないときの確かめの段は「<ラベル>で答える」が disabled で理由が出て、「やめる」は押せる。ok なら押せる', () => {
+  const p = part();
+  const state = choose(initialApprovalState(), p, 'always').state;
+  const off = renderCard(
+    buildApprovalCard(p, { key: 'k', state, availability: { ok: false, reason: '送信が無効' } }),
+  ).root;
+  const band = byClass(off, 'approval-confirm')[0];
+  assert.ok(band);
+  const yes = band.all().find((e) => e.dataset.action === 'persist-confirm');
+  const no = band.all().find((e) => e.dataset.action === 'persist-cancel');
+  assert.equal(yes?.textContent, '常に許可で答える');
+  assert.equal(yes?.disabled, true);
+  assert.equal(no?.disabled, false);
+  assert.equal(byClass(off, 'question-reason')[0]?.textContent, '送信が無効');
+  const on = renderCard(buildApprovalCard(p, { key: 'k', state, availability: { ok: true } })).root;
+  const onYes = on.all().find((e) => e.dataset.action === 'persist-confirm');
+  assert.equal(onYes?.disabled, false);
+  assert.equal(byClass(on, 'question-reason').length, 0);
+});

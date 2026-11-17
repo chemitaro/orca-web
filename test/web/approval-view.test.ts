@@ -227,6 +227,7 @@ test('T-12：確かめの段は選択肢のラベルと1行を持ち、選択肢
     optionId: 'always',
     label: '常に許可',
     note: '以後、同じ種類の確認が省かれ、自動で許可されます（Bash）',
+    disabled: false,
   });
   assert.ok(view.options.every((o: Any) => o.disabled));
 });
@@ -701,4 +702,130 @@ test('iss-00054 T-10：板の流れ：done は知らせ、partial は帯で押�
   assert.equal(fresh.confirm, null);
   // 構造化 Chat の押せるカードは今のまま開くを出さない。
   assert.equal(buildApprovalCard(chatPart(), { availability: OK }).open, false);
+});
+
+// ---- iss-00055（S-02）：確かめの段の押せない形、確定の 5xx、時間切れ ----
+
+test('iss-00055 T-05：確かめの段の confirm は、送れない（availability が ok でないか answerable が偽）とき disabled 真で理由を持ち、ok に戻ると押せる', () => {
+  const state = choose(initialApprovalState(), chatPart(), 'always').state;
+  const off = buildApprovalCard(chatPart(), {
+    state,
+    availability: { ok: false, reason: APPROVAL_REASONS.send_disabled },
+  });
+  assert.equal(off.confirm?.optionId, 'always');
+  assert.equal(off.confirm?.disabled, true);
+  assert.equal(off.reasonText, APPROVAL_REASONS.send_disabled);
+  const unanswerable = buildApprovalCard(chatPart({ answerable: false }), { state, availability: OK });
+  assert.equal(unanswerable.confirm?.disabled, true);
+  const loading = buildApprovalCard(chatPart(), { state });
+  assert.equal(loading.confirm?.disabled, true);
+  assert.equal(loading.reasonText, APPROVAL_REASONS.loading);
+  const on = buildApprovalCard(chatPart(), { state, availability: OK });
+  assert.equal(on.confirm?.disabled, false);
+  assert.equal(on.reasonText, null);
+});
+
+/** 外から決められる応答。 */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+const settle = () => new Promise((r) => setImmediate(r));
+const INTENT = { status: 200, body: { ok: true, ticket: 't1', operationId: 'op-1' } };
+
+test('iss-00055 T-06：承認の確定が 500 internal_error なら結果不明、503 record_failed・409 target_changed は refused', async () => {
+  const run = async (status: number, body: Any) => {
+    const replies: Any[] = [INTENT, { status, body }];
+    let sends = 0;
+    const approver = createChatApprover({
+      agentId: 'a1',
+      writer: {
+        send: async () => {
+          sends++;
+          return replies.shift();
+        },
+      },
+    });
+    const result = await approver.submit(chatPart(), 'yes');
+    assert.equal(sends, 2, '送り直さない');
+    return result;
+  };
+  assert.deepEqual(await run(500, { ok: false, error: 'internal_error' }), { kind: 'unknown', operationId: 'op-1' });
+  assert.deepEqual(await run(503, { ok: false, error: 'record_failed' }), {
+    kind: 'refused',
+    reason: APPROVAL_REASONS.record_failed,
+  });
+  assert.deepEqual(await run(409, { ok: false, error: 'target_changed' }), {
+    kind: 'refused',
+    reason: APPROVAL_REASONS.target_changed,
+  });
+});
+
+test('iss-00055 T-07：承認の意図は 30 秒で refused network、確定は 60 秒で結果不明。後に届いた応答で変わらず、それぞれ1回だけ送る', async () => {
+  const clock = () => {
+    const timers: Array<{ fn: () => void; ms: number; cleared: boolean }> = [];
+    return {
+      timers,
+      setTimer: (fn: () => void, ms: number) => timers.push({ fn, ms, cleared: false }) - 1,
+      clearTimer: (id: number) => {
+        const t = timers[id];
+        if (t) t.cleared = true;
+      },
+      fire: () => {
+        const t = [...timers].reverse().find((x) => !x.cleared);
+        assert.ok(t);
+        t.cleared = true;
+        t.fn();
+      },
+    };
+  };
+  const late = deferred<Any>();
+  const sent: string[] = [];
+  const c1 = clock();
+  const approver1 = createChatApprover({
+    agentId: 'a1',
+    writer: {
+      send: (path: string) => {
+        sent.push(path);
+        return late.promise;
+      },
+    },
+    setTimer: c1.setTimer,
+    clearTimer: c1.clearTimer,
+  });
+  const p1 = approver1.submit(chatPart(), 'yes');
+  await settle();
+  assert.equal(c1.timers[0]?.ms, 30_000);
+  c1.fire();
+  assert.deepEqual(await p1, { kind: 'refused', reason: APPROVAL_REASONS.network });
+  late.resolve(INTENT);
+  await settle();
+  assert.deepEqual(sent, ['/api/approval/intent']);
+
+  const lateConfirm = deferred<Any>();
+  const replies: Array<Promise<Any> | Any> = [INTENT, lateConfirm.promise];
+  const sent2: string[] = [];
+  const c2 = clock();
+  const approver2 = createChatApprover({
+    agentId: 'a1',
+    writer: {
+      send: async (path: string) => {
+        sent2.push(path);
+        return replies.shift();
+      },
+    },
+    setTimer: c2.setTimer,
+    clearTimer: c2.clearTimer,
+  });
+  const p2 = approver2.submit(chatPart(), 'yes');
+  await settle();
+  assert.equal(c2.timers[1]?.ms, 60_000);
+  c2.fire();
+  assert.deepEqual(await p2, { kind: 'unknown', operationId: 'op-1' });
+  lateConfirm.resolve({ status: 200, body: { ok: true, outcome: 'submitted', detail: {} } });
+  await settle();
+  assert.deepEqual(sent2, ['/api/approval/intent', '/api/approval/confirm']);
 });

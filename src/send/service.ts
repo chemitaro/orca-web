@@ -77,6 +77,14 @@ const ANSWER_METHOD = 'agentSession.respondToQuestion';
 const APPROVAL_METHOD = 'agentSession.respondToApproval';
 /** キーの組の列を Orca が知っているエージェント（buildAskAnswerKeys・buildCodexAskAnswerKeys）。 */
 const KEY_AGENTS: ReadonlySet<string> = new Set(['claude', 'codex']);
+/** 端末のキーの組（answerKeys）が使う RPC。method_not_found で止めた RPC のうち、これだけがキーの組の門を止める。 */
+const KEYS_METHODS: ReadonlySet<string> = new Set([
+  'terminal.send',
+  'terminal.agentStatus',
+  'terminal.inspectProcess',
+  'session.tabs.listAll',
+  'nativeChat.readSession',
+]);
 /** 読んだ会話のセッション（端末は nativeChat とエージェントのセッション、構造化 Chat は agentSession とそのセッション）。 */
 export interface TranscriptSession {
   source: TranscriptSource;
@@ -227,7 +235,9 @@ export class SendService {
     if (blocked.length) return { ok: false, error: 'unsupported', missing: blocked.map((method) => `rpc:${method}`) };
     return null;
   }
-  #blockedFor(key: 'terminal' | 'chat' | 'answer' | 'approval'): string[] {
+  #blockedFor(key: 'terminal' | 'chat' | 'answer' | 'approval' | 'keys'): string[] {
+    // 端末のキーの組は、端末の経路で止めた RPC のうち、キーの組が使うものだけで止める。
+    if (key === 'keys') return [...(this.#blocked.get('terminal') ?? [])].filter((method) => KEYS_METHODS.has(method));
     // 答えは自分の RPC と、Chat の経路で止めた読み（agentSession.history）で止める。
     if (key === 'answer' || key === 'approval')
       return [
@@ -249,16 +259,14 @@ export class SendService {
       return { ok: false, error: 'not_sendable', reason: 'agent_keys_unknown' };
     if (mode === 'status' && target.route === 'terminal') {
       const send = this.#gate(cap, 'sendTerminal', this.#blockedFor('terminal'));
-      const keys = KEY_AGENTS.has(target.agentType)
-        ? this.#gate(cap, 'answerKeys', this.#blockedFor('terminal'))
-        : send;
+      const keys = KEY_AGENTS.has(target.agentType) ? this.#gate(cap, 'answerKeys', this.#blockedFor('keys')) : send;
       if (send && keys) return send;
     } else {
       const gate =
         mode === 'answer' || mode === 'approval'
           ? this.#gate(cap, ANSWER_FEATURES[mode], this.#blockedFor(mode))
           : mode === 'keys'
-            ? this.#gate(cap, 'answerKeys', this.#blockedFor('terminal'))
+            ? this.#gate(cap, 'answerKeys', this.#blockedFor('keys'))
             : this.#gate(
                 cap,
                 target.route === 'terminal' ? 'sendTerminal' : 'sendChat',
@@ -414,7 +422,7 @@ export class SendService {
         : null;
     const answerKeys: AnswerStatus = keysReason
       ? off(keysReason)
-      : this.#gate(cap, 'answerKeys', this.#blockedFor('terminal'))
+      : this.#gate(cap, 'answerKeys', this.#blockedFor('keys'))
         ? off('unsupported')
         : { available: true, reason: null };
     const sendReason = sendRefusal ? (sendRefusal.reason ?? sendRefusal.error) : null;

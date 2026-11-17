@@ -659,6 +659,12 @@ li.row.question {
   gap: 8px;
 }
 
+/* カードの「Orca で開く」は、ほかのボタンと同じ押せる高さ 44px にする（iss-00055 D-07）。共有の部品の大きさの表（open-control.css）は
+   変えず、この中だけで高さの変数を上書きする。アイコンと文字の大きさは md のまま。 */
+.question-foot .orca-open[data-size] {
+  --orca-open-height: 44px;
+}
+
 .question-submit {
   min-height: 44px;
   padding: 6px 18px;

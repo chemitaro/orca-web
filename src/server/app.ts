@@ -227,6 +227,8 @@ const isBoundedText = (value: unknown, max: number): value is string =>
 
 const MAX_ITEM_ID_CHARS = 1024;
 const MAX_TICKET_CHARS = 128 * 1024;
+/** 答えの口だけの本文の上限。問い4つ × その他 64KiB（JSON の逃がしで2倍まで）= 512KiB と、封筒の余り 128KiB。 */
+const MAX_ANSWER_BODY_BYTES = 640 * 1024;
 const ANSWER_INTENT = '/api/answer/intent';
 const ANSWER_CONFIRM = '/api/answer/confirm';
 const APPROVAL_INTENT = '/api/approval/intent';
@@ -518,7 +520,7 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
     }
     if (!service) return sendError(res, 503, 'unreachable');
     if (writing) {
-      const raw = await readBody(req, 128 * 1024);
+      const raw = await readBody(req, answering ? MAX_ANSWER_BODY_BYTES : 128 * 1024);
       if (raw === null) return reject(413, 'payload_too_large');
       let body: unknown;
       try {

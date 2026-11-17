@@ -1080,8 +1080,10 @@ test('FQG3 answerKeys：2組目からは待ちの後、送る直前に前面を�
   assert.deepEqual(inspects, [
     { terminal: 'term_test', expectedIncarnationId: 'inc-test' },
     { terminal: 'term_test', expectedIncarnationId: 'inc-test' },
+    { terminal: 'term_test', expectedIncarnationId: 'inc-test' },
   ]);
   assert.deepEqual(order, [
+    'terminal.inspectProcess',
     'session.tabs.listAll',
     'terminal.send',
     'sleep',
@@ -1106,7 +1108,10 @@ test('FQG3 answerKeys：2組目の前に前面がシェル・別のプロセス�
     { ok: false, kind: 'orca-error', code: 'method_not_found', message: 'private' } as RpcOutcome,
     { ok: false, kind: 'timeout', message: 'private' } as RpcOutcome,
   ]) {
-    const { adapter, calls } = keyRpc([settled('accepted'), settled('accepted'), settled('accepted')], [foreground]);
+    const { adapter, calls } = keyRpc(
+      [settled('accepted'), settled('accepted'), settled('accepted')],
+      [ok({ process: { foregroundProcess: 'codex' } }), foreground],
+    );
     assert.deepEqual(
       await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], KEY_QUESTIONS, sleeper([])),
       { outcome: 'unknown', detail: { code: 'partial_sent', sentGroups: 1, totalGroups: 3 } },
@@ -1117,13 +1122,49 @@ test('FQG3 answerKeys：2組目の前に前面がシェル・別のプロセス�
   // 3組目の前に変われば、受けた2組で止める
   const { adapter, calls } = keyRpc(
     [settled('accepted'), settled('accepted'), settled('accepted')],
-    [ok({ process: { foregroundProcess: 'codex' } }), ok({ process: { foregroundProcess: 'zsh' } })],
+    [
+      ok({ process: { foregroundProcess: 'codex' } }),
+      ok({ process: { foregroundProcess: 'codex' } }),
+      ok({ process: { foregroundProcess: 'zsh' } }),
+    ],
   );
   assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], KEY_QUESTIONS, sleeper([])), {
     outcome: 'unknown',
     detail: { code: 'partial_sent', sentGroups: 2, totalGroups: 3 },
   });
   assert.equal(calls.length, 2);
+});
+
+test('T-03 answerKeys：1組目の直前にも前面を読み、シェル・別のプロセス・読めないなら terminal.send を0回で refused（not_sent）', async () => {
+  for (const foreground of [
+    ok({ process: { foregroundProcess: '/bin/zsh' } }),
+    ok({ process: { foregroundProcess: 'python3' } }),
+    ok({ process: { foregroundProcess: 'claude' } }),
+    ok({ process: { foregroundProcess: null } }),
+    { ok: false, kind: 'orca-error', code: 'terminal_gone', message: 'private' } as RpcOutcome,
+    { ok: false, kind: 'timeout', message: 'private' } as RpcOutcome,
+  ]) {
+    const log: string[] = [];
+    const { adapter, calls, order } = keyRpc([settled('accepted'), settled('accepted')], [foreground]);
+    assert.deepEqual(
+      await adapter.answerKeys(terminalTarget(), ['1', '\r'], KEY_QUESTIONS, sleeper(log)),
+      { outcome: 'refused', detail: { code: 'not_sent', sentGroups: 0, totalGroups: 2 } },
+      JSON.stringify(foreground),
+    );
+    assert.equal(calls.length, 0, 'terminal.send は0回');
+    assert.deepEqual(order, ['terminal.inspectProcess'], '前面の読みで止め、問いも読まない');
+    assert.deepEqual(log, [], '1組目の前は待たない');
+  }
+});
+
+test('T-03 answerKeys：前面が合えば今のとおり全部送り、組の間の待ちは組の数 − 1 回', async () => {
+  const log: string[] = [];
+  const { adapter, calls, inspects } = keyRpc([settled('accepted'), settled('accepted'), settled('accepted')]);
+  const result = await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], KEY_QUESTIONS, sleeper(log));
+  assert.deepEqual(result, { outcome: 'input_accepted', detail: { code: 'keys_sent', sentGroups: 3, totalGroups: 3 } });
+  assert.equal(calls.length, 3);
+  assert.equal(inspects.length, 3, '各組の直前に1回ずつ');
+  assert.deepEqual(log, ['sleep:1000', 'sleep:1000']);
 });
 
 test('FQG3-2 answerKeys：各組の前に宛先のペインの問いを読み直し、2組目の前に外れたら、その組から先を送らず partial_sent', async () => {

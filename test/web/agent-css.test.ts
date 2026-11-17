@@ -380,3 +380,16 @@ test('iss-00054 T-12：承認の帯の規則は var(--ds-…, 既定) の角丸�
   assert.equal(text.get('min-width'), '0');
   assert.equal(text.get('margin'), '0');
 });
+
+test('iss-00055 T-09：カードの「Orca で開く」（.question-foot の中）は --orca-open-height 44px で、open-control.css の大きさの表は変わらない', () => {
+  const foot = only('.question-foot .orca-open[data-size]', (m) => m === null);
+  assert.equal(foot.get('--orca-open-height'), '44px');
+  assert.equal(foot.size, 1, '高さだけを上書きし、アイコンと文字は md のまま');
+  const openCss = strip(readFileSync(new URL('../../web/embed/open-control.css', import.meta.url), 'utf8'));
+  const openRules = parseRules(openCss);
+  const md = only('.orca-open[data-size="md"]', (m) => m === null, openRules);
+  assert.equal(md.get('--orca-open-height'), '28px');
+  const sm = only('.orca-open[data-size="sm"]', (m) => m === null, openRules);
+  assert.equal(sm.get('--orca-open-height'), '24px');
+  assert.ok(!/question-foot/.test(openCss), '共有の部品の CSS にカードの規則を足さない');
+});

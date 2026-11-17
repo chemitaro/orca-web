@@ -180,7 +180,13 @@ export function buildApprovalCard(part, options = {}) {
     })),
     confirm:
       pendingOption && editableFlow(flow)
-        ? { optionId: pendingOption.id, label: pendingOption.label, note: persistentNote(part, pendingOption) }
+        ? {
+            optionId: pendingOption.id,
+            label: pendingOption.label,
+            note: persistentNote(part, pendingOption),
+            // 送れないあいだは「<ラベル>で答える」を押せない形にする（理由は reasonText が出す。iss-00055 D-02）。
+            disabled: !(part.answerable === true && availability.ok === true),
+          }
         : null,
     summary: closed ? summaryOf(part) : null,
     notice: closed ? null : noticeOf(flow),
@@ -230,6 +236,8 @@ export function approverFor(part, approvers) {
  *   agentId: string,
  *   writer: { send: (path: string, method: 'POST', body: unknown) => Promise<{ status: number, body: any }> },
  *   read?: (url: string) => Promise<{ status: number, body: any }>,
+ *   timeouts?: { intentMs?: number, confirmMs?: number },
+ *   setTimer?: (fn: () => void, ms: number) => unknown, clearTimer?: (id: any) => void,
  * }} deps
  */
 export function createChatApprover(deps) {
@@ -263,6 +271,9 @@ export function createChatApprover(deps) {
         },
         confirmPath: '/api/approval/confirm',
         confirmBody: (ticket) => ({ ticket, optionId }),
+        timeouts: deps.timeouts,
+        setTimer: deps.setTimer,
+        clearTimer: deps.clearTimer,
       });
     },
     check: (operationId) => checkOperation(read, operationId, APPROVAL_REASONS),
