@@ -61,6 +61,16 @@ test('T-01 強調：太字・斜体・取り消し線・行内のコード、語
   assert.deepEqual(parseMarkdown('**`a**`'), [p(t('**'), { type: 'code', text: 'a**' })]);
 });
 
+test('T-01 行内のコード：中身の \\ は逃がしにせず、閉じの ` の前の \\ もコードの文字', () => {
+  assert.deepEqual(parseMarkdown('`a\\`'), [p({ type: 'code', text: 'a\\' })]);
+  assert.deepEqual(parseMarkdown('区切りは `\\` と `/`'), [
+    p(t('区切りは '), { type: 'code', text: '\\' }, t(' と '), { type: 'code', text: '/' }),
+  ]);
+  // 逃がした ` は開きにならない。逃がしの後に続く ` の並びは、残りの数で開く。
+  assert.deepEqual(parseMarkdown('\\`a\\` と `b`'), [p(t('`a` と '), { type: 'code', text: 'b' })]);
+  assert.deepEqual(parseMarkdown('\\``b`'), [p(t('`'), { type: 'code', text: 'b' })]);
+});
+
 test('T-01 柵のコード：``` と ~~~、言語、閉じのない塊、字下げを落とす', () => {
   assert.deepEqual(parseMarkdown('```ts extra\nconst a = 1;\n  b\n```\n後'), [
     { type: 'code', lang: 'ts', text: 'const a = 1;\n  b' },
@@ -356,6 +366,15 @@ test('T-03 9段以上の入れ子：8段より深い中身は解かずに文字�
   assert.ok(collect(parseMarkdown(em)).includes('b'));
 });
 
+test('T-03 表のセルの総数が入力の長さに比例する上限を超えたら、残りの行は段落の文字にする', () => {
+  const src = `${'|a'.repeat(12_500)}\n${'-|'.repeat(12_500)}\n${'|z\n'.repeat(20)}`;
+  const blocks = parseMarkdown(src);
+  assert.equal(blocks[0].type, 'table');
+  assert.equal(blocks[0].rows.length < 20, true);
+  assert.equal(blocks[blocks.length - 1].type, 'paragraph');
+  assert.equal((collect(blocks).match(/z/g) ?? []).length, 20);
+});
+
 test('T-03 病的な入力 100,000 字を、それぞれ 1 秒より短く解く', () => {
   const N = 100_000;
   const inputs: [string, string][] = [
@@ -376,6 +395,8 @@ test('T-03 病的な入力 100,000 字を、それぞれ 1 秒より短く解く
     ['~~ の並び', '~~a '.repeat(N / 4)],
     ['- の入れ子の並び', '- '.repeat(N / 2)],
     ['| の表', `|a|b|\n|-|-|\n${'|x|y|\n'.repeat(N / 6)}`],
+    ['広い見出しと | だけの行の表', `${'|a'.repeat(1000)}|\n${'|-'.repeat(1000)}|\n${'|\n'.repeat((N - 4002) / 2)}`],
+    ['とても広い見出しと | だけの行の表', `${'|a'.repeat(12_500)}\n${'-|'.repeat(12_500)}\n${'|\n'.repeat(25_000)}`],
     ['\\ の並び', '\\'.repeat(N)],
   ];
   for (const [name, src] of inputs) {

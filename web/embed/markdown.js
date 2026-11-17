@@ -56,7 +56,8 @@ export function safeHref(raw) {
 export function parseMarkdown(text) {
   if (typeof text !== 'string') return [];
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
-  return parseBlocks(lines, 0);
+  // 表のセルの総数の上限。入力の長さに比例させ、超えた行は表にせず段落の文字にする（R-03）。
+  return parseBlocks(lines, 0, { cells: text.length + 1000 });
 }
 
 // ---- 行の判定（行の頭の短い形だけを見る） ----
@@ -229,7 +230,7 @@ function startsBlock(lines, i, depth) {
 
 // ---- 塊 ----
 
-function parseBlocks(lines, depth) {
+function parseBlocks(lines, depth, ctx) {
   const blocks = [];
   let i = 0;
   const n = lines.length;
@@ -263,16 +264,16 @@ function parseBlocks(lines, depth) {
       continue;
     }
     if (depth < MAX_DEPTH && isQuote(line)) {
-      i = parseQuote(lines, i, depth, blocks);
+      i = parseQuote(lines, i, depth, ctx, blocks);
       continue;
     }
     if (depth < MAX_DEPTH && listStart(line)) {
-      i = parseList(lines, i, depth, blocks);
+      i = parseList(lines, i, depth, ctx, blocks);
       continue;
     }
     const table = tableAt(lines, i);
-    if (table) {
-      i = parseTable(lines, i, table, blocks);
+    if (table && ctx.cells >= table.align.length) {
+      i = parseTable(lines, i, table, ctx, blocks);
       continue;
     }
     const para = [stripLeading(line)];
@@ -286,7 +287,7 @@ function parseBlocks(lines, depth) {
   return blocks;
 }
 
-function parseQuote(lines, i, depth, blocks) {
+function parseQuote(lines, i, depth, ctx, blocks) {
   const inner = [];
   let fence = null;
   const n = lines.length;
@@ -308,11 +309,11 @@ function parseQuote(lines, i, depth, blocks) {
     inner.push(line);
     i++;
   }
-  blocks.push({ type: 'quote', children: parseBlocks(inner, depth + 1) });
+  blocks.push({ type: 'quote', children: parseBlocks(inner, depth + 1, ctx) });
   return i;
 }
 
-function parseList(lines, i, depth, blocks) {
+function parseList(lines, i, depth, ctx, blocks) {
   const first = listStart(lines[i] ?? '');
   if (!first) return i + 1;
   const list = { type: 'list', ordered: first.ordered, start: first.start, items: [] };
@@ -343,7 +344,7 @@ function parseList(lines, i, depth, blocks) {
       checked = task[1] !== ' ';
       itemLines[0] = (itemLines[0] ?? '').slice(task[0].length);
     }
-    list.items.push({ checked, children: parseBlocks(itemLines, depth + 1) });
+    list.items.push({ checked, children: parseBlocks(itemLines, depth + 1, ctx) });
     // 項目の間の空行の後に、同じ種類の印が続けば同じ list。
     let j = i;
     while (j < n && isBlank(lines[j] ?? '')) j++;
@@ -355,11 +356,13 @@ function parseList(lines, i, depth, blocks) {
   return i;
 }
 
-function parseTable(lines, i, table, blocks) {
+function parseTable(lines, i, table, ctx, blocks) {
   const width = table.align.length;
+  // 見出しの列の数に合わせる。足りないセルは解かずに空にし、多いセルは落とす。
   const fit = (cells) => {
+    ctx.cells -= width;
     const out = [];
-    for (let k = 0; k < width; k++) out.push(parseInline(cells[k] ?? ''));
+    for (let k = 0; k < width; k++) out.push(k < cells.length ? parseInline(cells[k] ?? '') : []);
     return out;
   };
   const head = fit(table.headCells);
@@ -367,7 +370,7 @@ function parseTable(lines, i, table, blocks) {
   i += 2;
   while (i < lines.length) {
     const line = lines[i] ?? '';
-    if (isBlank(line) || !line.includes('|')) break;
+    if (isBlank(line) || !line.includes('|') || ctx.cells < width) break;
     rows.push(fit(splitCells(line)));
     i++;
   }
@@ -387,38 +390,47 @@ function parseInline(src) {
   return merge(parseRange(st, 0, src.length, 0, false));
 }
 
-/** 逃がしていない `` ` `` の並びを、同じ数の並びと組む（数ごとの位置の一覧を前から使う）。 */
+/**
+ * 行内のコードの区間を決める。開きは逃がしていない `` ` `` の並び（`\\` の後の `` ` `` は開きにしない）で、
+ * 閉じは開きの後の、同じ数のちょうどの並び（中身では `\\` を普通の文字とする）。
+ * 並びの位置を数ごとの一覧にし、閉じを二分探索で探す。
+ */
 function codeSpans(s) {
-  const runs = [];
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] === '\\' && isPunct(s[i + 1])) i++;
-    else if (s[i] === '`') {
-      let k = i;
-      while (k < s.length && s[k] === '`') k++;
-      runs.push({ pos: i, len: k - i });
-      i = k - 1;
-    }
-  }
+  const runLen = new Map();
   const byLen = new Map();
-  runs.forEach((run, idx) => {
-    const list = byLen.get(run.len);
-    if (list) list.push(idx);
-    else byLen.set(run.len, [idx]);
-  });
-  const ptr = new Map();
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] !== '`') continue;
+    let k = i;
+    while (k < s.length && s[k] === '`') k++;
+    runLen.set(i, k - i);
+    const list = byLen.get(k - i);
+    if (list) list.push(i);
+    else byLen.set(k - i, [i]);
+    i = k - 1;
+  }
   const spans = new Map();
+  /** pos から len 個の並びで開き、閉じがあれば区間を覚えて閉じの後を、なければ開きの後を返す。 */
+  const open = (pos, len) => {
+    const list = byLen.get(len) ?? [];
+    let lo = 0;
+    let hi = list.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((list[mid] ?? 0) < pos + len) lo = mid + 1;
+      else hi = mid;
+    }
+    const close = list[lo];
+    if (close === undefined) return pos + len;
+    spans.set(pos, { from: pos + len, to: close, end: close + len });
+    return close + len;
+  };
   let i = 0;
-  while (i < runs.length) {
-    const run = runs[i];
-    const list = byLen.get(run.len);
-    let k = ptr.get(run.len) ?? 0;
-    while (k < list.length && list[k] <= i) k++;
-    ptr.set(run.len, k);
-    if (k < list.length) {
-      const j = list[k];
-      spans.set(run.pos, { from: run.pos + run.len, to: runs[j].pos, end: runs[j].pos + run.len });
-      i = j + 1;
-    } else i++;
+  while (i < s.length) {
+    if (s[i] === '\\' && isPunct(s[i + 1])) {
+      const len = s[i + 1] === '`' ? (runLen.get(i + 1) ?? 1) : 0;
+      i = len > 1 ? open(i + 2, len - 1) : i + 2;
+    } else if (s[i] === '`') i = open(i, runLen.get(i) ?? 1);
+    else i++;
   }
   return spans;
 }
