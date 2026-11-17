@@ -410,14 +410,22 @@ test('部品のファイルは固定の対応だけで返り、ほかのパス�
       ['/embed/open-control.js', 'text/javascript; charset=utf-8'],
       ['/embed/open-control-view.js', 'text/javascript; charset=utf-8'],
       ['/embed/open-control.css', 'text/css; charset=utf-8'],
+      ['/embed/markdown.js', 'text/javascript; charset=utf-8'],
+      ['/embed/markdown-dom.js', 'text/javascript; charset=utf-8'],
     ]) {
       const res = await h.send({ path: path as string });
       assert.equal(res.status, 200, path);
       assert.equal(res.headers['content-type'], type);
       assert.equal(res.headers['x-content-type-options'], 'nosniff');
     }
-    // 開くボタンの部品は同じオリジンの画面と iframe だけが読む（CORS を付けない）。
-    for (const path of ['/embed/open-control.js', '/embed/open-control-view.js', '/embed/open-control.css']) {
+    // 開くボタンと Markdown の部品は同じオリジンの画面と iframe だけが読む（CORS を付けない）。
+    for (const path of [
+      '/embed/open-control.js',
+      '/embed/open-control-view.js',
+      '/embed/open-control.css',
+      '/embed/markdown.js',
+      '/embed/markdown-dom.js',
+    ]) {
       const res = await h.send({ path, headers: { origin: 'http://127.0.0.1:47800' } });
       assert.equal(res.status, 200, path);
       assert.equal(res.headers['access-control-allow-origin'], undefined, path);

@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { refreshTimes, renderChatRow, renderDetail, renderDetailMark } from '../../web/embed/agent-dom.js';
+import {
+  createMarkdownCache,
+  refreshTimes,
+  renderChatRow,
+  renderDetail,
+  renderDetailMark,
+  renderMarkdownBody,
+} from '../../web/embed/agent-dom.js';
 import { buildChat } from '../../web/embed/agent-view.js';
 
 /** 小さな偽の要素。textContent だけを文字として持ち、innerHTML などの HTML を解く口を使うと失敗する。 */
@@ -46,6 +54,14 @@ class FakeElement {
   append(...nodes: FakeElement[]): void {
     this.children.push(...nodes);
   }
+
+  replaceChildren(...nodes: FakeElement[]): void {
+    this.#text = '';
+    this.children.length = 0;
+    this.children.push(...nodes);
+  }
+
+  addEventListener(): void {}
 
   all(): FakeElement[] {
     return [this, ...this.children.flatMap((c) => c.all())];
@@ -332,4 +348,185 @@ test('T-01：親・子2つ・PR のすべてを同じ href の新しいタブで
   assert.equal(links[0]?.textContent, `${DANGER}（新しいタブで開く）`);
   assert.equal(links[1]?.textContent, `${DANGER}（新しいタブで開く）`);
   assert.ok(!el.all().some((node) => node.tagName === 'IMG' || node.tagName === 'SCRIPT'));
+});
+
+// ---- Markdown の本文（iss-00061 D-03・D-04） ----
+
+const MD = '## 題\n\n**太い** と `code` と [リンク](https://example.com/a)\n\n- 一\n- 二';
+const chatRows = () =>
+  buildChat([
+    { id: 'u1', role: 'user', at: null, parts: [{ type: 'text', text: MD }] },
+    { id: 'a1', role: 'assistant', at: null, parts: [{ type: 'text', text: MD }] },
+    { id: 's1', role: 'system', at: null, parts: [{ type: 'text', text: MD }] },
+    { id: 'a2', role: 'assistant', at: null, parts: [{ type: 'image', what: 'image' }] },
+    {
+      id: 'a3',
+      role: 'assistant',
+      at: null,
+      parts: [{ type: 'tool-call', name: 'Bash', input: MD, callId: 'c1' }],
+    },
+  ]);
+const rowOf = (kind: string, role?: string) => {
+  const row = chatRows().find((r) => r.kind === kind && (role === undefined || r.role === role));
+  assert.ok(row, `${kind} ${role ?? ''} の行がある`);
+  return row;
+};
+const bodyOf = (li: FakeElement) => li.children[0] as FakeElement;
+
+test('T-06：assistant の bubble は div.bubble.md で Markdown を描き、リンクは newTabLink', () => {
+  const li = renderChatRow(fakeDocument, rowOf('bubble', 'assistant')) as unknown as FakeElement;
+  const body = bodyOf(li);
+  assert.equal(body.tagName, 'DIV');
+  assert.equal(body.className, 'bubble md');
+  const tags = body.all().map((n) => n.tagName);
+  for (const tag of ['H2', 'P', 'STRONG', 'CODE', 'UL', 'LI', 'A']) assert.ok(tags.includes(tag), tag);
+  const link = body.all().find((n) => n.tagName === 'A');
+  assert.equal(link?.href, 'https://example.com/a');
+  assert.equal(link?.target, '_blank');
+  assert.equal(link?.rel, 'noopener noreferrer');
+  assert.equal(link?.className, 'newtab');
+  assert.equal(link?.title, '新しいタブで開く');
+  assert.doesNotMatch(body.textContent, /\*\*|##|\]\(/);
+});
+
+test('T-06：user の bubble・notice・unsupported・ツールの行は今のまま文字', () => {
+  const user = bodyOf(renderChatRow(fakeDocument, rowOf('bubble', 'user')) as unknown as FakeElement);
+  assert.equal(user.className, 'bubble');
+  assert.equal(user.textContent, MD);
+  assert.equal(user.children.length, 0);
+  const notice = bodyOf(renderChatRow(fakeDocument, rowOf('notice')) as unknown as FakeElement);
+  assert.equal(notice.className, 'notice');
+  assert.equal(notice.textContent, MD);
+  const unsupported = bodyOf(renderChatRow(fakeDocument, rowOf('unsupported')) as unknown as FakeElement);
+  assert.equal(unsupported.className, 'unsupported');
+  assert.equal(unsupported.children.length, 0);
+  const tool = renderChatRow(fakeDocument, rowOf('tool'), { open: new Set() }) as unknown as FakeElement;
+  const pre = tool.all().find((n) => n.tagName === 'PRE');
+  assert.equal(pre?.textContent, MD);
+  assert.ok(!tool.all().some((n) => n.tagName === 'H2' || n.tagName === 'STRONG'));
+});
+
+test('T-06：質問と承認のカードは options.markdown を使わず今のまま描く', () => {
+  const rows = buildChat([
+    {
+      id: 'q',
+      role: 'assistant',
+      at: null,
+      parts: [
+        {
+          type: 'question',
+          callId: 'c1',
+          answerVia: 'rpc',
+          questions: [{ question: '**どれ**？', header: null, multiSelect: false, options: [] }],
+        },
+        {
+          type: 'approval',
+          source: 'terminal',
+          prompt: null,
+          promptId: 'p1',
+          title: '**題**',
+          tool: 'Bash',
+          description: '**説明**',
+          reason: null,
+          blockedPath: null,
+          plan: null,
+          detail: null,
+          options: [{ id: 'allow_once', label: '**Allow**', description: null, intent: 'allow_once' }],
+          answerable: true,
+          unanswerableReason: null,
+          state: 'pending',
+          selectedOptionId: null,
+        },
+      ],
+    },
+  ]);
+  assert.deepEqual(
+    rows.map((r) => r.kind),
+    ['question', 'approval'],
+  );
+  let calls = 0;
+  for (const row of rows.filter((r) => r.kind === 'question' || r.kind === 'approval')) {
+    const li = renderChatRow(fakeDocument, row, {
+      markdown: () => {
+        calls++;
+        throw new Error('not for cards');
+      },
+    }) as unknown as FakeElement;
+    assert.ok(!li.all().some((n) => n.tagName === 'STRONG'), 'カードの文に Markdown を描かない');
+  }
+  assert.equal(calls, 0);
+});
+
+test('T-06：parse か render が例外を出したら、その行は今の文字の div.bubble で描く', () => {
+  const boom = () => {
+    throw new Error('boom');
+  };
+  for (const swap of [{ parse: boom }, { render: boom }]) {
+    const body = renderMarkdownBody(fakeDocument, MD, swap) as unknown as FakeElement;
+    assert.equal(body.className, 'bubble');
+    assert.equal(body.textContent, MD);
+    assert.equal(body.children.length, 0);
+  }
+  const li = renderChatRow(fakeDocument, rowOf('bubble', 'assistant'), {
+    markdown: (row: { text: string }) => renderMarkdownBody(fakeDocument, row.text, { parse: boom }),
+  }) as unknown as FakeElement;
+  assert.equal(bodyOf(li).className, 'bubble');
+  assert.equal(bodyOf(li).textContent, MD);
+});
+
+test('T-06：切った本文の注記と時刻は、Markdown の本文でも今のまま付く', () => {
+  const at = '2026-11-13T00:00:00.000Z';
+  const row = { kind: 'bubble', key: 'k', role: 'assistant', at, text: '**a**', truncated: true };
+  const li = renderChatRow(fakeDocument, row, { now: Date.parse(at) + 5 * MIN }) as unknown as FakeElement;
+  assert.deepEqual(
+    li.children.map((n) => n.className || n.tagName),
+    ['bubble md', 'cut', 'TIME'],
+  );
+});
+
+test('T-07：createMarkdownCache は同じ key と本文の2回目で render を呼ばず同じ要素を返す', () => {
+  const made: string[] = [];
+  const cache = createMarkdownCache(fakeDocument, (doc: typeof fakeDocument, text: string) => {
+    made.push(text);
+    return renderMarkdownBody(doc, text);
+  });
+  const a = { key: 'a', text: '**一**' };
+  const b = { key: 'b', text: '二' };
+  const first = cache.body(a);
+  assert.equal(cache.body({ ...a }), first, '同じ要素');
+  cache.body(b);
+  assert.deepEqual(made, ['**一**', '二']);
+  const changed = cache.body({ key: 'a', text: '**一** 足した' });
+  assert.notEqual(changed, first, '本文が変わると描き直す');
+  assert.deepEqual(made, ['**一**', '二', '**一** 足した']);
+  cache.prune(new Set(['a']));
+  cache.body(b);
+  assert.deepEqual(made.length, 4, '消えた key の写しは捨てる');
+  assert.equal(cache.body({ key: 'a', text: '**一** 足した' }), changed, '残した key の写しは使い続ける');
+});
+
+test('T-07：renderChatRow は options.markdown の要素を assistant の本文に使う', () => {
+  const cache = createMarkdownCache(fakeDocument);
+  const row = rowOf('bubble', 'assistant');
+  const one = renderChatRow(fakeDocument, row, {
+    markdown: (r: typeof row) => cache.body(r),
+  }) as unknown as FakeElement;
+  const two = renderChatRow(fakeDocument, row, {
+    markdown: (r: typeof row) => cache.body(r),
+  }) as unknown as FakeElement;
+  assert.equal(bodyOf(one), bodyOf(two));
+});
+
+test('T-07：agent-frame.js が写しを1つ持ち、rowOptions に markdown を渡し、renderChat で prune を呼ぶ', () => {
+  const frame = readFileSync(new URL('../../web/embed/agent-frame.js', import.meta.url), 'utf8').replace(
+    /\/\/.*$|\/\*[\s\S]*?\*\//gm,
+    '',
+  );
+  assert.equal(frame.match(/createMarkdownCache\(/g)?.length, 1);
+  const options = /const rowOptions = \(now\) => \(\{([\s\S]*?)\}\);/.exec(frame)?.[1] ?? '';
+  assert.match(options, /markdown: \(row\) => markdownCache\.body\(row\)/);
+  const render = /function renderChat\(\{ stickToEnd \}\) \{([\s\S]*?)\n\}/.exec(frame)?.[1] ?? '';
+  assert.match(render, /markdownCache\.prune\(new Set\(rows\.map\(\(row\) => row\.key\)\)\)/);
+  assert.ok(render.indexOf('buildChat(') < render.indexOf('markdownCache.prune('), 'buildChat の後に prune');
+  assert.doesNotMatch(frame, /innerHTML|insertAdjacentHTML|outerHTML/);
 });

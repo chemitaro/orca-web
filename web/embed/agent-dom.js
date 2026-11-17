@@ -5,6 +5,8 @@ import { detailMarkWorktree, MISSING_LABELS } from './agent-view.js';
 import { renderApprovalCard } from './approval-dom.js';
 import { buildApprovalCard } from './approval-view.js';
 import { formatElapsed } from './elapsed.js';
+import { parseMarkdown } from './markdown.js';
+import { renderMarkdown } from './markdown-dom.js';
 import { renderQuestionCard } from './question-dom.js';
 import { buildQuestionCard } from './question-view.js';
 
@@ -30,6 +32,40 @@ function newTabLink(doc, text, href) {
   link.className = 'newtab';
   link.append(make(doc, 'span', '（新しいタブで開く）', 'vh'), appIcon(doc, 'external', 'newtab-icon', LINK_ICONS));
   return link;
+}
+
+/**
+ * assistant の発言の本文を Markdown で描いた div.bubble.md（D-03）。解くか描くかで例外が出たら、今と同じ文字の div.bubble（F-01）。
+ * 第3引数はテストのための差し替え（既定は本物の parseMarkdown と renderMarkdown）。
+ */
+export function renderMarkdownBody(doc, text, { parse = parseMarkdown, render = renderMarkdown } = {}) {
+  try {
+    const body = render(doc, parse(text), { link: newTabLink });
+    body.className = 'bubble md';
+    return body;
+  } catch {
+    return make(doc, 'div', text, 'bubble');
+  }
+}
+
+/**
+ * 描いた本文の写し（D-04）。key の写しがあり本文が同じならその要素を返し、なければ render で作って覚える。
+ * prune は keys にない写しを捨てる（覚える数は今の会話の行の数まで）。
+ */
+export function createMarkdownCache(doc, render = renderMarkdownBody) {
+  const cache = new Map();
+  return {
+    body(row) {
+      const hit = cache.get(row.key);
+      if (hit && hit.text === row.text) return hit.element;
+      const element = render(doc, row.text);
+      cache.set(row.key, { text: row.text, element });
+      return element;
+    },
+    prune(keys) {
+      for (const key of cache.keys()) if (!keys.has(key)) cache.delete(key);
+    },
+  };
 }
 
 /** 詳細の行の並び（dl）。 */
@@ -66,6 +102,7 @@ export function renderDetail(doc, detail) {
  * 渡さなければ読むだけの形）、options.onOpenControl はカードが「Orca で開く」の部品を作ったときに呼ぶ。
  * 承認の行は approval-dom.js に任せる。options.approval は question と同じく、行からカードの描く物を作る関数。
  * 承認の「詳しく」の開け閉めは open の `<key>:detail` で持つ。
+ * options.markdown は assistant の本文の要素を返す関数（agent-frame.js の写し）。渡さなければその場で解いて描く。
  */
 export function renderChatRow(doc, row, options = {}) {
   const now = options.now ?? Date.now();
@@ -95,7 +132,13 @@ export function renderChatRow(doc, row, options = {}) {
     item.append(card.root);
     if (card.openControl) options.onOpenControl?.(row, card.openControl);
   } else {
-    const body = make(doc, 'div', row.text, row.kind === 'bubble' ? 'bubble' : row.kind);
+    // assistant の発言だけを Markdown で描く。本人の発言、notice、unsupported は今のまま文字（R-01）。
+    const body =
+      row.kind === 'bubble' && row.role === 'assistant'
+        ? options.markdown
+          ? options.markdown(row)
+          : renderMarkdownBody(doc, row.text)
+        : make(doc, 'div', row.text, row.kind === 'bubble' ? 'bubble' : row.kind);
     item.append(body);
     if (row.truncated) item.append(make(doc, 'div', '（長いので切りました）', 'cut'));
   }
