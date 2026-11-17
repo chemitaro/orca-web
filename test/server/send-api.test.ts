@@ -86,6 +86,7 @@ test('送信の4つの道はサービスの結果をD-09の形にして返し、
             target: 'a'.repeat(32),
             agentType: 'codex',
             answer: { available: false, reason: 'terminal_route' },
+            approval: { available: false, reason: 'terminal_route' },
           };
         },
         async intent(value) {
@@ -128,6 +129,7 @@ test('送信の4つの道はサービスの結果をD-09の形にして返し、
         target: 'a'.repeat(32),
         agentType: 'codex',
         answer: { available: false, reason: 'terminal_route' },
+        approval: { available: false, reason: 'terminal_route' },
       });
       const intent = await send('/api/send/intent', 'POST', JSON.stringify({ agent: 'agent', text: 'test' }));
       assert.equal(intent.status, 200);
@@ -164,6 +166,7 @@ test('守りはHost→方法→Content-Type→Origin→トークン→大きさ�
         target: null,
         agentType: null,
         answer: { available: false, reason: 'send_disabled' },
+        approval: { available: false, reason: 'send_disabled' },
       };
     },
     async intent() {
@@ -234,6 +237,7 @@ test('サービスの誤りはD-09のHTTP状態とreason/missingを返し、GET�
         target: null,
         agentType: null,
         answer: { available: false, reason: 'send_disabled' },
+        approval: { available: false, reason: 'send_disabled' },
       };
     },
     async intent() {
@@ -344,6 +348,7 @@ test('意図だけが32文字の小文字16進の target を受けてサービ�
             target: null,
             agentType: null,
             answer: { available: false, reason: 'send_disabled' },
+            approval: { available: false, reason: 'send_disabled' },
           };
         },
         async intent(value) {
@@ -435,6 +440,7 @@ function answerService(calls: unknown[]): NonNullable<AppOptions['send']> {
         target: 'a'.repeat(32),
         agentType: 'claude',
         answer: { available: true, reason: null },
+        approval: { available: true, reason: null },
       };
     },
     async intent() {
@@ -555,5 +561,158 @@ test('T-10 答えの誤りは invalid_answer を 400 で返し、答えの口の
   const { answerIntent: _i, answerConfirm: _c, ...old } = answerService([]);
   await withApp({ send: old }, async (send) => {
     assert.equal((await send('/api/answer/intent', 'POST', JSON.stringify(answerBody))).status, 503);
+  });
+});
+
+// ---- 承認への答えの口（iss-00050 D-05、T-10） ----
+
+function approvalService(calls: unknown[]): NonNullable<AppOptions['send']> {
+  const base = answerService(calls);
+  return {
+    ...base,
+    async approvalIntent(value) {
+      calls.push(['approvalIntent', value]);
+      return {
+        ok: true,
+        ticket: 'ticket',
+        expiresAt: 1,
+        operationId: id,
+        preview: {
+          repoName: null,
+          worktreePath: null,
+          branch: null,
+          agentType: 'claude',
+          title: null,
+          state: null,
+          route: 'chat' as const,
+          sessionShortId: 'short',
+        },
+        digest: 'd'.repeat(64),
+        intent: 'allow_once',
+      };
+    },
+    async approvalConfirm(value) {
+      calls.push(['approvalConfirm', value]);
+      return { ok: true, operationId: id, outcome: 'submitted', detail: { code: 'resolved' } };
+    },
+  };
+}
+
+const approvalBody = { agent: 'chat:x', prompt: { itemId: 'item', revision: 3 }, optionId: 'allow' };
+
+test('T-10 承認の意図と確定は物の鍵を確かめてサービスに渡し、ok を除いて返し、CORS を付けない', async () => {
+  const calls: unknown[] = [];
+  await withApp({ send: approvalService(calls) }, async (send) => {
+    const intent = await send(
+      '/api/approval/intent',
+      'POST',
+      JSON.stringify({ ...approvalBody, confirmPersistent: true, target: 'b'.repeat(32) }),
+    );
+    assert.equal(intent.status, 200);
+    assert.equal(intent.cors, undefined);
+    assert.equal('ok' in intent.body, false);
+    assert.equal(intent.body.ticket, 'ticket');
+    assert.equal(intent.body.intent, 'allow_once');
+    const plain = await send('/api/approval/intent', 'POST', JSON.stringify(approvalBody));
+    assert.equal(plain.status, 200);
+    const confirm = await send(
+      '/api/approval/confirm',
+      'POST',
+      JSON.stringify({ ticket: 'ticket', optionId: 'allow' }),
+    );
+    assert.equal(confirm.status, 200);
+    assert.equal(confirm.cors, undefined);
+    assert.deepEqual(confirm.body, { operationId: id, outcome: 'submitted', detail: { code: 'resolved' } });
+    const status = await send('/api/send/status?agent=chat:x');
+    assert.deepEqual(status.body.approval, { available: true, reason: null });
+    assert.equal(status.cors, undefined);
+  });
+  assert.deepEqual(calls, [
+    ['approvalIntent', { ...approvalBody, confirmPersistent: true, target: 'b'.repeat(32) }],
+    ['approvalIntent', approvalBody],
+    ['approvalConfirm', { ticket: 'ticket', optionId: 'allow' }],
+    ['status', 'chat:x'],
+  ]);
+});
+
+test('T-10 承認の口は、同じオリジンの JSON とトークンのない書き込み・余分な鍵・形の誤りを、サービスを呼ばずに拒む', async () => {
+  const calls: unknown[] = [];
+  const logs: Record<string, number>[] = [];
+  await withApp({ send: approvalService(calls), sendGuard: { log: (c) => logs.push(c) } }, async (send) => {
+    for (const path of ['/api/approval/intent', '/api/approval/confirm']) {
+      const good = path.endsWith('intent') ? approvalBody : { ticket: 't', optionId: 'allow' };
+      for (const [method, body, headers, status, error] of [
+        ['POST', JSON.stringify(good), { host: 'evil' }, 421, 'misdirected_host'],
+        ['GET', undefined, {}, 405, 'method_not_allowed'],
+        ['PUT', JSON.stringify(good), {}, 405, 'method_not_allowed'],
+        ['POST', JSON.stringify(good), { 'content-type': 'text/plain' }, 415, 'unsupported_media_type'],
+        ['POST', JSON.stringify(good), { origin: 'http://evil.example' }, 403, 'origin_rejected'],
+        ['POST', JSON.stringify(good), { 'x-orca-web-token': 'bad' }, 401, 'token_invalid'],
+        ['POST', 'x'.repeat(131073), {}, 413, 'payload_too_large'],
+        ['POST', '{', {}, 400, 'invalid_request'],
+        ['POST', JSON.stringify({ ...good, extra: true }), {}, 400, 'invalid_request'],
+        ['POST', JSON.stringify({ ...good, answers: [] }), {}, 400, 'invalid_request'],
+        ['POST', JSON.stringify({ ...good, optionId: '' }), {}, 400, 'invalid_request'],
+        ['POST', JSON.stringify({ ...good, optionId: 'o'.repeat(1025) }), {}, 400, 'invalid_request'],
+        ['POST', JSON.stringify({ ...good, optionId: 1 }), {}, 400, 'invalid_request'],
+      ] as const) {
+        const result = await send(path, method, body, headers);
+        assert.equal(result.status, status, `${path} ${method} ${error}`);
+        assert.equal(result.body.error, error);
+        assert.equal(result.cors, undefined);
+      }
+    }
+    for (const bad of [
+      { ...approvalBody, agent: '' },
+      { ...approvalBody, agent: 1 },
+      { ...approvalBody, prompt: { itemId: 'item' } },
+      { ...approvalBody, prompt: { itemId: '', revision: 3 } },
+      { ...approvalBody, prompt: { itemId: 'x'.repeat(1025), revision: 3 } },
+      { ...approvalBody, prompt: { itemId: 'item', revision: 0 } },
+      { ...approvalBody, prompt: { itemId: 'item', revision: 1.5 } },
+      { ...approvalBody, prompt: { itemId: 'item', revision: 3, extra: 1 } },
+      { ...approvalBody, target: 'short' },
+      { ...approvalBody, confirmPersistent: 'true' },
+      { ...approvalBody, confirmPersistent: 1 },
+      { ...approvalBody, confirmPersistent: null },
+      { agent: 'chat:x', prompt: approvalBody.prompt },
+    ]) {
+      const result = await send('/api/approval/intent', 'POST', JSON.stringify(bad));
+      assert.equal(result.status, 400, JSON.stringify(bad));
+    }
+    for (const bad of [
+      { ticket: '', optionId: 'allow' },
+      { ticket: 't' },
+      { optionId: 'allow' },
+      { ticket: 't', optionId: 'allow', confirmPersistent: true },
+    ]) {
+      assert.equal((await send('/api/approval/confirm', 'POST', JSON.stringify(bad))).status, 400);
+    }
+  });
+  assert.deepEqual(calls, []);
+  assert.ok(
+    Object.keys(logs[0] ?? {}).some((key) => key.startsWith('/api/approval/')),
+    '拒みの数を記録する',
+  );
+});
+
+test('T-10 承認の誤りは今の SEND_ERROR_STATUS で返し、承認の口のないサービスは 503 にする', async () => {
+  const service = approvalService([]);
+  service.approvalIntent = async () => ({ ok: false, error: 'invalid_answer', reason: 'persistent_unconfirmed' });
+  service.approvalConfirm = async () => ({ ok: false, error: 'target_changed', reason: 'question_changed' });
+  await withApp({ send: service }, async (send) => {
+    const intent = await send('/api/approval/intent', 'POST', JSON.stringify(approvalBody));
+    assert.equal(intent.status, 400);
+    assert.deepEqual(intent.body, { ok: false, error: 'invalid_answer', reason: 'persistent_unconfirmed' });
+    const confirm = await send('/api/approval/confirm', 'POST', JSON.stringify({ ticket: 't', optionId: 'allow' }));
+    assert.equal(confirm.status, 409);
+    assert.deepEqual(confirm.body, { ok: false, error: 'target_changed', reason: 'question_changed' });
+  });
+  await withApp({ send: answerService([]) }, async (send) => {
+    assert.equal((await send('/api/approval/intent', 'POST', JSON.stringify(approvalBody))).status, 503);
+    assert.equal(
+      (await send('/api/approval/confirm', 'POST', JSON.stringify({ ticket: 't', optionId: 'allow' }))).status,
+      503,
+    );
   });
 });

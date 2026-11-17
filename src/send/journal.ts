@@ -2,6 +2,7 @@
 import { chmod, mkdir, open, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { SendResult } from '../orca/send.ts';
+import type { ApprovalIntent } from '../transcript/normalize.ts';
 import type { SendPreview, SendTarget } from './model.ts';
 
 const SCHEMA = 'orca-web.send-record/v1';
@@ -30,7 +31,15 @@ export interface AnswerBeforeInput extends BeforeBase {
   questionCount: number;
   text?: never;
 }
-export type BeforeInput = SendBeforeInput | AnswerBeforeInput;
+/** 承認への答えの before。選択肢の id・ラベルと承認の中身は書かず、digest と intent と承認の位置だけを持つ。 */
+export interface ApprovalBeforeInput extends BeforeBase {
+  action: 'approval';
+  route: 'chat';
+  prompt: { itemId: string; revision: number };
+  intent: ApprovalIntent | null;
+  text?: never;
+}
+export type BeforeInput = SendBeforeInput | AnswerBeforeInput | ApprovalBeforeInput;
 export type BeforeRecord = RowBase & BeforeInput & { kind: 'before' };
 export type ResultInput = SendResult & { operationId: string };
 export type ResultRecord = RowBase & SendResult & { kind: 'after' | 'check' };
@@ -65,6 +74,18 @@ function isAnswerBefore(row: Record<string, unknown>): boolean {
     Number.isInteger(row.questionCount)
   );
 }
+const INTENTS: readonly unknown[] = ['allow_once', 'allow_always', 'reject_once', 'reject_always', null];
+function isApprovalBefore(row: Record<string, unknown>): boolean {
+  const prompt = row.prompt;
+  return (
+    row.action === 'approval' &&
+    row.route === 'chat' &&
+    object(prompt) &&
+    typeof prompt.itemId === 'string' &&
+    Number.isInteger(prompt.revision) &&
+    INTENTS.includes(row.intent)
+  );
+}
 function parseRow(line: string): JournalRow | null {
   try {
     const row: unknown = JSON.parse(line);
@@ -82,7 +103,11 @@ function parseRow(line: string): JournalRow | null {
       object(row.generation) &&
       typeof row.digest === 'string' &&
       (row.route === 'terminal' || row.route === 'chat') &&
-      (row.action === undefined ? typeof row.text === 'string' : isAnswerBefore(row))
+      (row.action === undefined
+        ? typeof row.text === 'string'
+        : row.action === 'approval'
+          ? isApprovalBefore(row)
+          : isAnswerBefore(row))
     )
       return row as unknown as BeforeRecord;
     if (

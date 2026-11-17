@@ -1,9 +1,11 @@
-// 確認票の消費と記録の順序を所有する送信サービス（本文の送信と、構造化 Chat の質問への答え）。
+// 確認票の消費と記録の順序を所有する送信サービス（本文の送信と、構造化 Chat の質問と承認への答え）。
 import type { CapabilityReport } from '../orca/capabilities.ts';
 import type { SendAdapter, SendReadFailure, SendResult } from '../orca/send.ts';
 import type { SendRpc } from '../orca/send-gates.ts';
 import type { StateDocument } from '../state/model.ts';
+import type { ApprovalIntent } from '../transcript/normalize.ts';
 import { checkAnswers, digestAnswers } from './answer.ts';
+import { checkOption, digestOption } from './approval.ts';
 import type { SendJournal, SendRecord } from './journal.ts';
 import type { ChatSendTarget, SendPreview, SendTarget } from './model.ts';
 import { buildPreview, compareTargets, resolveTarget, targetFingerprint } from './target.ts';
@@ -45,12 +47,17 @@ export interface AnswerIntentResult {
   preview: SendPreview;
   digest: string;
 }
+/** 承認の答えの意図の結果。選択肢の id は返さない（digest と intent だけ）。 */
+export interface ApprovalIntentResult extends AnswerIntentResult {
+  intent: ApprovalIntent | null;
+}
 export interface AnswerStatus {
   available: boolean;
   reason: string | null;
 }
 type ConfirmAnswer = SendAnswer<SendResult & { operationId: string; recordWarning?: 'after_record_failed' }>;
 const ANSWER_METHOD = 'agentSession.respondToQuestion';
+const APPROVAL_METHOD = 'agentSession.respondToApproval';
 /** 確定の前の読みで宛先が変わったと分かる理由。 */
 const CHANGED_REASONS = ['asleep', 'untabbed', 'no_session', 'identity_unavailable', 'state_out_of_date'];
 export interface SendDeps {
@@ -74,17 +81,26 @@ export type CheckResult =
       checkWarning?: 'check_record_failed';
     };
 type SendRefusal = Omit<SendFailure, 'error'> & { error: Exclude<SendFailure['error'], 'record_unreadable'> };
-/** answerChat は、この runtime の能力の確かめで答えの機能が使えるか（status が読み直さずに使う）。 */
+/** answerChat・answerApproval は、この runtime の能力の確かめで答えの機能が使えるか（status が読み直さずに使う）。 */
 type Preflight =
-  | { ok: true; target: SendTarget; preview: SendPreview; fence?: number; answerChat: boolean }
+  | {
+      ok: true;
+      target: SendTarget;
+      preview: SendPreview;
+      fence?: number;
+      answerChat: boolean;
+      answerApproval: boolean;
+    }
   | SendRefusal;
-/** send は今の送信、answer は質問への答え（構造化 Chat だけ、能力 answerChat）。 */
-type PreflightMode = 'send' | 'answer';
+/** send は今の送信、answer は質問への答え（能力 answerChat）、approval は承認への答え（能力 answerApproval）。どちらの答えも構造化 Chat だけ。 */
+type PreflightMode = 'send' | 'answer' | 'approval';
+/** 答えの道の、能力の名前と止めた鍵。 */
+const ANSWER_FEATURES = { answer: 'answerChat', approval: 'answerApproval' } as const;
 export class SendService {
   readonly #deps: SendDeps;
   #busy = false;
   #runtimeId: string | null = null;
-  /** method_not_found で止めた RPC。鍵は経路（terminal・chat）か、答えの 'answer'。 */
+  /** method_not_found で止めた RPC。鍵は経路（terminal・chat）か、答えの 'answer'・'approval'。 */
   readonly #blocked = new Map<string, Set<string>>();
   readonly #inFlight = new Set<string>();
   readonly #tickets: TicketStore;
@@ -118,16 +134,16 @@ export class SendService {
       return resolved;
     }
     const target = resolved.target;
-    if (mode === 'answer' && target.route !== 'chat')
+    if (mode !== 'send' && target.route !== 'chat')
       return { ok: false, error: 'not_sendable', reason: 'terminal_route' };
     const feature =
-      cap.features[mode === 'answer' ? 'answerChat' : target.route === 'terminal' ? 'sendTerminal' : 'sendChat'];
+      cap.features[mode !== 'send' ? ANSWER_FEATURES[mode] : target.route === 'terminal' ? 'sendTerminal' : 'sendChat'];
     if (!feature.available) return { ok: false, error: 'unsupported', missing: feature.missing };
     // 答えは自分の RPC と、Chat の経路で止めた読み（agentSession.history）で止める。
     const blocked =
-      mode === 'answer'
+      mode !== 'send'
         ? [
-            ...(this.#blocked.get('answer') ?? []),
+            ...(this.#blocked.get(mode) ?? []),
             ...[...(this.#blocked.get('chat') ?? [])].filter((method) => method === 'agentSession.history'),
           ]
         : [...(this.#blocked.get(target.route) ?? [])];
@@ -159,6 +175,7 @@ export class SendService {
       preview,
       ...(fence === undefined ? {} : { fence }),
       answerChat: cap.features.answerChat.available,
+      answerApproval: cap.features.answerApproval.available,
     };
   }
   #readError(failure: SendReadFailure, target: SendTarget): SendRefusal {
@@ -173,7 +190,7 @@ export class SendService {
   }
   #block(target: SendTarget, method: string): void {
     if (target.runtimeId !== this.#runtimeId) return;
-    const key = method === ANSWER_METHOD ? 'answer' : target.route;
+    const key = method === ANSWER_METHOD ? 'answer' : method === APPROVAL_METHOD ? 'approval' : target.route;
     const methods = this.#blocked.get(key) ?? new Set<string>();
     methods.add(method);
     this.#blocked.set(key, methods);
@@ -203,6 +220,19 @@ export class SendService {
       return { ok: false, error: 'target_changed', reason: 'question_changed' } as const;
     return read;
   }
+  /** 承認の今の状態を読み、送れる pending の同じ revision でなければ拒む（理由の名前は質問と同じ）。 */
+  async #readPendingApproval(target: ChatSendTarget, prompt: { itemId: string; revision: number }) {
+    const read = await this.#deps.adapter.readApproval(target.sessionId, prompt.itemId);
+    if (!read.ok) {
+      if (read.error === 'question_not_found')
+        return { ok: false, error: 'target_changed', reason: 'question_gone' } as const;
+      if (read.error === 'unknown_shape') return { ok: false, error: 'unknown_shape' } as const;
+      return this.#readError(read, target);
+    }
+    if (read.state !== 'pending' || read.revision !== prompt.revision)
+      return { ok: false, error: 'target_changed', reason: 'question_changed' } as const;
+    return read;
+  }
   async status(agentId: string): Promise<{
     enabled: boolean;
     available: boolean;
@@ -211,10 +241,14 @@ export class SendService {
     target: string | null;
     agentType: string | null;
     answer: AnswerStatus;
+    approval: AnswerStatus;
   }> {
     const enabled = await this.#deps.readSendEnabled();
     const checked = await this.#preflight(agentId);
-    const answer = checked.ok ? this.#answerStatus(checked) : await this.#answerStatusFor(agentId);
+    const answer = checked.ok ? this.#answerStatus(checked, 'answer') : await this.#answerStatusFor(agentId, 'answer');
+    const approval = checked.ok
+      ? this.#answerStatus(checked, 'approval')
+      : await this.#answerStatusFor(agentId, 'approval');
     return checked.ok
       ? {
           enabled,
@@ -224,6 +258,7 @@ export class SendService {
           target: targetFingerprint(checked.target),
           agentType: checked.target.agentType,
           answer,
+          approval,
         }
       : {
           enabled,
@@ -233,17 +268,20 @@ export class SendService {
           target: null,
           agentType: null,
           answer,
+          approval,
         };
   }
   /** 送信の preflight が通ったときの、答えられるか（読み直さない）。 */
-  #answerStatus(checked: Extract<Preflight, { ok: true }>): AnswerStatus {
+  #answerStatus(checked: Extract<Preflight, { ok: true }>, mode: 'answer' | 'approval'): AnswerStatus {
     if (checked.target.route !== 'chat') return { available: false, reason: 'terminal_route' };
-    if (this.#blocked.get('answer')?.size) return { available: false, reason: 'unsupported' };
-    return checked.answerChat ? { available: true, reason: null } : { available: false, reason: 'unsupported' };
+    if (this.#blocked.get(mode)?.size) return { available: false, reason: 'unsupported' };
+    return checked[ANSWER_FEATURES[mode]]
+      ? { available: true, reason: null }
+      : { available: false, reason: 'unsupported' };
   }
   /** 送信の preflight が通らないときは、答えの preflight で理由を決める（端末なら terminal_route）。 */
-  async #answerStatusFor(agentId: string): Promise<AnswerStatus> {
-    const checked = await this.#preflight(agentId, 'answer');
+  async #answerStatusFor(agentId: string, mode: 'answer' | 'approval'): Promise<AnswerStatus> {
+    const checked = await this.#preflight(agentId, mode);
     return checked.ok
       ? { available: true, reason: null }
       : { available: false, reason: checked.reason ?? checked.error };
@@ -266,7 +304,7 @@ export class SendService {
       // take と印の間に await を置かない。照会はこの印か未使用の票を必ず見る。
       this.#inFlight.add(operationId);
       activeId = operationId;
-      if (taken.value.prompt)
+      if (taken.value.prompt || taken.value.approval)
         return await this.#refuse(
           { ok: false, error: 'ticket_invalid', reason: 'wrong_kind' },
           operationId,
@@ -352,9 +390,11 @@ export class SendService {
       const result =
         before.action === 'answer' && target.route === 'chat'
           ? await this.#deps.adapter.checkAnswer(target, before.prompt, before.digest, operationId)
-          : target.route === 'terminal'
-            ? await this.#deps.adapter.checkTerminal(target, operationId)
-            : await this.#deps.adapter.checkChat(target, operationId);
+          : before.action === 'approval' && target.route === 'chat'
+            ? await this.#deps.adapter.checkApproval(target, before.prompt, before.digest, operationId)
+            : target.route === 'terminal'
+              ? await this.#deps.adapter.checkTerminal(target, operationId)
+              : await this.#deps.adapter.checkChat(target, operationId);
       if (!result.ok && result.error === 'unreachable')
         return { ok: true, operationId, state: 'recorded', record, checkError: 'unreachable' };
       if (!result.ok && result.error === 'unsupported' && result.method) {
@@ -488,6 +528,114 @@ export class SendService {
         return await refuse({ ok: false, error: 'record_failed' });
       }
       const result = await this.#deps.adapter.answerChat(target, prompt, valid.answers, operationId, question.fence);
+      if (result.detail.code === 'method_not_found' && result.detail.method) this.#block(target, result.detail.method);
+      const recorded = await this.#deps.journal.appendAfter({ operationId, ...result });
+      return {
+        ok: true,
+        operationId,
+        ...result,
+        ...(recorded ? {} : { recordWarning: 'after_record_failed' as const }),
+      };
+    } finally {
+      if (activeId) this.#inFlight.delete(activeId);
+      this.#busy = false;
+    }
+  }
+  /** 承認への答えの意図。送らずに確かめ、使い捨ての票を出す。常に許可・常に拒否は confirmPersistent が true のときだけ。 */
+  async approvalIntent({
+    agent,
+    prompt,
+    optionId,
+    confirmPersistent,
+    target,
+  }: {
+    agent: string;
+    prompt: { itemId: string; revision: number };
+    optionId: unknown;
+    confirmPersistent?: unknown;
+    target?: string;
+  }): Promise<SendAnswer<ApprovalIntentResult>> {
+    if (!(await this.#deps.readSendEnabled())) return { ok: false, error: 'send_disabled' };
+    const checked = await this.#preflight(agent, 'approval');
+    if (!checked.ok) return checked;
+    if (target !== undefined && target !== targetFingerprint(checked.target))
+      return { ok: false, error: 'target_changed', reason: 'changed_since_shown' };
+    const approval = await this.#readPendingApproval(checked.target as ChatSendTarget, prompt);
+    if (!approval.ok) return approval;
+    const valid = checkOption(approval, optionId, confirmPersistent);
+    if (!valid.ok) return valid;
+    const operationId = this.#operationId();
+    const digest = digestOption(valid.option.id);
+    const ticket = this.#tickets.issue({
+      target: checked.target,
+      digest,
+      operationId,
+      approval: {
+        itemId: prompt.itemId,
+        revision: prompt.revision,
+        optionId: valid.option.id,
+        intent: valid.option.intent,
+      },
+    });
+    return { ok: true, ...ticket, operationId, preview: checked.preview, digest, intent: valid.option.intent };
+  }
+  /** 承認への答えの確定。確かめ直してから、送る前の記録の後に agentSession.respondToApproval を1回だけ送る。 */
+  async approvalConfirm({ ticket, optionId }: { ticket: string; optionId: unknown }): Promise<ConfirmAnswer> {
+    if (this.#busy) return this.#refuse({ ok: false, error: 'busy' });
+    this.#busy = true;
+    let activeId: string | undefined;
+    try {
+      if (!(await this.#deps.readSendEnabled())) return await this.#refuse({ ok: false, error: 'send_disabled' });
+      const taken = this.#tickets.take(ticket);
+      if (!taken.ok) return await this.#refuse({ ok: false, error: 'ticket_invalid', reason: taken.reason });
+      const { operationId, target, digest, approval } = taken.value;
+      // take と印の間に await を置かない。照会はこの印か未使用の票を必ず見る。
+      this.#inFlight.add(operationId);
+      activeId = operationId;
+      const refuse = (failure: SendRefusal) => this.#refuse(failure, operationId, target.agentId);
+      if (!approval || taken.value.prompt || target.route !== 'chat')
+        return await refuse({ ok: false, error: 'ticket_invalid', reason: 'wrong_kind' });
+      if (optionId !== approval.optionId)
+        return await refuse({ ok: false, error: 'target_changed', reason: 'answer_changed' });
+      const checked = await this.#preflight(target.agentId, 'approval');
+      if (!checked.ok) return await refuse(SendService.#confirmRefusal(checked));
+      const change = compareTargets(target, checked.target);
+      if (change) return await refuse({ ok: false, error: 'target_changed', reason: change });
+      const prompt = { itemId: approval.itemId, revision: approval.revision };
+      const current = await this.#readPendingApproval(target, prompt);
+      if (!current.ok) return await refuse(current);
+      // 常に許可の確かめは意図で済ませた。ここでは今の選択肢にあり、intent が意図のときと同じことを確かめる。
+      const valid = checkOption(current, approval.optionId, true);
+      if (!valid.ok) return await refuse(valid);
+      if (valid.option.intent !== approval.intent)
+        return await refuse({ ok: false, error: 'target_changed', reason: 'question_changed' });
+      try {
+        await this.#deps.journal.appendBefore({
+          operationId,
+          action: 'approval',
+          route: 'chat',
+          target: {
+            ...target,
+            repoName: checked.preview.repoName,
+            worktreePath: checked.preview.worktreePath,
+            branch: checked.preview.branch,
+            title: checked.preview.title,
+          },
+          prompt,
+          intent: approval.intent,
+          digest,
+          generation: { runtimeId: target.runtimeId },
+        });
+      } catch {
+        return await refuse({ ok: false, error: 'record_failed' });
+      }
+      const result = await this.#deps.adapter.answerApproval(
+        target,
+        prompt,
+        approval.optionId,
+        operationId,
+        current.fence,
+      );
       if (result.detail.code === 'method_not_found' && result.detail.method) this.#block(target, result.detail.method);
       const recorded = await this.#deps.journal.appendAfter({ operationId, ...result });
       return {

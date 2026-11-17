@@ -36,6 +36,7 @@ function report(open = feature(true)): CapabilityReport {
       sendTerminal: feature(false),
       sendChat: feature(false),
       answerChat: feature(false),
+      answerApproval: feature(false),
     },
   };
 }
