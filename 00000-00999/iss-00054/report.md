@@ -19,6 +19,8 @@ ID: "iss-00054"
   - round-1：合格（P2 1、P3 3）。全部を直して確かめ直した（応答は `review-response.md`）。
   - round-2 の P2（タブの agentStatus が物でないときも、preflight の resolveTarget が no_session で先に止まり、意図と確定では prompt_unverified に届かない）：送らない点は同じなので文書は変えず、読み方として扱う（逸脱と判断に記録）。
 
+- 区切りのレビュー CP-1（code-reviewer、Opus 5.5 / medium、standards と spec の両方）：範囲 `253a1a6..a7a27a2`、round-1 で合格、指摘なし（`.workbench/code-review/iss-00054-cp1/round-1.json`）。実装担当の報告の lint 0・test 1040/1040・build 0 を、タスク担当が同じコミットで確かめた。
+
 ## Verification
 
 ## 逸脱と判断
