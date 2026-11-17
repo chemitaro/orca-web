@@ -19,6 +19,10 @@ ID: "iss-00049"
   - round-1：合格（P2 7件、P3 1件）。直す価値があるので全部直して確かめ直した（status の agentType、async の受付の結果で閉じる誤り、preview の判定、キーの文の制御文字、Orca の画面で途中まで進めた質問の残る危険、確かめの拒みの押し直せない形、S-02 の完了条件、切った async の問い）。応答は `review-response.md`。
   - round-2：合格（P3 1件：画面の buildAnswers が keys のその他の文の Tab・改行を許し、サーバーだけが拒む）。文書は変えず、F-04 の読みとして S-03 の実装担当に画面でも同じ条件と理由の言葉を入れるよう伝える（逸脱と判断に記録）。
 
+- 区切りのレビュー CP-1（code-reviewer、Opus 5.5 / medium、standards と spec の両方）：範囲 `3b7aece..b86a91f`、合格。
+  - round-1（`3b7aece..f40c8ee`）：合格（P2 1件：terminalPromptOf が tabId だけで探し、分割した端末で別のペインの agentStatus を確かめる）。安全に関わるので直した（b86a91f）。
+  - round-2（`3b7aece..b86a91f`）：合格、指摘なし（`.workbench/code-review/iss-00049-cp1/round-2.json`）。実装担当の報告の lint 0・test 897/897・build 0 を、タスク担当が同じコミットで確かめた。
+
 ## Verification
 
 ## 逸脱と判断
