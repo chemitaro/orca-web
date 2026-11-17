@@ -438,7 +438,7 @@ const PRE_SEND_5XX = new Set(['unsupported', 'unknown_shape', 'unreachable', 're
  * 確定の応答の ok: false を送る前の拒みと読むか。5xx は送る前の識別子のときだけで、ほか（internal_error や知らない識別子）は
  * 送った後にも起きうるので偽（呼び手は結果不明にする）。
  */
-function confirmRefused(res) {
+export function confirmRefused(res) {
   const body = isRecord(res?.body) ? res.body : {};
   if (body.ok !== false || !isText(body.error)) return false;
   return res.status < 500 || PRE_SEND_5XX.has(body.error);
@@ -454,7 +454,7 @@ const KEYS_CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
  * @param {{ timeouts?: { intentMs?: number, confirmMs?: number }, setTimer?: (fn: () => void, ms: number) => unknown,
  *   clearTimer?: (id: any) => void }} deps
  */
-function timing(deps, confirmDefault = CONFIRM_TIMEOUT_MS) {
+export function timing(deps, confirmDefault = CONFIRM_TIMEOUT_MS) {
   return {
     intentMs: deps.timeouts?.intentMs ?? INTENT_TIMEOUT_MS,
     confirmMs: deps.timeouts?.confirmMs ?? confirmDefault,
@@ -464,7 +464,7 @@ function timing(deps, confirmDefault = CONFIRM_TIMEOUT_MS) {
 }
 
 /** 時間切れつきで待つ（送る欄と同じ形）。時間切れは投げ、届いた方で時計を止める。後に届いた応答は捨てられる。 */
-function withTimeout(promise, ms, clock) {
+export function withTimeout(promise, ms, clock) {
   return new Promise((resolve, reject) => {
     const timer = clock.setTimer(() => reject(new Error('timeout')), ms);
     Promise.resolve(promise).then(
