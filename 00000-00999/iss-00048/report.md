@@ -24,6 +24,7 @@ ID: "iss-00048"
 
 ## 逸脱と判断
 
+- 逸脱（実装担当の切り替え）：Codex GPT-6.1 Sol / medium の実装担当（dispatch ctx_a4e2e572c73b）が、実行の前に `exec_command` が書き込みの許された根の中の Orca の Application Support の symlink を拒んだため何もできずに止まった（変更なし）。統括の依頼書の補足（『Codex が chat-scratch の symlink の拒否で止まったら、待たずに worker-stop して Claude Opus 5.5 / medium に切り替える』）に従い、worker-stop して Claude Opus 5.5 / medium（dispatch ctx_498915367a33）で S-01〜S-02 を始め直した。
 - 範囲（統括、2026-11-18、msg_fd0230f65b01）：端末のエージェントの質問は読むだけ（答えは iss-00049）、承認はこの Issue では今のまま（iss-00050）。
 
 ## Residual Risks / Follow-ups
