@@ -237,3 +237,53 @@ test('T-03：新しいタブの印は文字の高さに合わせ、読み上げ�
   });
   for (const value of [...hidden.values(), ...icon.values()]) assert.doesNotMatch(value, /#|rgba?\s*\(/i);
 });
+
+// 質問のカード（T-15、R-06、D-05）。色はこの CSS の変数（--chat-*。どれも SpecDock の --ds-*・--sd-* を先に使う）を通し、
+// 角丸は var(--ds-radius…, 既定)、選択肢は縦に並ぶ全幅で 44px 以上、長い語は折り返す。
+const cardRules = rules.filter((r) => /\.question-/.test(r.selector));
+
+test('T-15：カードの規則の色は --chat-* を通し、その変数は SpecDock の変数を先に使う', () => {
+  assert.ok(cardRules.length >= 6, `カードの規則がある（${cardRules.length}）`);
+  const root = only(':root', (m) => m === null);
+  const used = new Set<string>();
+  for (const rule of cardRules) {
+    for (const [prop, value] of declarations(rule.body)) {
+      for (const hit of value.matchAll(/var\((--[a-z0-9-]+)/g)) used.add(hit[1] ?? '');
+      if (/color|background|border/.test(prop))
+        assert.doesNotMatch(value, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i, `${rule.selector} の ${prop}`);
+    }
+  }
+  assert.ok(used.size > 0);
+  for (const name of used) {
+    if (name.startsWith('--chat-')) assert.match(root.get(name) ?? '', /^var\(--(ds|sd)-/, name);
+    else assert.match(name, /^--ds-/, `カードが直に読む変数は --ds-*：${name}`);
+  }
+  const card = only('.question-card', (m) => m === null);
+  assert.equal(card.get('border-radius'), 'var(--ds-radius-l, 8px)');
+  assert.equal(card.get('background'), 'var(--chat-bg)');
+});
+
+test('T-15：選択肢は縦に並ぶ全幅のボタンで min-height が 44px 以上、カードと文字は折り返し、横にはみ出さない', () => {
+  const list = only('.question-options', (m) => m === null);
+  assert.equal(list.get('display'), 'flex');
+  assert.equal(list.get('flex-direction'), 'column');
+  const option = only('.question-option', (m) => m === null);
+  assert.equal(option.get('width'), '100%');
+  assert.ok(Number.parseInt(option.get('min-height') ?? '0', 10) >= 44, `min-height: ${option.get('min-height')}`);
+  assert.equal(option.get('text-align'), 'left');
+  assert.equal(option.get('white-space'), 'normal');
+  const submit = only('.question-submit', (m) => m === null);
+  assert.ok(Number.parseInt(submit.get('min-height') ?? '0', 10) >= 44);
+  const card = only('.question-card', (m) => m === null);
+  assert.equal(card.get('max-width'), '100%');
+  assert.equal(card.get('min-width'), '0');
+  assert.equal(card.get('overflow-wrap'), 'anywhere');
+  const text = only('.question-other-text', (m) => m === null);
+  assert.equal(text.get('width'), '100%');
+  assert.equal(text.get('max-width'), '100%');
+});
+
+test('T-15：端末のカードの「Orca で開く」は幅 390px 以下でも隠さない', () => {
+  for (const rule of rules.filter((r) => r.media && /max-width:\s*390px/.test(r.media)))
+    assert.doesNotMatch(rule.selector, /question|orca-open/, rule.selector);
+});

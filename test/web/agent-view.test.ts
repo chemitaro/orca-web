@@ -245,3 +245,70 @@ test('T-17：detailMarkWorktree は、このエージェントだけを持ち経
     null,
   );
 });
+
+const questionPart = (over: Record<string, unknown> = {}) => ({
+  type: 'question',
+  source: 'terminal',
+  prompt: null,
+  callId: 'call-q',
+  questions: [
+    {
+      id: '0',
+      header: null,
+      question: 'どちら',
+      multiSelect: false,
+      options: [{ id: '0', label: 'はい', description: null }],
+      allowOther: false,
+      otherAllowsEmpty: false,
+    },
+  ],
+  state: 'pending',
+  answers: null,
+  ...over,
+});
+
+test('T-12：buildChat は question の部分を question の行にし、端末は後に来た同じ callId のツールの結果で答え済みにする', () => {
+  const rows = buildChat([
+    msg('m1', 'assistant', [{ type: 'text', text: '聞きます' }, questionPart()]),
+    msg('m2', 'tool', [{ type: 'tool-result', output: 'はい を選びました', isError: false, callId: 'call-q' }]),
+    msg('m3', 'assistant', [questionPart({ source: 'chat', callId: null, prompt: { itemId: 'i1', revision: 1 } })]),
+  ]);
+  assert.deepEqual(
+    rows.map((r: { kind: string }) => r.kind),
+    ['bubble', 'question', 'question'],
+  );
+  assert.equal(rows[1].key, 'm1:1');
+  assert.equal(rows[1].part.state, 'answered');
+  assert.equal(rows[1].answerText, 'はい を選びました');
+  assert.equal(rows[2].part.state, 'pending');
+  assert.equal(rows[2].answerText, null);
+});
+
+test('T-12：buildChat は、結果が先に来ても同じ callId の端末の質問に結びつけ、単独のツールの行を残さない', () => {
+  const rows = buildChat([
+    msg('m0', 'tool', [{ type: 'tool-result', output: '先の結果', isError: false, callId: 'call-q' }]),
+    msg('m1', 'assistant', [questionPart()]),
+    msg('m2', 'assistant', [questionPart({ callId: 'call-other' })]),
+  ]);
+  assert.deepEqual(
+    rows.map((r: { kind: string }) => r.kind),
+    ['question', 'question'],
+  );
+  assert.equal(rows[0].part.state, 'answered');
+  assert.equal(rows[0].answerText, '先の結果');
+  assert.equal(rows[1].part.state, 'pending', 'ほかの callId は結びつけない');
+});
+
+test('T-12：buildChat は、構造化 Chat の question に同じ callId の結果を結びつけず、読めない question は「表示できない（質問）」のまま', () => {
+  const rows = buildChat([
+    msg('m1', 'assistant', [questionPart({ source: 'chat', callId: 'x', prompt: { itemId: 'i', revision: 1 } })]),
+    msg('m2', 'tool', [{ type: 'tool-result', output: 'r', isError: false, callId: 'x' }]),
+    msg('m3', 'assistant', [{ type: 'unsupported', what: 'question' }]),
+  ]);
+  assert.deepEqual(
+    rows.map((r: { kind: string }) => r.kind),
+    ['question', 'tool', 'unsupported'],
+  );
+  assert.equal(rows[0].part.state, 'pending');
+  assert.equal(rows[2].text, '表示できない（質問）');
+});

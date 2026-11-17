@@ -54,3 +54,18 @@ test('T-17：agent.html が印の部品の CSS を読み、agent-frame.js が要
   assert.match(frame, /watchWorktreeSummary\(''/);
   assert.match(frame, /renderDetailMark\(/);
 });
+
+test('iss-00048 D-05：質問のカードの2つのファイルを同じオリジンだけで配り、agent-frame.js が板と2つの手段で描く', () => {
+  const app = readFileSync(new URL('../../src/server/app.ts', import.meta.url), 'utf8');
+  for (const name of ['question-view.js', 'question-dom.js']) {
+    const line = new RegExp(
+      `'/embed/${name.replace('.', '\\.')}': \\{ file: 'embed/${name.replace('.', '\\.')}', type: 'text/javascript; charset=utf-8' \\}`,
+    );
+    assert.match(app, line, name);
+  }
+  assert.match(frame, /createQuestionBoard\(/);
+  assert.match(frame, /createChatAnswerer\(/);
+  assert.match(frame, /terminal: terminalAnswerer/);
+  assert.match(frame, /createOpenBoard\(/);
+  assert.doesNotMatch(frame, /innerHTML|insertAdjacentHTML/);
+});
