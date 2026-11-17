@@ -18,6 +18,8 @@ ID: "iss-00061"
   - 合格した文書の sha256：requirement.cue `f9dcc29901a801de60469c174e09702ff6d212a10e6661bb18e12a26796ead32`、design.cue `856091b155f79d92a4d7983233b7d9e64e9776a30bebf38f9211cc81b15f7c57`、plan.cue `2385b0ea1f93fac9f63682a25f4618a6fd7d85bcb5ee46cd8b54721eef262685`（コードの HEAD は 0a55268）。
   - round-1：fail（P1 1：`_`・`__` の語の中の条件で強調が成り立たない、P2 2：R-02 の属性の一覧、見出しの末尾の `#`）。全部を直した（応答は `review-response.md`）。
 
+- 区切りのレビュー CP-1（code-reviewer、Opus / medium、standards と spec の両方）：範囲 `0a55268..06ca927`、round-2 で合格、指摘なし（`.workbench/code-review/iss-00061-cp1/round-2.json`）。round-1（`0a55268..41b3a3f`）は合格（P0/P1 0）で P2 2（表の幅×行数の時間、行内のコードの閉じの前の `\`）。R-03・D-01 に直接反するのでタスク担当の判断で直した（06ca927）。
+
 
 ## Verification
 
