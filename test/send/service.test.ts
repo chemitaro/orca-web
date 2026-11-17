@@ -76,6 +76,7 @@ async function fixture(t: import('node:test').TestContext, agentType: 'claude' |
       sendTerminal: feature(),
       sendChat: feature(),
       answerChat: feature(),
+      answerApproval: feature(),
     },
   };
   const snapshot = state({
@@ -365,6 +366,7 @@ test('status は送信せず Chat の fence と利用可能性を確かめる', 
     target: targetFingerprint(chatTarget()),
     agentType: 'claude',
     answer: { available: true, reason: null },
+    approval: { available: true, reason: null },
   });
   assert.ok(f.calls.some((c) => c.method === 'agentSession.history'));
   f.responses.set('agentSession.history', ok({ ok: true, page: { sessionId: 'other', fence: 4 } }));
@@ -378,6 +380,7 @@ test('status は送信せず Chat の fence と利用可能性を確かめる', 
     target: null,
     agentType: null,
     answer: { available: false, reason: 'unknown_shape' },
+    approval: { available: false, reason: 'unknown_shape' },
   });
   assert.equal(f.sends().length, 0);
 });
@@ -910,6 +913,7 @@ test('status は端末の指紋と種類を返し、preflight が通らなけれ
     target: targetFingerprint(terminalTarget()),
     agentType: 'codex',
     answer: { available: false, reason: 'terminal_route' },
+    approval: { available: false, reason: 'terminal_route' },
   });
   f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: '/bin/zsh' } }));
   assert.deepEqual(await f.service.status(TERMINAL_AGENT), {
@@ -920,6 +924,7 @@ test('status は端末の指紋と種類を返し、preflight が通らなけれ
     target: null,
     agentType: null,
     answer: { available: false, reason: 'terminal_route' },
+    approval: { available: false, reason: 'terminal_route' },
   });
   assert.equal(f.sends().length, 0);
 });
@@ -1361,4 +1366,426 @@ test('T-09 結果不明の答えは check で質問の今の状態を照会し�
   assert.equal(checked.record.outcome, 'submitted');
   assert.equal(checked.record.detail.code, 'resolved');
   assert.equal(answerCalls(f).length, 1);
+});
+
+// ---- 承認への答え（iss-00050 D-04、T-07〜T-09） ----
+
+const APPROVAL_ITEM = 'item-approval-test';
+const APPROVAL_PROMPT = { itemId: APPROVAL_ITEM, revision: 2 };
+// 選択肢の id とラベル、題、detail が記録に入らないことを確かめるため、目立つ文字にする。
+function approvalRow(
+  resolution: Record<string, unknown>,
+  revision = 2,
+  itemId = APPROVAL_ITEM,
+  options: unknown[] = [
+    { id: 'opt-secret-allow', label: 'ラベル秘密許可', intent: 'allow_once' },
+    { id: 'opt-secret-always', label: 'ラベル秘密常に', intent: 'allow_always' },
+    { id: 'opt-secret-deny', label: 'ラベル秘密拒否', intent: 'reject_once' },
+  ],
+  extra: Record<string, unknown> = {},
+) {
+  return {
+    itemId,
+    revision,
+    sequence: 10,
+    body: {
+      kind: 'approval',
+      title: '題の秘密',
+      displayName: 'Bash',
+      detail: 'detail の秘密',
+      options,
+      resolution,
+      ...extra,
+    },
+  };
+}
+const approvalCalls = (f: { calls: { method: string }[] }) =>
+  f.calls.filter((c) => c.method === 'agentSession.respondToApproval');
+const allWrites = (f: { calls: { method: string }[] }) =>
+  f.calls.filter((c) =>
+    ['terminal.send', 'agentSession.send', 'agentSession.respondToQuestion', 'agentSession.respondToApproval'].includes(
+      c.method,
+    ),
+  );
+async function approvalFixture(t: import('node:test').TestContext) {
+  const f = await fixture(t);
+  f.setHistory([questionRow(pendingResolution), approvalRow(pendingResolution)]);
+  f.responses.set(
+    'agentSession.respondToApproval',
+    ok({ ok: true, value: { itemId: APPROVAL_ITEM, revision: 3, resolution: { state: 'resolved' } } }),
+  );
+  return f;
+}
+
+test('T-07 approvalIntent は送れないときの理由を返し、どれも書き込みの RPC を送らない', async (t) => {
+  const f = await approvalFixture(t);
+  const intent = (extra: Record<string, unknown> = {}) =>
+    f.service.approvalIntent({ agent: CHAT_AGENT, prompt: APPROVAL_PROMPT, optionId: 'opt-secret-allow', ...extra });
+  f.setEnabled(false);
+  assert.deepEqual(await intent(), { ok: false, error: 'send_disabled' });
+  f.setEnabled(true);
+  assert.deepEqual(await intent({ agent: TERMINAL_AGENT }), {
+    ok: false,
+    error: 'not_sendable',
+    reason: 'terminal_route',
+  });
+  assert.deepEqual(await intent({ target: '0'.repeat(32) }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'changed_since_shown',
+  });
+  f.setHistory([
+    approvalRow({ state: 'resolved', selectedOptionId: 'opt-secret-deny', resolvedBy: 'x', resolvedAt: 1 }, 3),
+  ]);
+  assert.deepEqual(await intent(), { ok: false, error: 'target_changed', reason: 'question_changed' });
+  f.setHistory([approvalRow(pendingResolution, 5)]);
+  assert.deepEqual(await intent(), { ok: false, error: 'target_changed', reason: 'question_changed' });
+  f.setHistory([approvalRow(pendingResolution, 2, 'other-item')]);
+  assert.deepEqual(await intent(), { ok: false, error: 'target_changed', reason: 'question_gone' });
+  f.setHistory([approvalRow({ ...pendingResolution, state: 'expired' })]);
+  assert.deepEqual(await intent(), { ok: false, error: 'unknown_shape' });
+  f.setHistory([questionRow(pendingResolution, 2, APPROVAL_ITEM)]);
+  assert.deepEqual(await intent(), { ok: false, error: 'unknown_shape' }, '承認でない項目');
+  f.setHistory([approvalRow(pendingResolution)]);
+  assert.deepEqual(await intent({ optionId: 'gone' }), {
+    ok: false,
+    error: 'invalid_answer',
+    reason: 'unknown_option',
+  });
+  assert.deepEqual(await intent({ optionId: 'opt-secret-always' }), {
+    ok: false,
+    error: 'invalid_answer',
+    reason: 'persistent_unconfirmed',
+  });
+  assert.deepEqual(await intent({ optionId: 'opt-secret-always', confirmPersistent: false }), {
+    ok: false,
+    error: 'invalid_answer',
+    reason: 'persistent_unconfirmed',
+  });
+  f.setHistory([approvalRow(pendingResolution, 2, APPROVAL_ITEM, undefined, { subject: { kind: 'url', url: 'x' } })]);
+  assert.deepEqual(await intent(), { ok: false, error: 'invalid_answer', reason: 'not_answerable' });
+  f.setHistory([approvalRow(pendingResolution)]);
+  f.cap.features.answerApproval = {
+    available: false,
+    missing: ['capability:agent-session.structured.v1'],
+    satisfied: [],
+    deferred: [],
+  };
+  assert.deepEqual(await intent(), {
+    ok: false,
+    error: 'unsupported',
+    missing: ['capability:agent-session.structured.v1'],
+  });
+  assert.equal(allWrites(f).length, 0);
+});
+
+test('T-07 approvalIntent は通れば票と digest と intent を返し、送らず、記録も作らない。質問の能力は要らない', async (t) => {
+  const f = await approvalFixture(t);
+  f.cap.features.answerChat = { available: false, missing: ['x'], satisfied: [], deferred: [] };
+  const status = await f.service.status(CHAT_AGENT);
+  assert.ok(status.target);
+  const intent = await f.service.approvalIntent({
+    agent: CHAT_AGENT,
+    prompt: APPROVAL_PROMPT,
+    optionId: 'opt-secret-allow',
+    target: status.target,
+  });
+  assert.ok(intent.ok);
+  assert.match(intent.digest, /^[0-9a-f]{64}$/);
+  assert.equal(intent.intent, 'allow_once');
+  assert.equal(intent.preview.route, 'chat');
+  assert.ok(intent.ticket && intent.operationId);
+  assert.equal('optionId' in intent, false);
+  const always = await f.service.approvalIntent({
+    agent: CHAT_AGENT,
+    prompt: APPROVAL_PROMPT,
+    optionId: 'opt-secret-always',
+    confirmPersistent: true,
+  });
+  assert.ok(always.ok);
+  assert.equal(always.intent, 'allow_always');
+  assert.equal(allWrites(f).length, 0);
+  assert.equal(await f.journal.read(intent.operationId), null);
+});
+
+test('T-08 approvalConfirm は before の記録の後に respondToApproval を1回だけ送り、同じ票の2回目は送らない', async (t) => {
+  const f = await approvalFixture(t);
+  const intent = await f.service.approvalIntent({
+    agent: CHAT_AGENT,
+    prompt: APPROVAL_PROMPT,
+    optionId: 'opt-secret-always',
+    confirmPersistent: true,
+  });
+  assert.ok(intent.ok);
+  const order: string[] = [];
+  const appendBefore = f.deps.journal.appendBefore.bind(f.deps.journal);
+  f.deps.journal.appendBefore = async (input) => {
+    order.push('before');
+    return appendBefore(input);
+  };
+  const call = f.deps.rpc.call.bind(f.deps.rpc);
+  f.deps.rpc.call = (async (method: string, params: unknown, options?: unknown) => {
+    if (method === 'agentSession.respondToApproval') order.push('send');
+    return call(method, params, options as never);
+  }) as typeof f.deps.rpc.call;
+  const confirmed = await f.service.approvalConfirm({ ticket: intent.ticket, optionId: 'opt-secret-always' });
+  assert.deepEqual(confirmed, {
+    ok: true,
+    operationId: intent.operationId,
+    outcome: 'submitted',
+    detail: { code: 'resolved' },
+  });
+  assert.deepEqual(order, ['before', 'send']);
+  const sent = approvalCalls(f);
+  assert.equal(sent.length, 1);
+  const params = (sent[0] as unknown as { params: Record<string, unknown> }).params;
+  assert.equal(params.itemId, APPROVAL_ITEM);
+  assert.equal(params.expectedRevision, 2);
+  assert.equal(params.optionId, 'opt-secret-always');
+  assert.equal((params.envelope as Record<string, unknown>).clientOperationId, intent.operationId);
+  assert.equal((params.envelope as Record<string, unknown>).expectedRuntimeFence, 4);
+  assert.deepEqual(await f.service.approvalConfirm({ ticket: intent.ticket, optionId: 'opt-secret-always' }), {
+    ok: false,
+    error: 'ticket_invalid',
+    reason: 'unknown',
+  });
+  assert.equal(approvalCalls(f).length, 1);
+});
+
+test('T-08 承認を送っている間の2回目は busy で送らず、照会は in_progress', async (t) => {
+  const f = await approvalFixture(t);
+  const issue = () =>
+    f.service.approvalIntent({ agent: CHAT_AGENT, prompt: APPROVAL_PROMPT, optionId: 'opt-secret-allow' });
+  const a = await issue();
+  const b = await issue();
+  assert.ok(a.ok && b.ok);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const call = f.deps.rpc.call.bind(f.deps.rpc);
+  f.deps.rpc.call = (async (method: string, params: unknown, options?: unknown) => {
+    if (method === 'agentSession.respondToApproval') {
+      entered.resolve();
+      await release.promise;
+    }
+    return call(method, params, options as never);
+  }) as typeof f.deps.rpc.call;
+  const first = f.service.approvalConfirm({ ticket: a.ticket, optionId: 'opt-secret-allow' });
+  await entered.promise;
+  assert.deepEqual(await f.service.approvalConfirm({ ticket: b.ticket, optionId: 'opt-secret-allow' }), {
+    ok: false,
+    error: 'busy',
+  });
+  assert.deepEqual(await f.service.check(a.operationId, { query: true }), {
+    ok: true,
+    operationId: a.operationId,
+    state: 'in_progress',
+  });
+  release.resolve();
+  assert.ok((await first).ok);
+  assert.equal(approvalCalls(f).length, 1);
+});
+
+test('T-08 optionId 違い・確定の前に答え済み・revision 違い・intent の変化・項目の消失・before の記録の失敗では送らない', async (t) => {
+  const f = await approvalFixture(t);
+  const issue = async (optionId = 'opt-secret-allow') => {
+    f.setHistory([approvalRow(pendingResolution)]);
+    const intent = await f.service.approvalIntent({ agent: CHAT_AGENT, prompt: APPROVAL_PROMPT, optionId });
+    assert.ok(intent.ok);
+    return intent;
+  };
+  const confirm = (ticket: string, optionId = 'opt-secret-allow') => f.service.approvalConfirm({ ticket, optionId });
+  let intent = await issue();
+  assert.deepEqual(await confirm(intent.ticket, 'opt-secret-deny'), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'answer_changed',
+  });
+  intent = await issue();
+  f.setHistory([
+    approvalRow({ state: 'resolved', selectedOptionId: 'opt-secret-deny', resolvedBy: 'x', resolvedAt: 1 }, 3),
+  ]);
+  assert.deepEqual(await confirm(intent.ticket), { ok: false, error: 'target_changed', reason: 'question_changed' });
+  intent = await issue();
+  f.setHistory([approvalRow(pendingResolution, 3)]);
+  assert.deepEqual(await confirm(intent.ticket), { ok: false, error: 'target_changed', reason: 'question_changed' });
+  intent = await issue();
+  // 同じ id の選択肢の intent が常に許可に変わった
+  f.setHistory([
+    approvalRow(pendingResolution, 2, APPROVAL_ITEM, [
+      { id: 'opt-secret-allow', label: 'ラベル秘密許可', intent: 'allow_always' },
+    ]),
+  ]);
+  assert.deepEqual(await confirm(intent.ticket), { ok: false, error: 'target_changed', reason: 'question_changed' });
+  intent = await issue();
+  // 選んだ選択肢が今の選択肢にない
+  f.setHistory([
+    approvalRow(pendingResolution, 2, APPROVAL_ITEM, [{ id: 'opt-secret-deny', label: 'x', intent: 'reject_once' }]),
+  ]);
+  assert.deepEqual(await confirm(intent.ticket), { ok: false, error: 'invalid_answer', reason: 'unknown_option' });
+  intent = await issue();
+  f.setHistory([]);
+  assert.deepEqual(await confirm(intent.ticket), { ok: false, error: 'target_changed', reason: 'question_gone' });
+  intent = await issue();
+  f.deps.journal.appendBefore = async () => {
+    throw new Error('disk full');
+  };
+  assert.deepEqual(await confirm(intent.ticket), { ok: false, error: 'record_failed' });
+  assert.equal(allWrites(f).length, 0);
+  const refused = await f.journal.read(intent.operationId);
+  assert.equal(refused?.refused?.reason, 'record_failed');
+});
+
+test('T-08 送信の票・質問の票・承認の票を取り違えない', async (t) => {
+  const f = await approvalFixture(t);
+  const issue = async () => {
+    const send = await f.service.intent({ agent: CHAT_AGENT, text: 'hello' });
+    const answer = await f.service.answerIntent({ agent: CHAT_AGENT, prompt: PROMPT, answers: answers() });
+    const approval = await f.service.approvalIntent({
+      agent: CHAT_AGENT,
+      prompt: APPROVAL_PROMPT,
+      optionId: 'opt-secret-allow',
+    });
+    assert.ok(send.ok && answer.ok && approval.ok);
+    return { send, answer, approval };
+  };
+  const wrong = { ok: false, error: 'ticket_invalid', reason: 'wrong_kind' };
+  let t1 = await issue();
+  assert.deepEqual(await f.service.approvalConfirm({ ticket: t1.send.ticket, optionId: 'opt-secret-allow' }), wrong);
+  assert.deepEqual(await f.service.approvalConfirm({ ticket: t1.answer.ticket, optionId: 'opt-secret-allow' }), wrong);
+  assert.deepEqual(await f.service.confirm({ ticket: t1.approval.ticket, text: 'hello' }), wrong);
+  t1 = await issue();
+  assert.deepEqual(await f.service.answerConfirm({ ticket: t1.approval.ticket, answers: answers() }), wrong);
+  assert.equal(allWrites(f).length, 0);
+});
+
+test('T-09 承認の記録の行に、選択肢の id・ラベル・題・detail が入らず、digest・intent・itemId・revision が入る', async (t) => {
+  const f = await approvalFixture(t);
+  const raw = () => readFile(path.join(f.sendsDir, 'sends.jsonl'), 'utf8');
+  const ok1 = await f.service.approvalIntent({
+    agent: CHAT_AGENT,
+    prompt: APPROVAL_PROMPT,
+    optionId: 'opt-secret-deny',
+  });
+  assert.ok(ok1.ok);
+  assert.ok((await f.service.approvalConfirm({ ticket: ok1.ticket, optionId: 'opt-secret-deny' })).ok);
+  const refusedIntent = await f.service.approvalIntent({
+    agent: CHAT_AGENT,
+    prompt: APPROVAL_PROMPT,
+    optionId: 'opt-secret-allow',
+  });
+  assert.ok(refusedIntent.ok);
+  assert.ok(!(await f.service.approvalConfirm({ ticket: refusedIntent.ticket, optionId: 'opt-secret-deny' })).ok);
+  const text = await raw();
+  for (const secret of ['opt-secret', 'ラベル秘密', '題の秘密', 'detail の秘密']) {
+    assert.ok(!text.includes(secret), secret);
+  }
+  const rows = text
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const before = rows.find((r) => r.kind === 'before');
+  assert.equal(before.action, 'approval');
+  assert.equal(before.route, 'chat');
+  assert.deepEqual(before.prompt, APPROVAL_PROMPT);
+  assert.equal(before.intent, 'reject_once');
+  assert.equal(before.digest, ok1.digest);
+  assert.equal('text' in before, false);
+  assert.equal('optionId' in before, false);
+  assert.ok(rows.some((r) => r.kind === 'after' && r.outcome === 'submitted'));
+  assert.ok(rows.some((r) => r.kind === 'refused'));
+  const record = await f.journal.read(ok1.operationId);
+  assert.equal(record?.before?.action, 'approval');
+});
+
+test('T-09 結果不明の承認の答えは check で承認の今の状態を照会し、送り直さない', async (t) => {
+  const f = await approvalFixture(t);
+  const intent = await f.service.approvalIntent({
+    agent: CHAT_AGENT,
+    prompt: APPROVAL_PROMPT,
+    optionId: 'opt-secret-allow',
+  });
+  assert.ok(intent.ok);
+  f.responses.set('agentSession.respondToApproval', { ok: false, kind: 'timeout', message: 'private' });
+  const confirmed = await f.service.approvalConfirm({ ticket: intent.ticket, optionId: 'opt-secret-allow' });
+  assert.deepEqual(confirmed, {
+    ok: true,
+    operationId: intent.operationId,
+    outcome: 'unknown',
+    detail: { code: 'timeout' },
+  });
+  let checked = await f.service.check(intent.operationId, { query: true });
+  assert.ok(checked.ok && checked.state === 'recorded');
+  assert.equal(checked.record.outcome, 'unknown');
+  assert.equal(checked.record.checks.at(-1)?.detail.code, 'prompt_pending');
+  f.setHistory([
+    approvalRow({ state: 'resolved', selectedOptionId: 'opt-secret-deny', resolvedBy: 'x', resolvedAt: 2 }, 3),
+  ]);
+  checked = await f.service.check(intent.operationId, { query: true });
+  assert.ok(checked.ok && checked.state === 'recorded');
+  assert.equal(checked.record.outcome, 'refused');
+  assert.equal(checked.record.detail.code, 'resolved_by_other');
+  assert.equal(approvalCalls(f).length, 1);
+  assert.equal(
+    f.calls.filter((c) => c.method === 'agentSession.respondToQuestion' || c.method === 'agentSession.sendRecorded')
+      .length,
+    0,
+  );
+});
+
+test('T-09 結果不明の後に同じ選択肢で答え済みなら submitted', async (t) => {
+  const f = await approvalFixture(t);
+  const intent = await f.service.approvalIntent({
+    agent: CHAT_AGENT,
+    prompt: APPROVAL_PROMPT,
+    optionId: 'opt-secret-allow',
+  });
+  assert.ok(intent.ok);
+  f.responses.set('agentSession.respondToApproval', { ok: false, kind: 'timeout', message: 'private' });
+  assert.ok((await f.service.approvalConfirm({ ticket: intent.ticket, optionId: 'opt-secret-allow' })).ok);
+  f.setHistory([
+    approvalRow({ state: 'resolved', selectedOptionId: 'opt-secret-allow', resolvedBy: 'x', resolvedAt: 2 }, 3),
+  ]);
+  const checked = await f.service.check(intent.operationId, { query: true });
+  assert.ok(checked.ok && checked.state === 'recorded');
+  assert.equal(checked.record.outcome, 'submitted');
+  assert.equal(approvalCalls(f).length, 1);
+});
+
+test('status の approval は能力 answerApproval と止めた承認の RPC を見て、質問の能力に引きずられない', async (t) => {
+  const f = await approvalFixture(t);
+  f.cap.features.answerChat = { available: false, missing: ['x'], satisfied: [], deferred: [] };
+  let status = await f.service.status(CHAT_AGENT);
+  assert.deepEqual(status.answer, { available: false, reason: 'unsupported' });
+  assert.deepEqual(status.approval, { available: true, reason: null });
+  f.cap.features.answerApproval = { available: false, missing: ['x'], satisfied: [], deferred: [] };
+  status = await f.service.status(CHAT_AGENT);
+  assert.deepEqual(status.approval, { available: false, reason: 'unsupported' });
+  f.cap.features.answerApproval = { available: true, missing: [], satisfied: [], deferred: [] };
+  // method_not_found で承認の RPC を止めると、approval だけが使えなくなる
+  f.cap.features.answerChat = { available: true, missing: [], satisfied: [], deferred: [] };
+  f.responses.set('agentSession.respondToApproval', {
+    ok: false,
+    kind: 'orca-error',
+    code: 'method_not_found',
+    message: 'private',
+  });
+  const intent = await f.service.approvalIntent({
+    agent: CHAT_AGENT,
+    prompt: APPROVAL_PROMPT,
+    optionId: 'opt-secret-allow',
+  });
+  assert.ok(intent.ok);
+  const confirmed = await f.service.approvalConfirm({ ticket: intent.ticket, optionId: 'opt-secret-allow' });
+  assert.ok(confirmed.ok);
+  assert.equal(confirmed.outcome, 'refused');
+  status = await f.service.status(CHAT_AGENT);
+  assert.deepEqual(status.approval, { available: false, reason: 'unsupported' });
+  assert.deepEqual(status.answer, { available: true, reason: null });
+  assert.deepEqual(
+    await f.service.approvalIntent({ agent: CHAT_AGENT, prompt: APPROVAL_PROMPT, optionId: 'opt-secret-allow' }),
+    { ok: false, error: 'unsupported', missing: ['rpc:agentSession.respondToApproval'] },
+  );
+  // 端末は terminal_route
+  status = await f.service.status(TERMINAL_AGENT);
+  assert.deepEqual(status.approval, { available: false, reason: 'terminal_route' });
 });

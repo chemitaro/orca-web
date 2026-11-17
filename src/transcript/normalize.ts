@@ -16,6 +16,13 @@ export const MAX_QUESTION_OTHER_CHARS = 4_000;
 /** Orca の答えは1〜4件、1つの答えの optionIds は64件まで。これを超える質問は部分にしない。 */
 export const MAX_QUESTIONS = 4;
 export const MAX_QUESTION_OPTIONS = 64;
+export const MAX_APPROVAL_LABEL_CHARS = 500;
+export const MAX_APPROVAL_DESCRIPTION_CHARS = 2_000;
+export const MAX_APPROVAL_PATH_CHARS = 1_000;
+export const MAX_APPROVAL_DETAIL_CHARS = 8_000;
+export const MAX_APPROVAL_PLAN_CHARS = 16_000;
+/** 承認の選択肢の上限。超える承認は部分にしない。 */
+export const MAX_APPROVAL_OPTIONS = 16;
 
 export type TranscriptRole = 'user' | 'assistant' | 'tool' | 'system';
 
@@ -24,6 +31,7 @@ export type TranscriptPart =
   | { type: 'tool-call'; name: string; input: string; callId: string | null; truncated?: true }
   | { type: 'tool-result'; output: string; isError: boolean; callId: string | null; truncated?: true }
   | QuestionPart
+  | ApprovalPart
   | { type: 'unsupported'; what: UnsupportedWhat };
 
 export interface QuestionOptionView {
@@ -59,6 +67,39 @@ export interface QuestionPart {
   questions: QuestionView[];
   state: QuestionState;
   answers: QuestionAnswerView[] | null;
+  truncated?: true;
+}
+
+export type ApprovalIntent = 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+
+export interface ApprovalOptionView {
+  id: string;
+  label: string;
+  description: string | null;
+  intent: ApprovalIntent | null;
+}
+
+/** 答えられない理由。url は Orca の外で開くページ、newer_subject は知らない種類か選択肢のない承認、terminal は端末のエージェント。 */
+export type ApprovalUnanswerableReason = 'url' | 'newer_subject' | 'terminal';
+
+/** 承認（許可の確認）の部分。chat は構造化 Chat の journal の approval、terminal は端末のエージェントの待っている許可の確認。 */
+export interface ApprovalPart {
+  type: 'approval';
+  source: 'chat' | 'terminal';
+  prompt: { itemId: string; revision: number } | null;
+  title: string | null;
+  tool: string | null;
+  description: string | null;
+  reason: string | null;
+  blockedPath: string | null;
+  plan: { text: string; filePath: string | null } | null;
+  detail: string | null;
+  options: ApprovalOptionView[];
+  answerable: boolean;
+  unanswerableReason: ApprovalUnanswerableReason | null;
+  state: QuestionState;
+  /** answered のときの選んだ選択肢の id（今の選択肢にあるときだけ）。 */
+  selectedOptionId: string | null;
   truncated?: true;
 }
 
@@ -487,6 +528,176 @@ function terminalQuestionPart(input: unknown, callId: string | null, shortened: 
   );
 }
 
+// ---- 承認（Orca v1.4.261 の agent-session-journal-types.ts、agent-session-approval-subject.ts、
+// agent-session-approval-blocked-path.ts、agent-session-approval-detail-preview.ts に合わせる） ----
+
+const APPROVAL_UNSUPPORTED: TranscriptPart = { type: 'unsupported', what: 'approval' };
+const APPROVAL_INTENTS: ReadonlySet<string> = new Set(['allow_once', 'allow_always', 'reject_once', 'reject_always']);
+
+/** Orca の approvalDetailPreview と同じ下見（先頭 512 字・4 行）。 */
+export function approvalDetailPreview(detail: string): string {
+  const prefix = detail.slice(0, 512).split('\n', 4).join('\n');
+  if (prefix.length === detail.length || prefix.trimEnd() === detail.trimEnd()) return detail;
+  return `${prefix.replace(/[\uD800-\uDBFF]$/, '').trimEnd()}…`;
+}
+
+const PATH_END = /[\s'"`/\\]/;
+
+/** Orca の containsWholePath と同じ判定（長い名前の一部は数えない）。 */
+function containsWholePath(text: string, path: string): boolean {
+  for (let at = text.indexOf(path); at !== -1; at = text.indexOf(path, at + 1)) {
+    const next = text[at + path.length];
+    if (next === undefined || PATH_END.test(next)) return true;
+  }
+  return false;
+}
+
+/** Orca の approvalBlockedPathToShow と同じく、カードのほかの文に同じパスが出ていれば null。 */
+function blockedPathToShow(
+  path: string | undefined,
+  texts: {
+    description: string | undefined;
+    reason: string | undefined;
+    plan: { text: string; filePath?: string } | null;
+    detail: string | null;
+  },
+): string | null {
+  if (!path) return null;
+  const forms = [path, JSON.stringify(path).slice(1, -1)];
+  const drawn = texts.plan
+    ? [texts.plan.text, texts.plan.filePath]
+    : [texts.detail === null ? undefined : approvalDetailPreview(texts.detail)];
+  const shown = [texts.description, texts.reason, ...drawn].some(
+    (t) => t !== undefined && forms.some((form) => containsWholePath(t, form)),
+  );
+  return shown ? null : path;
+}
+
+function approvalOptions(raw: unknown, c: Clipper): ApprovalOptionView[] | null {
+  if (!Array.isArray(raw) || raw.length > MAX_APPROVAL_OPTIONS) return null;
+  const out: ApprovalOptionView[] = [];
+  for (const o of raw) {
+    if (!isRecord(o) || typeof o.id !== 'string' || o.id.length === 0) return null;
+    if (typeof o.label !== 'string' || o.label.length === 0) return null;
+    const description = optStr(o.description);
+    if (description === null) return null;
+    out.push({
+      id: o.id,
+      label: c.clip(o.label, MAX_APPROVAL_LABEL_CHARS),
+      description: description === undefined ? null : c.clip(description, MAX_APPROVAL_DESCRIPTION_CHARS),
+      intent: typeof o.intent === 'string' && APPROVAL_INTENTS.has(o.intent) ? (o.intent as ApprovalIntent) : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * journal の approval の項目（agentSession.history の page.items の1件）を部分にする。知らない形なら null（F-03）。
+ * 会話の正規化と、承認の答えの送信の読み（`readApproval`）が共有する。
+ */
+export function parseJournalApproval(item: unknown): ApprovalPart | null {
+  if (!isRecord(item) || typeof item.itemId !== 'string' || item.itemId.length === 0 || !isRecord(item.body))
+    return null;
+  const body = item.body;
+  if (body.kind !== 'approval' || typeof body.title !== 'string') return null;
+  const revision = item.revision;
+  if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision <= 0) return null;
+  const resolution = body.resolution;
+  if (!isRecord(resolution) || typeof resolution.state !== 'string') return null;
+  const state = Object.hasOwn(RESOLUTION_STATES, resolution.state) ? RESOLUTION_STATES[resolution.state] : undefined;
+  if (state === undefined) return null;
+  if (body.detail !== null && typeof body.detail !== 'string') return null;
+  const displayName = optStr(body.displayName);
+  const description = optStr(body.description);
+  const reason = optStr(body.decisionReason);
+  const blockedPath = optStr(body.blockedPath);
+  if (displayName === null || description === null || reason === null || blockedPath === null) return null;
+  const c = new Clipper();
+  const options = approvalOptions(body.options, c);
+  if (options === null) return null;
+  const subject = body.subject;
+  let plan: { text: string; filePath?: string } | null = null;
+  let unanswerableReason: ApprovalUnanswerableReason | null = null;
+  if (subject !== undefined) {
+    if (isRecord(subject) && subject.kind === 'plan' && typeof subject.text === 'string') {
+      const filePath = optStr(subject.filePath);
+      if (filePath === null) unanswerableReason = 'newer_subject';
+      else plan = { text: subject.text, ...(filePath === undefined ? {} : { filePath }) };
+    } else {
+      unanswerableReason = isRecord(subject) && subject.kind === 'url' ? 'url' : 'newer_subject';
+    }
+  }
+  if (unanswerableReason === null && options.length === 0) unanswerableReason = 'newer_subject';
+  const detail = body.detail as string | null;
+  const path = blockedPathToShow(blockedPath, { description, reason, plan, detail });
+  const selected =
+    state === 'answered' && typeof resolution.selectedOptionId === 'string' ? resolution.selectedOptionId : null;
+  return withTruncated<ApprovalPart>(
+    {
+      type: 'approval',
+      source: 'chat',
+      prompt: { itemId: item.itemId, revision },
+      title: c.clip(body.title, MAX_APPROVAL_LABEL_CHARS),
+      tool: displayName === undefined ? null : c.clip(displayName, MAX_APPROVAL_LABEL_CHARS),
+      description: description === undefined ? null : c.clip(description, MAX_APPROVAL_DESCRIPTION_CHARS),
+      reason: reason === undefined ? null : c.clip(reason, MAX_APPROVAL_DESCRIPTION_CHARS),
+      blockedPath: path === null ? null : c.clip(path, MAX_APPROVAL_PATH_CHARS),
+      plan: plan
+        ? {
+            text: c.clip(plan.text, MAX_APPROVAL_PLAN_CHARS),
+            filePath: plan.filePath === undefined ? null : c.clip(plan.filePath, MAX_APPROVAL_PATH_CHARS),
+          }
+        : null,
+      detail: detail === null ? null : c.clip(detail, MAX_APPROVAL_DETAIL_CHARS),
+      options,
+      answerable: unanswerableReason === null,
+      unanswerableReason,
+      state,
+      selectedOptionId: selected !== null && options.some((o) => o.id === selected) ? selected : null,
+    },
+    c.truncated || item.shortened === true,
+  );
+}
+
+const WAITING_STATES: ReadonlySet<unknown> = new Set(['blocked', 'waiting']);
+
+/** 端末のエージェントの待っている許可の確認（タブの agentStatus の3つの項目）を、会話の最後の件にする。読めなければ null（F-05）。 */
+function terminalApprovalMessage(prompt: RawPage['terminalPrompt']): TranscriptMessage | null {
+  if (!isRecord(prompt) || !WAITING_STATES.has(prompt.state) || typeof prompt.interactivePrompt !== 'string')
+    return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(prompt.interactivePrompt);
+  } catch {
+    return null;
+  }
+  if (!isRecord(value) || !isRecord(value.approval)) return null;
+  const { tool, summary } = value.approval;
+  if (typeof tool !== 'string' || tool.length === 0) return null;
+  const c = new Clipper();
+  const part = withTruncated<ApprovalPart>(
+    {
+      type: 'approval',
+      source: 'terminal',
+      prompt: null,
+      title: null,
+      tool: c.clip(tool, MAX_APPROVAL_LABEL_CHARS),
+      description: typeof summary === 'string' ? c.clip(summary, MAX_APPROVAL_DESCRIPTION_CHARS) : null,
+      reason: null,
+      blockedPath: null,
+      plan: null,
+      detail: null,
+      options: [],
+      answerable: false,
+      unanswerableReason: 'terminal',
+      state: 'pending',
+      selectedOptionId: null,
+    },
+    c.truncated,
+  );
+  return { id: 'pending-approval', role: 'assistant', at: toIso(prompt.stateStartedAt), parts: [part] };
+}
+
 /** 出さない journal の kind（会話の本文ではない）。 */
 const HIDDEN_KINDS = new Set(['turn', 'agent-start', 'agent-handoff']);
 
@@ -540,6 +751,10 @@ export function normalizeJournalItems(items: readonly unknown[]): TranscriptMess
       out.push({ id, role: 'assistant', at, parts: [journalQuestionPart(item)] });
       continue;
     }
+    if (kind === 'approval') {
+      out.push({ id, role: 'assistant', at, parts: [parseJournalApproval(item) ?? APPROVAL_UNSUPPORTED] });
+      continue;
+    }
     const what = typeof kind === 'string' && JOURNAL_UNSUPPORTED.has(kind) ? (kind as UnsupportedWhat) : 'unknown';
     out.push({ id, role: 'assistant', at, parts: [{ type: 'unsupported', what }] });
   }
@@ -558,8 +773,12 @@ export interface TranscriptDocument {
   readAt: string;
 }
 
+/** ページを正規化する。端末の最新のページに待っている許可の確認が添えてあれば、会話の最後に端末の承認の件を足す。 */
 export function normalizePage(page: RawPage): TranscriptMessage[] | null {
-  return page.source === 'nativeChat' ? normalizeNativeMessages(page.rows) : normalizeJournalItems(page.rows);
+  if (page.source !== 'nativeChat') return normalizeJournalItems(page.rows);
+  const messages = normalizeNativeMessages(page.rows);
+  const approval = messages === null ? null : terminalApprovalMessage(page.terminalPrompt);
+  return approval && messages ? [...messages, approval] : messages;
 }
 
 export function encodeBefore(key: string, position: PagePosition): string {

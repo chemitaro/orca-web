@@ -36,6 +36,7 @@ export function report(
       sendTerminal: feature(false),
       sendChat: feature(false),
       answerChat: feature(false),
+      answerApproval: feature(false),
     },
   };
 }

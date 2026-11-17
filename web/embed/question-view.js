@@ -48,10 +48,7 @@ export const QUESTION_REASONS = {
 export const TERMINAL_REASON = QUESTION_REASONS.terminal_route;
 const UNKNOWN_TEXT = '届いたか分かりません。自動では送り直しません';
 
-const reasonText = (code) =>
-  typeof code === 'string' && Object.hasOwn(QUESTION_REASONS, code)
-    ? QUESTION_REASONS[code]
-    : `答えられません（${String(code)}）`;
+const reasonText = (code) => reasonTextFrom(QUESTION_REASONS)(code);
 
 const isRecord = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isText = (v) => typeof v === 'string' && v.length > 0;
@@ -322,23 +319,106 @@ export function answererFor(part, answerers) {
 
 const DELIVERED = new Set(['submitted', 'accepted', 'input_accepted']);
 
+/** 言葉の表から、理由の識別子を言葉にする関数を作る（質問と承認が共有する）。知らない識別子はそのまま括弧に入れる。 */
+export function reasonTextFrom(table) {
+  return (code) =>
+    typeof code === 'string' && Object.hasOwn(table, code) ? table[code] : `答えられません（${String(code)}）`;
+}
+
 /** 意図・確定の誤りの応答（ok: false）の理由の言葉。 */
-function refusalReason(body) {
-  if (!isRecord(body)) return reasonText('unknown_shape');
-  if (isText(body.reason) && Object.hasOwn(QUESTION_REASONS, body.reason)) return QUESTION_REASONS[body.reason];
-  if (isText(body.error)) return reasonText(body.error);
-  return reasonText('unknown_shape');
+function refusalReason(body, table) {
+  const text = reasonTextFrom(table);
+  if (!isRecord(body)) return text('unknown_shape');
+  if (isText(body.reason) && Object.hasOwn(table, body.reason)) return table[body.reason];
+  if (isText(body.error)) return text(body.error);
+  return text('unknown_shape');
 }
 
 /** 確定の 200 の応答（outcome）を結果にする。 */
-function outcomeResult(body, operationId) {
+function outcomeResult(body, operationId, table) {
   const detail = isRecord(body.detail) ? body.detail : {};
   if (DELIVERED.has(body.outcome)) return { kind: 'done' };
   if (body.outcome === 'refused') {
     const why = detail.code ?? detail.refusedReason;
-    return { kind: 'refused', reason: isText(why) ? reasonText(why) : QUESTION_REASONS.not_sent };
+    return { kind: 'refused', reason: isText(why) ? reasonTextFrom(table)(why) : table.not_sent };
   }
   return { kind: 'unknown', operationId };
+}
+
+/** 同じオリジンで JSON を読む既定の口。 */
+export async function readSameOrigin(url) {
+  const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+  return { status: res.status, body: await res.json().catch(() => ({})) };
+}
+
+/**
+ * 意図と確定を続けて1回ずつ送る（質問と承認が共有する手順）。確定の応答を失えば結果不明にし、送り直さない。
+ * @param {{
+ *   writer: { send: (path: string, method: 'POST', body: unknown) => Promise<{ status: number, body: any }> },
+ *   reasons: Record<string, string>,
+ *   intentPath: string, intentBody: unknown,
+ *   confirmPath: string, confirmBody: (ticket: string) => unknown,
+ * }} step
+ * @returns {Promise<FlowResult>}
+ */
+export async function sendIntentConfirm(step) {
+  const table = step.reasons;
+  let intent;
+  try {
+    intent = await step.writer.send(step.intentPath, 'POST', step.intentBody);
+  } catch {
+    return { kind: 'refused', reason: table.network };
+  }
+  const body = isRecord(intent?.body) ? intent.body : {};
+  if (intent?.status !== 200 || !isText(body.ticket) || !isText(body.operationId))
+    return { kind: 'refused', reason: refusalReason(body, table) };
+  const operationId = body.operationId;
+  let confirm;
+  try {
+    confirm = await step.writer.send(step.confirmPath, 'POST', step.confirmBody(body.ticket));
+  } catch {
+    return { kind: 'unknown', operationId };
+  }
+  const result = isRecord(confirm?.body) ? confirm.body : {};
+  if (confirm?.status === 200 && typeof result.outcome === 'string') return outcomeResult(result, operationId, table);
+  // 送る前の拒み（ok: false と error）は送っていない。ほかの形は届いたか分からない。
+  if (result.ok === false && isText(result.error)) return { kind: 'refused', reason: refusalReason(result, table) };
+  return { kind: 'unknown', operationId };
+}
+
+/**
+ * 結果不明の照会。/api/send/{操作の ID}?check=1 を1回だけ読む。送らない。
+ * @param {(url: string) => Promise<{ status: number, body: any }>} read
+ * @param {string} operationId
+ * @param {Record<string, string>} table 言葉の表
+ * @returns {Promise<FlowResult>}
+ */
+export async function checkOperation(read, operationId, table) {
+  const text = reasonTextFrom(table);
+  const still = (code) => ({ kind: 'unknown', operationId, note: `まだ分かりません：${text(code)}` });
+  let res;
+  try {
+    res = await read(`/api/send/${encodeURIComponent(operationId)}?check=1`);
+  } catch {
+    return still('network');
+  }
+  const body = isRecord(res?.body) ? res.body : {};
+  if (res?.status !== 200) return still(isText(body.error) ? body.error : 'unknown_shape');
+  if (body.state === 'not_sent') return { kind: 'refused', reason: table.not_sent };
+  if (body.state === 'in_progress')
+    return { kind: 'unknown', operationId, note: '送っている途中です。少し待ってもう一度確かめてください' };
+  const record = isRecord(body.record) ? body.record : null;
+  if (body.state !== 'recorded' || !record) return still('unknown_shape');
+  if (body.checkError === 'unreachable') return still('unreachable');
+  const detail = isRecord(record.detail) ? record.detail : {};
+  if (DELIVERED.has(record.outcome)) return { kind: 'done' };
+  if (record.outcome === 'refused')
+    return { kind: 'refused', reason: isText(detail.code) ? text(detail.code) : table.not_sent };
+  return {
+    kind: 'unknown',
+    operationId,
+    note: `まだ分かりません${isText(detail.code) ? `：${text(detail.code)}` : ''}。Orca の画面で確かめてください`,
+  };
 }
 
 /**
@@ -351,12 +431,7 @@ function outcomeResult(body, operationId) {
  * }} deps
  */
 export function createChatAnswerer(deps) {
-  const read =
-    deps.read ??
-    (async (url) => {
-      const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
-      return { status: res.status, body: await res.json().catch(() => ({})) };
-    });
+  const read = deps.read ?? readSameOrigin;
   return {
     /** status は GET /api/send/status の本体、読めなければ 'failed'、まだなら null。 */
     availability(part, status) {
@@ -374,58 +449,16 @@ export function createChatAnswerer(deps) {
       const prompt = part?.prompt;
       if (!isRecord(prompt) || !isText(prompt.itemId))
         return { kind: 'refused', reason: QUESTION_REASONS.unknown_shape };
-      let intent;
-      try {
-        intent = await deps.writer.send('/api/answer/intent', 'POST', {
-          agent: deps.agentId,
-          prompt: { itemId: prompt.itemId, revision: prompt.revision },
-          answers,
-        });
-      } catch {
-        return { kind: 'refused', reason: QUESTION_REASONS.network };
-      }
-      const body = isRecord(intent?.body) ? intent.body : {};
-      if (intent?.status !== 200 || !isText(body.ticket) || !isText(body.operationId))
-        return { kind: 'refused', reason: refusalReason(body) };
-      const operationId = body.operationId;
-      let confirm;
-      try {
-        confirm = await deps.writer.send('/api/answer/confirm', 'POST', { ticket: body.ticket, answers });
-      } catch {
-        return { kind: 'unknown', operationId };
-      }
-      const result = isRecord(confirm?.body) ? confirm.body : {};
-      if (confirm?.status === 200 && typeof result.outcome === 'string') return outcomeResult(result, operationId);
-      // 送る前の拒み（ok: false と error）は送っていない。ほかの形は届いたか分からない。
-      if (result.ok === false && isText(result.error)) return { kind: 'refused', reason: refusalReason(result) };
-      return { kind: 'unknown', operationId };
+      return sendIntentConfirm({
+        writer: deps.writer,
+        reasons: QUESTION_REASONS,
+        intentPath: '/api/answer/intent',
+        intentBody: { agent: deps.agentId, prompt: { itemId: prompt.itemId, revision: prompt.revision }, answers },
+        confirmPath: '/api/answer/confirm',
+        confirmBody: (ticket) => ({ ticket, answers }),
+      });
     },
-    async check(operationId) {
-      const still = (code) => ({ kind: 'unknown', operationId, note: `まだ分かりません：${reasonText(code)}` });
-      let res;
-      try {
-        res = await read(`/api/send/${encodeURIComponent(operationId)}?check=1`);
-      } catch {
-        return still('network');
-      }
-      const body = isRecord(res?.body) ? res.body : {};
-      if (res?.status !== 200) return still(isText(body.error) ? body.error : 'unknown_shape');
-      if (body.state === 'not_sent') return { kind: 'refused', reason: QUESTION_REASONS.not_sent };
-      if (body.state === 'in_progress')
-        return { kind: 'unknown', operationId, note: '送っている途中です。少し待ってもう一度確かめてください' };
-      const record = isRecord(body.record) ? body.record : null;
-      if (body.state !== 'recorded' || !record) return still('unknown_shape');
-      if (body.checkError === 'unreachable') return still('unreachable');
-      const detail = isRecord(record.detail) ? record.detail : {};
-      if (DELIVERED.has(record.outcome)) return { kind: 'done' };
-      if (record.outcome === 'refused')
-        return { kind: 'refused', reason: isText(detail.code) ? reasonText(detail.code) : QUESTION_REASONS.not_sent };
-      return {
-        kind: 'unknown',
-        operationId,
-        note: `まだ分かりません${isText(detail.code) ? `：${reasonText(detail.code)}` : ''}。Orca の画面で確かめてください`,
-      };
-    },
+    check: (operationId) => checkOperation(read, operationId, QUESTION_REASONS),
   };
 }
 

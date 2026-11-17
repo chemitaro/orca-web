@@ -1,4 +1,4 @@
-// 確認つきの送信と質問への答えだけを通す RPC の門。読む門の許可一覧は広げない。
+// 確認つきの送信と、質問と承認への答えだけを通す RPC の門。読む門の許可一覧は広げない。
 import { READ_METHODS, type RpcCallOptions, type RpcOutcome, type RpcTransport } from './rpc.ts';
 
 export const SEND_READ_METHODS: readonly string[] = [
@@ -102,6 +102,18 @@ function chatAnswer(params: unknown): boolean {
   );
 }
 
+/** 承認への答え。Orca の RespondToApprovalParams と同じ形（optionId は1〜1024字）。 */
+function chatApproval(params: unknown): boolean {
+  return (
+    hasKeys(params, ['envelope', 'itemId', 'expectedRevision', 'optionId']) &&
+    isEnvelope(params.envelope) &&
+    isText(params.itemId) &&
+    Number.isSafeInteger(params.expectedRevision) &&
+    (params.expectedRevision as number) > 0 &&
+    isAnswerId(params.optionId)
+  );
+}
+
 export class SendRpc implements RpcTransport {
   readonly #transport: RpcTransport;
 
@@ -117,7 +129,9 @@ export class SendRpc implements RpcTransport {
           ? chatSend(params)
           : method === 'agentSession.respondToQuestion'
             ? chatAnswer(params)
-            : READ_METHODS.includes(method) || SEND_READ_METHODS.includes(method))
+            : method === 'agentSession.respondToApproval'
+              ? chatApproval(params)
+              : READ_METHODS.includes(method) || SEND_READ_METHODS.includes(method))
     ) {
       return Promise.reject(new Error(`${method} is not allowed for sending`));
     }

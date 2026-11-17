@@ -37,6 +37,14 @@ export interface RawPage {
   rows: unknown[];
   hasMore: boolean;
   before: PagePosition | null;
+  /** 端末の最新のページだけに添える、タブの agentStatus の state・interactivePrompt・stateStartedAt。読めなければ null。 */
+  terminalPrompt?: TerminalPromptStatus | null;
+}
+
+export interface TerminalPromptStatus {
+  state: unknown;
+  interactivePrompt: unknown;
+  stateStartedAt: unknown;
 }
 
 export type Resolved = { ok: true; target: TranscriptTarget } | { ok: false; error: TranscriptErrorCode };
@@ -55,6 +63,34 @@ const text = (value: unknown): string | null => (typeof value === 'string' && va
 
 export function sessionKey(agentId: string, source: TranscriptSource, agentType: string, sessionId: string): string {
   return createHash('sha256').update([agentId, source, agentType, sessionId].join('\0')).digest('hex').slice(0, 16);
+}
+
+/** 端末のタブの、状態の API の id（paneKey、なければタブの id）。 */
+function terminalAgentId(tab: Record<string, unknown>): string | null {
+  const paneKey = text(tab.parentTabId) && text(tab.leafId) ? `${tab.parentTabId}:${tab.leafId}` : null;
+  return paneKey ?? text(tab.id);
+}
+
+/**
+ * タブの集合の中から、agentId の端末のタブの agentStatus の state・interactivePrompt・stateStartedAt の3つだけを取る。
+ * タブも agentStatus もなければ、また一覧の形が違えば null。ほかの項目は写さない。
+ */
+export function terminalPromptFromTabs(listAll: unknown, agentId: string): TerminalPromptStatus | null {
+  if (!isRecord(listAll) || !Array.isArray(listAll.snapshots)) return null;
+  for (const snap of listAll.snapshots) {
+    if (!isRecord(snap) || !Array.isArray(snap.tabs)) return null;
+    for (const tab of snap.tabs) {
+      if (!isRecord(tab) || tab.type !== 'terminal' || terminalAgentId(tab) !== agentId) continue;
+      const status = tab.agentStatus;
+      if (!isRecord(status)) return null;
+      return {
+        state: status.state,
+        interactivePrompt: status.interactivePrompt,
+        stateStartedAt: status.stateStartedAt,
+      };
+    }
+  }
+  return null;
 }
 
 /** タブの集合の中から、状態の API の id（paneKey、タブの id、`chat:<タブの id>`）に当たるタブを探して解く。 */
@@ -81,9 +117,7 @@ export function resolveFromTabs(listAll: unknown, agentId: string): Resolved {
           },
         };
       }
-      if (tab.type !== 'terminal') continue;
-      const paneKey = text(tab.parentTabId) && text(tab.leafId) ? `${tab.parentTabId}:${tab.leafId}` : null;
-      if ((paneKey ?? text(tab.id)) !== agentId) continue;
+      if (tab.type !== 'terminal' || terminalAgentId(tab) !== agentId) continue;
       const status = isRecord(tab.agentStatus) ? tab.agentStatus : null;
       const ps = status && isRecord(status.providerSession) ? status.providerSession : null;
       const agentType = text(status?.agentType) ?? text(tab.launchAgent);
@@ -203,8 +237,14 @@ export function createTranscriptReader(deps: {
           if (!('offset' in options.before)) return { ok: false, error: 'read_failed' };
           params.beforeOffset = options.before.offset;
         }
+        // 最新のページだけに、端末のエージェントの待っている許可の確認を添える。一覧が読めなくても会話は読む。
+        const tabs = options.before ? null : await listAll();
         const o = await deps.rpc.call<unknown>('nativeChat.readSession', params, { timeoutMs: RPC_TIMEOUT_MS });
-        return o.ok ? parseNativePage(o.result) : { ok: false, error: rpcError(o) };
+        if (!o.ok) return { ok: false, error: rpcError(o) };
+        const parsed = parseNativePage(o.result);
+        if (!parsed.ok || tabs === null) return parsed;
+        const terminalPrompt = tabs.ok ? terminalPromptFromTabs(tabs.result, target.agentId) : null;
+        return { ok: true, page: { ...parsed.page, terminalPrompt } };
       }
       const params: Record<string, unknown> = {
         sessionId: target.sessionId,
