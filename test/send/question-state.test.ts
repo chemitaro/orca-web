@@ -198,3 +198,40 @@ test('FQG3 T-05 findCallQuestion：ほかのエージェントからの発言（
     assert.equal(findCallQuestion([msg('assistant', q), fromAgent], 'a3', { countUndelivered })?.state, 'pending');
   }
 });
+
+test('FQG3-3 promptMatches：header や選択肢の説明だけが違う問いも mismatch、切られた interactivePrompt は unverified', () => {
+  const prompt = (q: Record<string, unknown>) => status({ interactivePrompt: JSON.stringify({ questions: [q] }) });
+  const described = [
+    {
+      ...(questions[0] as (typeof questions)[0]),
+      header: '見出し',
+      options: [
+        { id: '0', label: '甲', description: '説明A' },
+        { id: '1', label: '乙', description: null },
+      ],
+    },
+  ];
+  const same = { question: '仮の問い', header: '見出し', options: [{ label: '甲', description: '説明A' }, '乙'] };
+  assert.equal(promptMatches(prompt(same), described), 'match');
+  assert.equal(
+    promptMatches(prompt({ ...same, options: [{ label: '甲', description: '説明B' }, '乙'] }), described),
+    'mismatch',
+  );
+  assert.equal(promptMatches(prompt({ ...same, header: '別の見出し' }), described), 'mismatch');
+  assert.equal(promptMatches(prompt({ ...same, header: undefined }), described), 'mismatch');
+  assert.equal(promptMatches(prompt({ question: 'q'.repeat(5000), options: ['甲', '乙'] }), questions), 'unverified');
+});
+
+test('FQG3-3 sameQuestions：選択肢の説明が違えば偽', () => {
+  const base = question('c', 'keys').questions;
+  const other = [
+    {
+      ...(base[0] as (typeof base)[0]),
+      options: [
+        { id: '0', label: '甲', description: '説明' },
+        { id: '1', label: '乙', description: null },
+      ],
+    },
+  ];
+  assert.equal(sameQuestions(base, other), false);
+});

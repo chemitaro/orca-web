@@ -58,6 +58,7 @@ export const QUESTION_REASONS = {
   unconfirmed: '届いたか分かりません。Orca で確かめてください',
   keys_sent: '答えを送りました。エージェントの返事を待っています',
   control_character: 'その他の文は1行で、制御文字を含めないでください',
+  too_large: '答えが長すぎます（引用を含めて 16KB まで）',
   permission: 'エージェントが権限の確認を待っています',
 };
 
@@ -151,7 +152,8 @@ const byteLength = (text) => new TextEncoder().encode(text).length;
  * 選択から、Orca の answers の形を作る。サーバーの checkAnswers と同じ条件（全部の問いに1件、出された選択肢だけ、
  * その他は allowOther の問いで、選んでいて空を許すか空白でない文のときだけ数える、単一はちょうど1つ、複数は1つ以上）。
  * answerVia keys の部分は、その他の文に Tab・改行などの制御文字があれば reason control_character で送らない（サーバーの planKeys と同じ）。
- * @returns {{ ok: true, answers: { questionId: string, optionIds: string[], other?: string }[] } | { ok: false, reason?: 'control_character' }}
+ * answerVia message の部分は、formatAsyncAnswer の文が 16,384 バイトを超えれば reason too_large で送らない。
+ * @returns {{ ok: true, answers: { questionId: string, optionIds: string[], other?: string }[] } | { ok: false, reason?: 'control_character' | 'too_large' }}
  */
 export function buildAnswers(part, selection) {
   const questions = questionsOf(part);
@@ -175,7 +177,31 @@ export function buildAnswers(part, selection) {
     if (count === 0 || (!question.multiSelect && count !== 1)) return { ok: false };
     answers.push({ questionId: question.id, optionIds: [...chosen.optionIds], ...(counts ? { other } : {}) });
   }
+  // 後の発言で答える質問は、引用を含めた発言の文が今の送信の本文の上限（サーバーの checkText）を超えれば送れない。
+  if (part.answerVia === 'message' && byteLength(formatAsyncAnswer(questions, answers)) > MAX_MESSAGE_BYTES)
+    return { ok: false, reason: 'too_large' };
   return { ok: true, answers };
+}
+
+/** 今の送信の本文の上限（src/send/ticket.ts の checkText と同じ 16,384 バイト）。 */
+const MAX_MESSAGE_BYTES = 16384;
+
+/**
+ * 後の発言で答える質問の発言の文。サーバーの src/send/keys.ts の formatAsyncAnswer（Orca の formatAskAnswer の replyAsMessage）と同じ規則：
+ * 答えた問いごとに「> 問いの文（改行の続きは空白1つ）」、空行、選んだラベル（選択肢の番号の順）とその他の文（trim）を「, 」で並べた答え。問いの間は空行。
+ */
+export function formatAsyncAnswer(questions, answers) {
+  const byId = new Map(answers.map((a) => [a.questionId, a]));
+  return questions
+    .flatMap((q) => {
+      const answer = byId.get(q.id);
+      const indices = (answer?.optionIds ?? []).map(Number).sort((a, b) => a - b);
+      const labels = indices.map((i) => q.options[i]?.label ?? '').filter((l) => l.length > 0);
+      const other = typeof answer?.other === 'string' ? answer.other.trim() : '';
+      const text = (other ? [...labels, other] : labels).join(', ');
+      return text ? [`> ${String(q.question).replace(/[\r\n]+/g, ' ')}\n\n${text}`] : [];
+    })
+    .join('\n\n');
 }
 
 /**

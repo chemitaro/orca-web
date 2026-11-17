@@ -1,6 +1,7 @@
 // 質問のカードの組み立て（web/embed/question-view.js）を確かめる（T-11、T-12、T-13）。DOM に触らない純な関数と、注入した口だけの流れ。
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { formatAsyncAnswer as serverFormat } from '../../src/send/keys.ts';
 import {
   answererFor,
   buildAnswers,
@@ -8,6 +9,7 @@ import {
   createCallAnswerer,
   createChatAnswerer,
   createQuestionBoard,
+  formatAsyncAnswer,
   initialFlow,
   initialSelection,
   QUESTION_REASONS,
@@ -818,4 +820,46 @@ test('FQG3-2 createCallAnswerer：callId が空でない文字でない質問は
     }
     assert.deepEqual(answerer.availability(part(), keysStatus()), { ok: true });
   }
+});
+
+test('FQG3-3 message の buildAnswers は formatAsyncAnswer の文が 16,384 バイトを超えれば too_large で送れない', () => {
+  assert.equal(QUESTION_REASONS.too_large, '答えが長すぎます（引用を含めて 16KB まで）');
+  // 引用「> どれにしますか」と空行は 25 バイト
+  const fits = buildAnswers(messagePart(), [{ optionIds: [], other: 'x'.repeat(16384 - 25) }]);
+  assert.equal(fits.ok, true);
+  assert.deepEqual(buildAnswers(messagePart(), [{ optionIds: [], other: 'x'.repeat(16384 - 24) }]), {
+    ok: false,
+    reason: 'too_large',
+  });
+  // keys の答えには引用の上限を当てない
+  assert.equal(
+    buildAnswers(keysPart({ questions: [question({ id: '0', allowOther: true })] }), [
+      { optionIds: [], other: 'x'.repeat(16384) },
+    ]).ok,
+    true,
+  );
+  const card = buildQuestionCard(messagePart(), {
+    key: 'k',
+    availability: OK,
+    selection: [{ optionIds: [], other: 'あ'.repeat(6000) }],
+  });
+  assert.equal(card.hint, QUESTION_REASONS.too_large);
+});
+
+test('FQG3-3 画面の formatAsyncAnswer はサーバーの formatAsyncAnswer と同じ文を作る', () => {
+  const questions = [
+    question({
+      id: '0',
+      question: '一つ目\r\n続き',
+      options: [option('0', '甲'), option('1', '乙'), option('2', '丙')],
+      multiSelect: true,
+    }),
+    question({ id: '1', question: '二つ目', options: [], allowOther: true }),
+  ];
+  const answers = [
+    { questionId: '0', optionIds: ['2', '0'], other: ' 自由 ' },
+    { questionId: '1', optionIds: [], other: '答え' },
+  ];
+  assert.equal(formatAsyncAnswer(questions, answers), serverFormat(questions as Any, answers));
+  assert.equal(formatAsyncAnswer(questions, answers), '> 一つ目 続き\n\n甲, 丙, 自由\n\n> 二つ目\n\n答え');
 });

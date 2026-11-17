@@ -2623,3 +2623,45 @@ test('FQG3-2 構造化 Chat の request_user_input_async の後の、ほかの�
   assert.ok((await c.service.answerConfirm({ ticket: intent.ticket, answers: PICK_ANSWERS })).ok);
   assert.equal(c.writes().length, 1);
 });
+
+test('FQG3-3 意図と確定の間に選択肢の説明が変われば question_changed で送らない', async (t) => {
+  const f = await callFixture(t);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS });
+  assert.ok(intent.ok);
+  const input = {
+    questions: [
+      {
+        question: '仮の端末の問い',
+        options: [{ label: 'ラベル秘密A', description: '新しい説明' }, { label: 'ラベル秘密B' }],
+      },
+    ],
+  };
+  f.setNative([callMessage('AskUserQuestion', input)]);
+  f.setPrompt({ interactivePrompt: JSON.stringify(input) });
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: PICK_ANSWERS }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'question_changed',
+  });
+  assert.equal(f.writes().length, 0);
+});
+
+test('FQG3-3 interactivePrompt の説明だけが違えば prompt_mismatch で送らない', async (t) => {
+  const f = await callFixture(t);
+  f.setPrompt({
+    interactivePrompt: JSON.stringify({
+      questions: [
+        {
+          question: '仮の端末の問い',
+          options: [{ label: 'ラベル秘密A', description: '別' }, { label: 'ラベル秘密B' }],
+        },
+      ],
+    }),
+  });
+  assert.deepEqual(await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'prompt_mismatch',
+  });
+  assert.equal(f.writes().length, 0);
+});
