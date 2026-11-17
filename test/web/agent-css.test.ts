@@ -187,7 +187,8 @@ test('T-19：.bubble に当たる規則はすべて li.row の子の本文（li.
       .filter((s) => /\.bubble\b/.test(s)),
   );
   assert.ok(hits.length >= 2, `吹き出しの規則がある（${hits.join(' | ')}）`);
-  for (const selector of hits) assert.match(selector, /^li\.row(\.user)? > \.bubble$/, selector);
+  // Markdown の本文（iss-00061 D-05）は li.row > .bubble.md の形で、同じく li.row の子の本文だけを指す。
+  for (const selector of hits) assert.match(selector, /^li\.row(\.user)? > \.bubble(\.md)?$/, selector);
 });
 
 test('T-19：発言の行（li.row とその class の組み）に線・背景・内側の余白の規則がない', () => {
@@ -195,7 +196,7 @@ test('T-19：発言の行（li.row とその class の組み）に線・背景�
     for (const selector of rule.selector.split(',').map((s) => s.trim())) {
       const target = lastCompound(selector);
       if (!/^li(\.|$)/.test(target) && !/^\.(row|bubble|user|assistant)\b/.test(target)) continue;
-      if (target.includes('.bubble') && /^li\.row(\.user)? > \.bubble$/.test(selector)) continue;
+      if (target.includes('.bubble') && /^li\.row(\.user)? > \.bubble(\.md)?$/.test(selector)) continue;
       for (const prop of declarations(rule.body).keys()) assert.doesNotMatch(prop, BOX_PROPS, `${selector} の ${prop}`);
     }
   }
@@ -392,4 +393,52 @@ test('iss-00055 T-09：カードの「Orca で開く」（.question-foot の中�
   const sm = only('.orca-open[data-size="sm"]', (m) => m === null, openRules);
   assert.equal(sm.get('--orca-open-height'), '24px');
   assert.ok(!/question-foot/.test(openCss), '共有の部品の CSS にカードの規則を足さない');
+});
+
+// assistant の発言の Markdown（iss-00061 T-08、R-05、D-05）。
+const mdRules = rules.filter((r) => r.selector.split(',').some((s) => /(^|[\s>])\.md(\b|[-\s>:.])/.test(s.trim())));
+
+test('iss-00061 T-08：.md の規則の色は var(--chat-…) だけを使い、角丸と等幅の字は var(--ds-…, 既定)', () => {
+  assert.ok(mdRules.length >= 10, `Markdown の規則がある（${mdRules.length}）`);
+  const root = only(':root', (m) => m === null);
+  for (const rule of mdRules) {
+    for (const [prop, value] of declarations(rule.body)) {
+      assert.doesNotMatch(value, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i, `${rule.selector} の ${prop}`);
+      for (const used of value.matchAll(/var\((--[a-z0-9-]+)/g)) {
+        const name = used[1] ?? '';
+        if (name.startsWith('--chat-')) assert.ok(root.has(name), `${name} が :root にある`);
+        else assert.match(value, new RegExp(`var\\(${name}, [^)]+\\)`), `${rule.selector} の ${prop} は既定つき`);
+      }
+      if (/color|background|border/.test(prop) && /var\(/.test(value) && !/radius/.test(prop))
+        assert.match(value, /var\(--chat-/, `${rule.selector} の ${prop} の色は --chat-*`);
+    }
+  }
+});
+
+test('iss-00061 T-08：pre と .md-table は overflow-x: auto で、.bubble.md は white-space: normal と折り返し', () => {
+  const pre = only('.md .md-code pre', (m) => m === null);
+  assert.equal(pre.get('overflow-x'), 'auto');
+  assert.equal(pre.get('white-space'), 'pre');
+  const table = only('.md .md-table', (m) => m === null);
+  assert.equal(table.get('overflow-x'), 'auto');
+  assert.equal(table.get('max-width'), '100%');
+  const body = only('li.row > .bubble.md', (m) => m === null);
+  assert.equal(body.get('white-space'), 'normal');
+  assert.equal(body.get('overflow-wrap'), 'anywhere');
+  assert.equal(body.get('min-width'), '0');
+  const cells = only('.md th,\n.md td', (m) => m === null);
+  assert.notEqual(cells.get('white-space'), 'nowrap', '表のセルは折り返す');
+  assert.equal(cells.get('overflow-wrap'), 'normal', '切れない長い語で広ければ枠が横に動く');
+});
+
+test('iss-00061 T-08：見出しは本文より少し大きい程度で、user-select: none の規則がない', () => {
+  const sizes = ['h1', 'h2', 'h3'].map((h) => only(`.md ${h}.md-h`, (m) => m === null).get('font-size'));
+  assert.deepEqual(sizes, ['1.2em', '1.12em', '1.05em']);
+  assert.doesNotMatch(css, /user-select\s*:\s*none/);
+});
+
+test('iss-00061：.md の中の ul の印は段ごとに disc・circle・square（会話の行の入れ子に左右されない）', () => {
+  assert.equal(only('.md ul', (m) => m === null).get('list-style-type'), 'disc');
+  assert.equal(only('.md ul ul', (m) => m === null).get('list-style-type'), 'circle');
+  assert.equal(only('.md ul ul ul', (m) => m === null).get('list-style-type'), 'square');
 });

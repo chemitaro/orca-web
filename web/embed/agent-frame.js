@@ -11,7 +11,7 @@
 // 文字はすべて textContent で入れる（会話の本文、ツールの出力、題名、送る本文、質問と選択肢は信頼しないデータ）。
 
 import { createWriter } from '../write.js';
-import { refreshTimes, renderChatRow, renderDetail, renderDetailMark } from './agent-dom.js';
+import { createMarkdownCache, refreshTimes, renderChatRow, renderDetail, renderDetailMark } from './agent-dom.js';
 import { watchWorktreeSummary } from './agent-marks.js';
 import { buildChat, buildDetail, errorLabel, initialChat, olderResult, reduceChat } from './agent-view.js';
 import {
@@ -159,8 +159,12 @@ function approvalView(row) {
   });
 }
 
+/** assistant の本文の写し（D-04）。key と本文が同じ行は、前に描いた要素を新しい li に移して使う。 */
+const markdownCache = createMarkdownCache(document);
+
 const rowOptions = (now) => ({
   open: openTools,
+  markdown: (row) => markdownCache.body(row),
   now,
   question: questionView,
   approval: approvalView,
@@ -246,6 +250,7 @@ function renderChat({ stickToEnd }) {
   els.older.hidden = !(chat.status === 'ok' && chat.hasMore && chat.before);
   const now = Date.now();
   const rows = buildChat(chat.messages);
+  markdownCache.prune(new Set(rows.map((row) => row.key)));
   questionRows = new Map(rows.filter((row) => row.kind === 'question').map((row) => [row.key, row]));
   questionBoard.prune(new Set(questionRows.keys()));
   approvalRows = new Map(rows.filter((row) => row.kind === 'approval').map((row) => [row.key, row]));
