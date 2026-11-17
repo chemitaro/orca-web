@@ -279,3 +279,81 @@ test('T-14：renderChatRow は question の行をカードに任せ、時刻を�
   const fallback: FakeElement = renderChatRow(fakeDocument, row);
   assert.ok(byClass(fallback as Any, 'question-card').length === 1, '組み立てを渡さなくても読む形で描く');
 });
+
+// ---- iss-00049 T-16：途中まで送った帯、二度と送らない拒み、答えずに閉じた形、注と送れない理由 ----
+
+const keysPart = (over: Record<string, unknown> = {}): Any =>
+  part({ source: 'terminal', answerVia: 'keys', prompt: null, callId: 'c', ...over });
+
+test('iss-00049 T-16：partial の帯は文字のまま描き、「Orca で開く」を持ち、送るボタンも照会のボタンも持たない', () => {
+  const view = buildQuestionCard(keysPart(), {
+    key: 'k',
+    flow: { phase: 'partial', result: { kind: 'partial', operationId: 'op', note: DANGER } } as Any,
+    availability: { ok: true },
+  });
+  const { root, openControl } = renderCard(view);
+  for (const el of root.all()) assert.ok(allowedTag(el), `作らない要素：${el.tagName}`);
+  const band = byClass(root, 'question-partial')[0];
+  assert.ok(band, '途中まで送った帯');
+  assert.equal(band.textContent, DANGER);
+  assert.ok(openControl);
+  assert.ok(root.all().includes(openControl.root));
+  for (const action of ['submit', 'query', 'dismiss'])
+    assert.equal(
+      root.all().find((e) => e.dataset.action === action),
+      undefined,
+      action,
+    );
+});
+
+test('iss-00049 T-16：blocked は理由と「Orca で開く」を出し、送るボタンを出さない', () => {
+  const view = buildQuestionCard(keysPart(), {
+    key: 'k',
+    flow: { phase: 'blocked', result: { kind: 'blocked', reason: DANGER } } as Any,
+    availability: { ok: true },
+  });
+  const { root, openControl } = renderCard(view);
+  assert.ok(openControl);
+  assert.equal(byClass(root, 'question-notice')[0]?.textContent, DANGER);
+  assert.equal(
+    root.all().find((e) => e.dataset.action === 'submit'),
+    undefined,
+  );
+});
+
+test('iss-00049 T-16：declined は閉じた形で、印は「答えずに閉じた」、要約は結果の文を文字のまま描く', () => {
+  const view = buildQuestionCard(keysPart({ state: 'declined' }), {
+    key: 'k',
+    answerText: DANGER,
+    availability: { ok: true },
+  });
+  assert.equal(view.title, '答えずに閉じられた質問');
+  const { root, openControl } = renderCard(view);
+  assert.equal(openControl, null);
+  assert.ok(root.className.split(' ').includes('closed'));
+  assert.equal(root.dataset.state, 'declined');
+  assert.equal(root.attrs['aria-label'], '答えずに閉じられた質問');
+  for (const el of root.all()) assert.ok(allowedTag(el), `作らない要素：${el.tagName}`);
+  assert.equal(byClass(root, 'question-badge')[0]?.textContent, '答えずに閉じた');
+  assert.equal(byClass(root, 'question-answers')[0]?.textContent, DANGER);
+  for (const b of root.all().filter((e) => e.tagName === 'BUTTON')) assert.equal(b.disabled, true);
+});
+
+test('iss-00049 T-16：keys の未回答は送るボタンの近くに注を、送れないその他の文には理由を出す', () => {
+  const p = keysPart();
+  const selection = toggleOther(initialSelection(p), p, 0);
+  selection[0] = { optionIds: [], other: 'a\tb' };
+  const view = buildQuestionCard(p, { key: 'k', selection, flow: initialFlow(), availability: { ok: true } });
+  const { root } = renderCard(view);
+  const foot = byClass(root, 'question-foot')[0];
+  assert.ok(foot);
+  assert.equal(
+    byClass(foot, 'question-keys-note')[0]?.textContent,
+    'Orca の画面で途中まで答えた質問は、Orca で続けてください',
+  );
+  assert.equal(byClass(root, 'question-hint')[0]?.textContent, 'その他の文は1行で、制御文字を含めないでください');
+  assert.equal(root.all().find((e) => e.dataset.action === 'submit')?.disabled, true);
+  const chat = renderCard(buildQuestionCard(part(), { key: 'k', availability: { ok: true } })).root;
+  assert.equal(byClass(chat, 'question-keys-note').length, 0);
+  assert.equal(byClass(chat, 'question-hint').length, 0);
+});

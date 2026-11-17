@@ -5,6 +5,7 @@ import {
   answererFor,
   buildAnswers,
   buildQuestionCard,
+  createCallAnswerer,
   createChatAnswerer,
   createQuestionBoard,
   initialFlow,
@@ -497,4 +498,296 @@ test('T-13：board は送れないとき（availability が ok でない、答�
   assert.equal(calls, 0, '端末');
   await board.submit('k', chatPart(undefined, { state: 'answered' }), STATUS_OK);
   assert.equal(calls, 0, '答え済み');
+});
+
+// ---- iss-00049：答え方（answerVia）ごとの手段、キーの組と後の発言の流れ（T-13、T-14） ----
+
+const keysPart = (over: Record<string, unknown> = {}): Any =>
+  terminalPart({
+    answerVia: 'keys',
+    questions: [
+      question({ id: '0', options: [option('0', 'はい'), option('1', 'いいえ')], allowOther: true, preview: false }),
+    ],
+    ...over,
+  });
+const messagePart = (over: Record<string, unknown> = {}): Any =>
+  terminalPart({
+    answerVia: 'message',
+    questions: [question({ id: '0', options: [option('0', 'はい')], allowOther: true, preview: false })],
+    ...over,
+  });
+const keysStatus = (over: Record<string, unknown> = {}): Any => ({
+  enabled: true,
+  available: false,
+  agentType: 'claude',
+  answer: { available: false, reason: 'terminal_route' },
+  answerKeys: { available: true, reason: null },
+  answerMessage: { available: true, reason: null },
+  ...over,
+});
+const KEY_ANSWERS = [{ questionId: '0', optionIds: ['0'] }];
+
+test('iss-00049 T-13：answererFor は answerVia で rpc・keys・message の手段を選び、answerVia のない物は source の規則', () => {
+  const chat = { availability: () => OK, submit: async () => ({ kind: 'done' }) };
+  const keys = { availability: () => OK, submit: async () => ({ kind: 'done' }) };
+  const message = { availability: () => OK, submit: async () => ({ kind: 'done' }) };
+  const table = { chat, terminal: terminalAnswerer, keys, message };
+  assert.equal(answererFor(keysPart(), table), keys);
+  assert.equal(answererFor(messagePart(), table), message);
+  assert.equal(answererFor(messagePart({ source: 'chat' }), table), message, '構造化 Chat の async も message');
+  assert.equal(answererFor(chatPart(undefined, { answerVia: 'rpc' }), table), chat);
+  assert.equal(answererFor(terminalPart(), table), terminalAnswerer, 'answerVia のない端末は今の規則');
+  assert.equal(answererFor(chatPart(), table), chat);
+});
+
+test('iss-00049 T-13：createCallAnswerer の availability は status の answerKeys・answerMessage を読み、keys で答えられないときは open を返す', () => {
+  const writer = { send: async () => ({ status: 500, body: {} }) };
+  const keys = createCallAnswerer({ agentId: 'a1', writer, mode: 'keys' });
+  const message = createCallAnswerer({ agentId: 'a1', writer, mode: 'message' });
+  assert.deepEqual(keys.availability(keysPart(), keysStatus()), { ok: true });
+  assert.deepEqual(message.availability(messagePart(), keysStatus()), { ok: true });
+  assert.deepEqual(keys.availability(keysPart(), null), { ok: false, reason: QUESTION_REASONS.loading });
+  assert.deepEqual(keys.availability(keysPart(), 'failed'), {
+    ok: false,
+    reason: QUESTION_REASONS.status_unavailable,
+    open: true,
+  });
+  assert.deepEqual(keys.availability(keysPart(), keysStatus({ enabled: false })), {
+    ok: false,
+    reason: QUESTION_REASONS.send_disabled,
+    open: true,
+  });
+  assert.deepEqual(keys.availability(keysPart(), keysStatus({ answerKeys: undefined })), {
+    ok: false,
+    reason: QUESTION_REASONS.unknown_shape,
+    open: true,
+  });
+  assert.deepEqual(
+    keys.availability(keysPart(), keysStatus({ answerKeys: { available: false, reason: 'agent_keys_unknown' } })),
+    { ok: false, reason: QUESTION_REASONS.agent_keys_unknown, open: true },
+  );
+  assert.deepEqual(
+    message.availability(messagePart(), keysStatus({ answerMessage: { available: false, reason: 'permission' } })),
+    { ok: false, reason: 'エージェントが権限の確認を待っています' },
+    'message は送る欄と同じく押せない理由だけ',
+  );
+  assert.deepEqual(message.availability(messagePart(), keysStatus({ enabled: false })), {
+    ok: false,
+    reason: QUESTION_REASONS.send_disabled,
+  });
+});
+
+test('iss-00049 T-13：codex の複数選択・preview の問いと truncated の async の質問は prompt_unsupported と「Orca で開く」', () => {
+  const writer = { send: async () => ({ status: 500, body: {} }) };
+  const keys = createCallAnswerer({ agentId: 'a1', writer, mode: 'keys' });
+  const message = createCallAnswerer({ agentId: 'a1', writer, mode: 'message' });
+  const codex = keysStatus({ agentType: 'codex' });
+  const unsupported = { ok: false, reason: QUESTION_REASONS.prompt_unsupported, open: true };
+  assert.equal(QUESTION_REASONS.prompt_unsupported, 'この形の質問は、ここからは答えられません');
+  assert.deepEqual(keys.availability(keysPart(), codex), { ok: true });
+  const multi = keysPart({ questions: [question({ id: '0', multiSelect: true })] });
+  assert.deepEqual(keys.availability(multi, codex), unsupported);
+  assert.deepEqual(keys.availability(multi, keysStatus()), { ok: true }, 'Claude は複数選択に答えられる');
+  const preview = keysPart({ questions: [question({ id: '0', preview: true })] });
+  assert.deepEqual(keys.availability(preview, codex), unsupported);
+  assert.deepEqual(message.availability(messagePart({ truncated: true }), keysStatus()), unsupported);
+});
+
+test('iss-00049 T-13：keys の未回答のカードに途中まで答えた質問の注が出て、ほかのカードには出ない', () => {
+  const part = keysPart();
+  const view = buildQuestionCard(part, { key: 'k', availability: OK });
+  assert.equal(view.keysNote, 'Orca の画面で途中まで答えた質問は、Orca で続けてください');
+  assert.equal(buildQuestionCard(messagePart(), { key: 'k', availability: OK }).keysNote, null);
+  assert.equal(buildQuestionCard(chatPart(), { key: 'k', availability: OK }).keysNote, null);
+  assert.equal(buildQuestionCard(keysPart({ state: 'answered' }), { key: 'k', availability: OK }).keysNote, null);
+});
+
+test('iss-00049 T-13：createCallAnswerer は意図と確定を1回ずつ送り、callId の物を送る。keys の done は返事を待つ文', async () => {
+  const ok = fakeWriter([
+    INTENT_OK,
+    { status: 200, body: { operationId: 'op-1', outcome: 'input_accepted', detail: { code: 'keys_sent' } } },
+  ]);
+  const keys = createCallAnswerer({ agentId: 'a1', writer: ok.writer, mode: 'keys' });
+  assert.deepEqual(await keys.submit(keysPart(), KEY_ANSWERS), {
+    kind: 'done',
+    note: '答えを送りました。エージェントの返事を待っています',
+  });
+  assert.deepEqual(ok.calls, [
+    { path: '/api/answer/intent', body: { agent: 'a1', callId: 'call-1', answers: KEY_ANSWERS } },
+    { path: '/api/answer/confirm', body: { ticket: 't-1', answers: KEY_ANSWERS } },
+  ]);
+  const sent = fakeWriter([INTENT_OK, { status: 200, body: { outcome: 'accepted', detail: {} } }]);
+  const message = createCallAnswerer({ agentId: 'a1', writer: sent.writer, mode: 'message' });
+  assert.equal((await message.submit(messagePart(), KEY_ANSWERS)).kind, 'done');
+  const noCall = fakeWriter([]);
+  const bad = await createCallAnswerer({ agentId: 'a1', writer: noCall.writer, mode: 'keys' }).submit(
+    keysPart({ callId: null }),
+    KEY_ANSWERS,
+  );
+  assert.equal(bad.kind, 'refused');
+  assert.equal(noCall.calls.length, 0);
+});
+
+test('iss-00049 T-14：keys の partial_sent・unconfirmed・応答の欠けは partial（照会しない）、message の unknown は今の照会の帯', async () => {
+  const run = async (mode: 'keys' | 'message', confirm: Any) => {
+    const w = fakeWriter([INTENT_OK, confirm]);
+    const answerer = createCallAnswerer({ agentId: 'a1', writer: w.writer, mode });
+    const result = await answerer.submit(mode === 'keys' ? keysPart() : messagePart(), KEY_ANSWERS);
+    assert.equal(w.calls.length, 2, '送り直さない');
+    return result;
+  };
+  assert.deepEqual(
+    await run('keys', {
+      status: 200,
+      body: { outcome: 'unknown', detail: { code: 'partial_sent', sentGroups: 1, totalGroups: 3 } },
+    }),
+    { kind: 'partial', operationId: 'op-1', note: '途中まで送りました。Orca で確かめてください' },
+  );
+  assert.deepEqual(
+    await run('keys', {
+      status: 200,
+      body: { outcome: 'unknown', detail: { code: 'unconfirmed', sentGroups: 0, totalGroups: 2 } },
+    }),
+    { kind: 'partial', operationId: 'op-1', note: '届いたか分かりません。Orca で確かめてください' },
+  );
+  assert.deepEqual(await run('keys', new Error('lost')), {
+    kind: 'partial',
+    operationId: 'op-1',
+    note: '届いたか分かりません。Orca で確かめてください',
+  });
+  assert.deepEqual(await run('keys', { status: 502, body: {} }), {
+    kind: 'partial',
+    operationId: 'op-1',
+    note: '届いたか分かりません。Orca で確かめてください',
+  });
+  assert.deepEqual(await run('message', { status: 200, body: { outcome: 'unknown', detail: {} } }), {
+    kind: 'unknown',
+    operationId: 'op-1',
+  });
+  assert.deepEqual(
+    await run('keys', { status: 200, body: { outcome: 'refused', detail: { code: 'not_sent', sentGroups: 0 } } }),
+    { kind: 'refused', reason: '送っていません' },
+  );
+});
+
+test('iss-00049 T-14：意図・確定の拒みが already_sent・question_answered・prompt_mismatch・prompt_unsupported・agent_keys_unknown なら blocked、prompt_unverified は押し直せる', async () => {
+  const refuse = async (status: number, body: Any, confirm = false) => {
+    const w = fakeWriter(confirm ? [INTENT_OK, { status, body }] : [{ status, body }]);
+    return await createCallAnswerer({ agentId: 'a1', writer: w.writer, mode: 'keys' }).submit(keysPart(), KEY_ANSWERS);
+  };
+  for (const reason of [
+    'already_sent',
+    'question_answered',
+    'prompt_mismatch',
+    'prompt_unsupported',
+    'agent_keys_unknown',
+  ]) {
+    const result = await refuse(409, { ok: false, error: 'not_sendable', reason });
+    assert.deepEqual(
+      result,
+      { kind: 'blocked', reason: QUESTION_REASONS[reason as keyof typeof QUESTION_REASONS] },
+      reason,
+    );
+  }
+  assert.deepEqual(await refuse(409, { ok: false, error: 'target_changed', reason: 'prompt_mismatch' }, true), {
+    kind: 'blocked',
+    reason: '端末の質問が変わりました',
+  });
+  assert.deepEqual(await refuse(409, { ok: false, error: 'not_sendable', reason: 'prompt_unverified' }), {
+    kind: 'refused',
+    reason: '端末がこの質問を出しているか確かめられません',
+  });
+  assert.deepEqual(await refuse(400, { ok: false, error: 'invalid_answer', reason: 'control_character' }), {
+    kind: 'refused',
+    reason: QUESTION_REASONS.control_character,
+  });
+  assert.equal(QUESTION_REASONS.already_sent, 'この質問には一度答えを送りました。Orca で確かめてください');
+  assert.equal(QUESTION_REASONS.question_answered, 'ほかの画面で答え済みです');
+  assert.equal(QUESTION_REASONS.agent_keys_unknown, 'このエージェントの質問は、ここからは答えられません');
+  for (const code of ['chat_route', 'partial_sent', 'unconfirmed', 'keys_sent'])
+    assert.ok(Object.hasOwn(QUESTION_REASONS, code), code);
+});
+
+test('iss-00049 T-14：流れの partial と blocked は押し直し・選択・閉じる・照会を受けず、カードは帯か理由と「Orca で開く」を出し送るボタンを出さない', async () => {
+  const part = keysPart();
+  const selection = toggleOption(initialSelection(part), part, 0, '0');
+  const sending = reduceFlow(initialFlow(), { type: 'submit' });
+  const partial = reduceFlow(sending, {
+    type: 'result',
+    result: { kind: 'partial', operationId: 'op-1', note: '途中まで送りました。Orca で確かめてください' },
+  });
+  assert.equal(partial.phase, 'partial');
+  for (const type of ['submit', 'query', 'dismiss']) assert.equal(reduceFlow(partial, { type }), partial, type);
+  const blocked = reduceFlow(sending, {
+    type: 'result',
+    result: { kind: 'blocked', reason: '端末の質問が変わりました' },
+  });
+  assert.equal(blocked.phase, 'blocked');
+  for (const type of ['submit', 'query', 'dismiss']) assert.equal(reduceFlow(blocked, { type }), blocked, type);
+
+  const partialView = buildQuestionCard(part, { key: 'k', selection, flow: partial, availability: OK });
+  assert.deepEqual(partialView.partial, { text: '途中まで送りました。Orca で確かめてください' });
+  assert.equal(partialView.button.shown, false);
+  assert.equal(partialView.open, true);
+  assert.equal(partialView.unknown, null, '照会の帯を出さない');
+  for (const o of partialView.questions[0].options) assert.equal(o.disabled, true);
+  const blockedView = buildQuestionCard(part, { key: 'k', selection, flow: blocked, availability: OK });
+  assert.deepEqual(blockedView.notice, { kind: 'error', text: '端末の質問が変わりました' });
+  assert.equal(blockedView.button.shown, false);
+  assert.equal(blockedView.open, true);
+  assert.equal(blockedView.partial, null);
+  for (const o of blockedView.questions[0].options) assert.equal(o.disabled, true);
+  const done = buildQuestionCard(part, {
+    key: 'k',
+    selection,
+    flow: { phase: 'done', result: { kind: 'done', note: '答えを送りました。エージェントの返事を待っています' } },
+    availability: OK,
+  });
+  assert.deepEqual(done.notice, { kind: 'info', text: '答えを送りました。エージェントの返事を待っています' });
+
+  // 板：partial・blocked の後は選択も送信も照会も受けない。
+  let submits = 0;
+  const results: Any[] = [
+    { kind: 'partial', operationId: 'op-1', note: 'x' },
+    { kind: 'blocked', reason: 'y' },
+  ];
+  const keys = {
+    availability: () => OK,
+    submit: async () => {
+      submits++;
+      return results.shift();
+    },
+    check: async () => ({ kind: 'done' }),
+  };
+  const board = createQuestionBoard({ answerers: { chat: keys, terminal: terminalAnswerer, keys, message: keys } });
+  for (const key of ['p', 'b']) {
+    board.toggleOption(key, part, 0, '0');
+    await board.submit(key, part, STATUS_OK);
+    assert.equal(board.toggleOption(key, part, 0, '1'), false, `${key}：選択を変えない`);
+    await board.submit(key, part, STATUS_OK);
+    await board.query(key, part);
+    assert.equal(board.dismiss(key), false);
+  }
+  assert.equal(submits, 2, '押し直さない');
+  assert.equal(board.flow('p').phase, 'partial');
+  assert.equal(board.flow('b').phase, 'blocked');
+});
+
+test('iss-00049：keys のその他の文に Tab・改行などの制御文字があれば送れず、理由の言葉を出す。message と rpc は今のまま', () => {
+  const part = keysPart();
+  const typed = (p: Any, text: string) => setOther(toggleOther(initialSelection(p), p, 0), p, 0, text);
+  for (const text of ['a\tb', '一行目\n二行目', 'x\ry']) {
+    const built = buildAnswers(part, typed(part, text));
+    assert.deepEqual(built, { ok: false, reason: 'control_character' }, JSON.stringify(text));
+    const view = buildQuestionCard(part, { key: 'k', selection: typed(part, text), availability: OK });
+    assert.equal(view.button.disabled, true);
+    assert.equal(view.hint, QUESTION_REASONS.control_character);
+  }
+  assert.equal(QUESTION_REASONS.control_character, 'その他の文は1行で、制御文字を含めないでください');
+  assert.equal(buildAnswers(part, typed(part, '普通の文')).ok, true);
+  assert.equal(buildQuestionCard(part, { key: 'k', selection: typed(part, '普通の文'), availability: OK }).hint, null);
+  const message = messagePart();
+  assert.equal(buildAnswers(message, typed(message, '一行目\n二行目')).ok, true, 'message は改行を許す');
+  const rpc = chatPart([question({ allowOther: true })]);
+  assert.equal(buildAnswers(rpc, typed(rpc, 'a\tb')).ok, true, 'rpc は Tab を許す');
 });
