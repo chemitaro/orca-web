@@ -15,7 +15,7 @@ steps: {
 		title:    "会話の正規化の質問の部分（D-01）"
 		text:     "対象：`src/transcript/normalize.ts` と `test/transcript/normalize.test.ts`（必要なら `test/transcript/fixture.ts`）。確かめ：T-01、T-02、T-03。完了：`node --test test/transcript/*.test.ts` と `npm run lint` が通り、T-01〜T-03 のテストがある。区切りのレビュー：なし"
 		realizes: ["R-01", "F-03"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -23,7 +23,7 @@ steps: {
 		text:     "対象：`src/orca/send-gates.ts`、`src/orca/send.ts`、`src/orca/capabilities.ts`、`src/send/answer.ts`（新）、`src/send/ticket.ts`、`src/send/journal.ts`、`src/send/service.ts`、`src/send/model.ts`、`src/server/app.ts` と、`test/orca/send-gates.test.ts`、`test/orca/send.test.ts`、`test/orca/capabilities.test.ts`、`test/send/answer.test.ts`（新）、`test/send/service.test.ts`、`test/send/journal.test.ts`、`test/server/send-api.test.ts`（または `test/server/answer-api.test.ts`）。確かめ：T-04〜T-10。完了：`npm run lint`、`npm test`、`npm run build` が通り、T-04〜T-10 のテストがあり、今の送信のテストが変えずに通る。実装担当 impl の最後の手順で、区切りのレビュー CP-1 の最後の手順。止まって HEAD を報告する"
 		realizes: ["R-03", "R-04", "R-05", "F-01", "F-02", "F-03", "F-04"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-03": {
@@ -31,7 +31,7 @@ steps: {
 		text:     "対象：`web/embed/question-view.js`（新）、`web/embed/question-dom.js`（新）、`web/embed/agent-view.js`、`web/embed/agent-dom.js`、`web/embed/agent-frame.js`、`web/embed/agent.css`、`src/server/app.ts` の STATIC_FILES と、`test/web/question-view.test.ts`（新）、`test/web/question-dom.test.ts`（新）、`test/web/agent-view.test.ts`、`test/web/agent-css.test.ts`。`web/embed/agent-marks*.js`、`open-control*.js` は使うだけで変えない。確かめ：T-11〜T-15。完了：`node --test test/web/*.test.ts`、`npm run lint`、`npm test`、`npm run build` が通り、T-11〜T-15 のテストがある。描画の確かめは、実装担当が自分で起動した orca-web（一時の port、一時の settings で sendEnabled は偽のまま）とヘッドレスの Chrome（`--disable-features=MacAppCodeSignClone`、CDP の Browser.close で閉じる）で、幅 1280px と 390px、明暗で、録画か偽の会話のカードが横にはみ出さないことを見る（答えを送らない）。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-02", "R-03", "R-05", "R-06", "F-01", "F-04"]
 		after:    ["S-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "ui"
 	}
 	"S-04": {
@@ -39,7 +39,7 @@ steps: {
 		text:     "タスク担当が行う。D-06 のとおり。確かめ：T-16、T-17。完了：report.md の Verification に実機の結論と写しがあり、`npm run lint`、`npm test`、`npm run build` が通る。試しのエージェントは止め、試しの画面は本人が見られるように動かしたまま報告する"
 		realizes: ["R-03", "R-05", "R-06"]
 		after:    ["S-03"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }

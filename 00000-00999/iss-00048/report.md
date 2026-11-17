@@ -12,6 +12,11 @@ ID: "iss-00048"
 
 ## Outcome
 
+- 小窓（`/embed/agent`）が、エージェントの質問をカード（見出し、問い、選択肢と説明、複数選択、その他の自由入力、答える）で出す。答え済みは選んだ答えを示して閉じ、取り消しは「取り消されました」で閉じる。
+- 構造化 Chat（Orca のチャットのタブ）の質問に、Orca のチャットと同じ RPC `agentSession.respondToQuestion`（itemId と revision の比較つき）で答えられる。新しい口 `POST /api/answer/intent`・`/api/answer/confirm` は今の送信と同じ守り（同じオリジンの JSON、短期のトークン、sendEnabled、使い捨ての票、送る前の記録、処理中の印、照会、自動で送り直さない）で、記録に答えの中身を残さない。
+- 端末のエージェントの質問は読むだけ（理由と「Orca で開く」）。答える手段（answerer）は差し替えられる形で、iss-00049 が端末の手段を足す。承認は今のまま（iss-00050）。
+- コミット：4965d7c（会話の質問の部分）、8567b3b（答えの門・アダプター・サービス・HTTP の口）、5e3a1c7（質問のカード）、ecca212（README.md・AGENTS.md）、43a4762（origin/main の取り込み。iss-00047 の PR #51）。
+
 ## レビュー記録
 
 - 仕様レビュー（spec-reviewer、Opus 5.5 / high、standard なので1人）：合格。round-3 で P0・P1・P2・P3 がすべて0（`.workbench/spec-review/iss-00048/round-3.json`、検査 `round-3.check.json`）。
@@ -21,6 +26,9 @@ ID: "iss-00048"
   - round-3：合格、指摘なし。
 
 - 区切りのレビュー CP-1（code-reviewer、Opus 5.5 / medium、standards と spec の両方）：範囲 `27b01fe..8567b3b`、合格（P0〜P3 すべて0、`.workbench/code-review/iss-00048-cp1/round-1.json`）。手順の実装担当の報告で lint 0、test 767/767、build 0 を、タスク担当が同じコミットで再び確かめた。
+
+- 最終品質ゲート（キャンペーン `.workbench/final-quality-gate/iss-00048-fqg/`、範囲 `27b01fe..43a4762`）：attempt 1 で合格。合格のコミット `43a47629a5bba5702b968c455526ff2051396e14`。主のレビュー（quality-gate-reviewer、Opus 5.5 / medium、観点 functional-correctness・requirements-closure・test-adequacy・security-baseline・reliability-recovery・e2e-user-flow）pass、P0/P1 0、P3 1。2人目 ChatGPT GPT-6 / Extra High（chatgpt-code-review-strict、GitHub の SHA の一致を確かめた）pass、P0/P1 0、P2 4。テスト lint 0・test 820/820・build 0。closure：`.workbench/final-quality-gate/iss-00048-fqg/closure.md`（写し `artifacts/closure.md`）。記録だけのコミットはない。
+  - 計画の観点 concurrency-idempotency と ui-interaction は契約の観点の一覧にないので、reliability-recovery と e2e-user-flow で見た（キャンペーンの additional_instructions に記録）。
 
 ## Verification
 
@@ -42,3 +50,22 @@ ID: "iss-00048"
 - 範囲（統括、2026-11-18、msg_fd0230f65b01）：端末のエージェントの質問は読むだけ（答えは iss-00049）、承認はこの Issue では今のまま（iss-00050）。
 
 ## Residual Risks / Follow-ups
+
+### 引き継ぎ：iss-00049（端末のエージェントの質問への答え）
+
+- 調べた事実（Orca v1.4.261）：端末のエージェントの質問は、会話（nativeChat）のツールの呼び出し AskUserQuestion・request_user_input（Orca の `isAskUserQuestionTool`）で、答え済みは同じ callId のツールの結果の有無で分かる。答える RPC はない。Orca 自身（デスクトップ `sendNativeChatAskAnswer`、モバイル `use-mobile-native-chat-answer-send.ts`）は `terminal.send` でキーの列を間を空けて（`NATIVE_CHAT_QUESTION_STEP_MS`）打ち込む。列は `src/shared/native-chat/input/questions/native-chat-ask-answer.ts`：Claude は `buildAskAnswerKeys`（単一選択は選択肢の番号の数字で確定と次へ、自由入力は「Type something」の番号＋貼り付け＋Enter、複数選択は数字で入れ外しして右矢印 `\x1b[C` で次のタブ、複数問と複数選択は最後に Submit の Enter、preview の付く問いは数字で移り `n` でメモ、Enter で確定）、Codex は `buildCodexAskAnswerKeys`（数字で確定、メモは上下の矢印で行を移り Tab、未回答は `\x7f` と次へ、飛ばしたら確認で Enter）。モバイルは `requireWriteSettlement: true` で1つずつ届いたかを見て、途中で失敗したら「Answer partly sent — check chat before retrying」と示す。
+- 危険：キーの列は途中まで届いた状態があり得る（選択が進んだまま止まる）。送った後に結果不明なら自動で送り直さず、会話の記録（ツールの結果）で確かめる。前面のプロセスと画面の状態（質問の選択が出ていること。`terminal.agentStatus` の `interactivePrompt`）を送る前に確かめる。
+- 部品：`web/embed/question-view.js` の `answererFor` が source terminal に返す端末の手段を差し替える。サーバーには `/api/answer/*` に端末の経路を足す（今は `not_sendable`／`terminal_route`）。
+- Codex の構造化 Chat の質問：実機で、Codex は構造化 Chat でも `request_user_input_async`（すぐ受付を返し、答えは後の利用者の発言で受ける）を使った。この Issue ではツールの行のまま。Orca は `formatAskAnswer`（`replyAsMessage` のとき『> 問い』と答えの引用の形）で普通の発言として答える。カードにして、今の送信（`agentSession.send`／`terminal.send`）で答えを発言として送るのが自然。iss-00049 の範囲に入れるかを決める。
+- 最終品質ゲートの P2-d（端末の質問の失敗したツールの結果を答え済みと示す）も iss-00049 で直すのがよい。
+
+### 引き継ぎ：iss-00050（承認）
+
+- 構造化 Chat の承認は journal の `{kind: 'approval', title, description?, detail, options: [{id, label, description?, intent?: allow_once|allow_always|reject_once|reject_always}], resolution}` で、答えは `agentSession.respondToApproval`（`{envelope, itemId, expectedRevision, optionId}`、指紋の method は `agentSession.respondTo:approval`）。この Issue の答えの道（票、記録、照会、revision の比較）をそのまま使える。allow_always のような重い選択の見せ方を決める。
+
+### 残る P2/P3（最終品質ゲートの情報。直していない）
+
+- P2-a：確定の 5xx 応答を、画面が refused（押し直せる）と示す。Orca の revision の比較で二重の答えにはならないが、結果不明（照会できる形）にするのが正確。
+- P2-b：応答のない通信で、カードが「送っています」のまま止まる（送信の欄にある期限が答えの流れにない）。
+- P2-c：64KiB のその他の文を2つ以上書くと、本文の上限 128KiB を超えて 413 になる。
+- P3（FQG-01）：空を許すその他に空の文で答えた質問の要約が「（答えなし）」と出る。
