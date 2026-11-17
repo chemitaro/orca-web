@@ -1,6 +1,9 @@
-// 「Orca で開く」の処理。worktree を最新の一覧で解決し、既存のタブを1つ選び、門を通して1回だけ送る。
-// 送った後の時間切れや結果不明では、別のタブへ切り替えずに unconfirmed を返す（2回目の書き込みを送らない）。
+// 「Orca で開く」の処理。worktree を最新の一覧で解決し、既存のタブを1つ選び、門を通して送る。
+// 押した端末（host か client）の navigation で、まず worktree.activate で worktree を表示し、次に選んだタブを選ぶ（Orca の左の一覧を押したときと同じ順）。
+// 1 が失敗したら 2 を送らない。送った後の時間切れや結果不明では、送り直さずに unconfirmed を返す。
+// Orca の画面を読む RPC はないので、切り替わったかは確かめない（成功の文書の screen: "unverified"）。
 import type { CapabilityReport } from './capabilities.ts';
+import type { OpenDevice } from './open-device.ts';
 import type { OpenOrcaCli } from './open-gates.ts';
 import { chooseTarget, type OpenReason, type OpenTarget, parseTabsSnapshot } from './open-target.ts';
 import { type CliOutcome, clip } from './orca-cli.ts';
@@ -24,7 +27,9 @@ export type OpenErrorCode =
   | 'unconfirmed'
   | 'unsupported'
   | 'target_gone'
-  | 'orca_error';
+  | 'orca_error'
+  | 'device_not_connected'
+  | 'device_unknown';
 
 export interface OpenSuccess {
   ok: true;
@@ -32,6 +37,12 @@ export interface OpenSuccess {
   route: OpenRoute;
   reason: OpenReason;
   worktreeId: string;
+  /** 押した端末。client では Orca が接続中のすべての端末を動かす（1台に絞れない）。 */
+  device: OpenDevice;
+  /** orca-web は Orca の画面を読めず、切り替わったかを確かめていない。 */
+  screen: 'unverified';
+  /** host のときだけ。Orca を前面に出せたか。 */
+  raised?: boolean;
   requestedAgentFound?: boolean;
   /** worktree だけを選んだとき、Orca が最初の端末を作りうるか（タブのない worktree）。 */
   mayCreateInitialTerminal?: boolean;
@@ -45,6 +56,8 @@ export interface OpenFailure {
   missing?: string[];
   /** 書き込みを送った後の失敗なら、その経路。 */
   route?: OpenRoute;
+  /** worktree.activate は通り、タブの選択が失敗したとき。 */
+  worktreeShown?: true;
 }
 
 export type OpenOutcome = OpenSuccess | OpenFailure;
@@ -52,8 +65,10 @@ export type OpenOutcome = OpenSuccess | OpenFailure;
 export interface OpenDeps {
   /** 読むコマンドと `terminal switch` だけを呼べる CLI（OpenOrcaCli）。 */
   cli: Pick<OpenOrcaCli, 'json'>;
-  /** 読む RPC と `navigation: "host"` の activate だけを送れる口（OpenRpc）。 */
+  /** 読む RPC と `navigation: "host"`・`"clients"` の activate だけを送れる口（OpenRpc）。 */
   rpc: RpcTransport;
+  /** ホストの Orca を前面に出す（raiseOrca）。なければ呼ばず raised を出さない。 */
+  raise?: () => Promise<boolean>;
   /** 機能の確かめ（CapabilityCache.get）。 */
   capabilities: () => Promise<CapabilityReport>;
   /** 書き込みの時間切れ。 */
@@ -89,6 +104,10 @@ interface WorktreeRow {
 
 type Resolved = { ok: true; id: string } | OpenFailure;
 
+type Navigation = 'host' | 'clients';
+
+type Sent = { ok: true; route: OpenRoute } | OpenFailure;
+
 export class OpenService {
   readonly #deps: OpenDeps;
   #busy = false;
@@ -97,18 +116,18 @@ export class OpenService {
     this.#deps = deps;
   }
 
-  /** 1つの開く要求。処理中に来た要求は busy で断る。 */
-  async open(request: OpenRequest): Promise<OpenOutcome> {
+  /** 1つの開く要求。origin は押した端末（open-device.ts で決める）。処理中に来た要求は busy で断る。 */
+  async open(request: OpenRequest, origin: OpenDevice = 'host'): Promise<OpenOutcome> {
     if (this.#busy) return fail('busy', 'another open request is in progress');
     this.#busy = true;
     try {
-      return await this.#open(request);
+      return await this.#open(request, origin);
     } finally {
       this.#busy = false;
     }
   }
 
-  async #open(request: OpenRequest): Promise<OpenOutcome> {
+  async #open(request: OpenRequest, origin: OpenDevice): Promise<OpenOutcome> {
     const report = await this.#deps.capabilities();
     const feature = report.features.openExistingTab;
     if (!feature.available) {
@@ -128,12 +147,29 @@ export class OpenService {
 
     const choice = request.agent === undefined ? chooseTarget(snapshot) : chooseTarget(snapshot, request.agent);
     const target = choice.target;
-    const sent = await this.#send(worktreeId, target);
+    const sent = await this.#send(worktreeId, target, origin === 'client' ? 'clients' : 'host');
     if (!sent.ok) return sent;
-    const success: OpenSuccess = { ok: true, status: 'opened', route: target.route, reason: target.reason, worktreeId };
+    const success: OpenSuccess = {
+      ok: true,
+      status: 'opened',
+      route: sent.route,
+      reason: target.reason,
+      worktreeId,
+      device: origin,
+      screen: 'unverified',
+    };
     if (choice.requestedAgentFound !== undefined) success.requestedAgentFound = choice.requestedAgentFound;
     if (target.route === 'worktree-activate') success.mayCreateInitialTerminal = target.mayCreateInitialTerminal;
+    if (origin === 'host' && this.#deps.raise) success.raised = await this.#raise(this.#deps.raise);
     return success;
+  }
+
+  async #raise(raise: () => Promise<boolean>): Promise<boolean> {
+    try {
+      return (await raise()) === true;
+    } catch {
+      return false;
+    }
   }
 
   async #resolveWorktree(selector: string): Promise<Resolved> {
@@ -152,29 +188,33 @@ export class OpenService {
     return { ok: true, id: only.id };
   }
 
-  async #send(worktreeId: string, target: OpenTarget): Promise<{ ok: true } | OpenFailure> {
+  /** 1. worktree.activate、2. 選んだタブの選択（あれば）。route は最後に送った書き込みの経路。 */
+  async #send(worktreeId: string, target: OpenTarget, navigation: Navigation): Promise<Sent> {
     const timeoutMs = this.#deps.writeTimeoutMs ?? DEFAULT_WRITE_TIMEOUT_MS;
-    const route = target.route;
-    if (route === 'terminal-switch') {
-      const outcome = await this.#deps.cli.json<unknown>(['terminal', 'switch', '--terminal', target.handle]);
-      return classifyCli(outcome, route);
-    }
-    if (route === 'tab-activate') {
-      const params: Record<string, unknown> = {
-        worktree: `id:${worktreeId}`,
-        tabId: target.tabId,
-        navigation: 'host',
-        intent: 'user',
-      };
-      if (target.leafId !== undefined) params.leafId = target.leafId;
-      return classifyRpc(await this.#deps.rpc.call<unknown>('session.tabs.activate', params, { timeoutMs }), route);
-    }
-    const outcome = await this.#deps.rpc.call<unknown>(
-      'worktree.activate',
-      { worktree: `id:${worktreeId}`, navigation: 'host' },
-      { timeoutMs },
+    const worktree = `id:${worktreeId}`;
+    const shown = classifyRpc(
+      await this.#deps.rpc.call<unknown>('worktree.activate', { worktree, navigation }, { timeoutMs }),
+      'worktree-activate',
     );
-    return classifyRpc(outcome, route);
+    if (!shown.ok) return shown;
+    if (target.route === 'worktree-activate') return { ok: true, route: 'worktree-activate' };
+
+    let selected: { ok: true } | OpenFailure;
+    let route: OpenRoute;
+    if (target.route === 'terminal-switch' && navigation === 'host') {
+      route = 'terminal-switch';
+      const outcome = await this.#deps.cli.json<unknown>(['terminal', 'switch', '--terminal', target.handle]);
+      selected = classifyCli(outcome, route);
+    } else {
+      // terminal switch は navigation に clients を取らないので、クライアントでは端末のタブも session.tabs.activate で選ぶ。
+      route = 'tab-activate';
+      const params: Record<string, unknown> = { worktree, tabId: target.tabId, navigation, intent: 'user' };
+      if (target.leafId !== undefined) params.leafId = target.leafId;
+      const outcome = await this.#deps.rpc.call<unknown>('session.tabs.activate', params, { timeoutMs });
+      selected = classifyRpc(outcome, route);
+    }
+    if (!selected.ok) return { ...selected, worktreeShown: true };
+    return { ok: true, route };
   }
 }
 

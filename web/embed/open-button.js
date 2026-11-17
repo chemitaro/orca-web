@@ -23,7 +23,8 @@
 
   const frame = document.createElement('iframe');
   frame.title = 'Orca で開く';
-  frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+  // 外部の protocol（orca://）への移動だけを足す。上の窓のページの移動は許さない（D-04）。
+  frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-top-navigation-to-custom-protocols');
   frame.setAttribute('referrerpolicy', 'no-referrer');
   frame.width = data.width || String(data.label === 'none' ? height : textWidth);
   frame.height = String(height);

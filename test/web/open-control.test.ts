@@ -276,7 +276,7 @@ test('T-05：busy の間の2回目の押しは send を呼ばず、done の後 O
   assert.equal(await runOpen(control, send, { ...clock, onState }), null);
   assert.equal(calls, 1);
   reply.resolve({ status: 200, body: { ok: true } });
-  assert.deepEqual(await first, { state: 'done', message: '開きました' });
+  assert.deepEqual(await first, { state: 'done', message: 'Orca に切り替えを送りました' });
   assert.equal(control.state, 'done');
   clock.advance(OPEN_DONE_MS - 1);
   assert.equal(control.state, 'done');
@@ -393,4 +393,68 @@ test('T-05（レビュー P2-1）：要求の途中に描き直した部品に�
   const c = createOpenControl(doc, {});
   board.mount('agent-1', c);
   assert.equal(c.state, 'idle');
+});
+
+test('T-08：done で device が client のときだけ raiseClient を1回呼ぶ', async () => {
+  const clock = fakeClock();
+  let raised = 0;
+  const raiseClient = () => {
+    raised += 1;
+  };
+  const control = createOpenControl(doc, {});
+  const result = await runOpen(
+    control,
+    async () => ({ status: 200, body: { ok: true, device: 'client', screen: 'unverified' } }),
+    { ...clock, raiseClient },
+  );
+  assert.deepEqual(result, { state: 'done', message: 'この端末の Orca に切り替えを送りました' });
+  assert.equal(raised, 1);
+});
+
+test('T-08：host の成功、失敗、通信の失敗では raiseClient を呼ばない', async () => {
+  const replies: Array<() => Promise<{ status: number; body: unknown }>> = [
+    async () => ({ status: 200, body: { ok: true, device: 'host', screen: 'unverified', raised: true } }),
+    async () => ({ status: 200, body: { ok: true } }),
+    async () => ({ status: 502, body: { ok: false, error: 'orca_error', device: 'client', worktreeShown: true } }),
+    async () => ({ status: 409, body: { ok: false, error: 'device_not_connected' } }),
+    async () => {
+      throw new Error('network');
+    },
+  ];
+  for (const send of replies) {
+    let raised = 0;
+    const control = createOpenControl(doc, {});
+    await runOpen(control, send, {
+      ...fakeClock(),
+      raiseClient: () => {
+        raised += 1;
+      },
+    });
+    assert.equal(raised, 0);
+  }
+});
+
+test('T-08：raiseClient が投げても結果は done のまま', async () => {
+  const clock = fakeClock();
+  const control = createOpenControl(doc, {});
+  const result = await runOpen(control, async () => ({ status: 200, body: { ok: true, device: 'client' } }), {
+    ...clock,
+    raiseClient: () => {
+      throw new Error('blocked');
+    },
+  });
+  assert.deepEqual(result, { state: 'done', message: 'この端末の Orca に切り替えを送りました' });
+  assert.equal(control.state, 'done');
+  clock.advance(OPEN_DONE_MS);
+  assert.equal(control.state, 'idle');
+});
+
+test('T-08：既定の raiseClient は location がなくても投げず、結果を変えない', async () => {
+  const control = createOpenControl(doc, {});
+  const result = await runOpen(
+    control,
+    async () => ({ status: 200, body: { ok: true, device: 'client' } }),
+    fakeClock(),
+  );
+  assert.equal(result?.state, 'done');
 });

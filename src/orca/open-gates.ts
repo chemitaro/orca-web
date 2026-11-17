@@ -1,4 +1,4 @@
-// 開く口の門。読む CLI と RPC に加えて、既存のタブを選ぶ3つの操作だけを通す。
+// 開く口の門。読む CLI と RPC に加えて、既存のタブを選ぶ3つの操作だけを通す（RPC の activate は navigation が host か clients のときだけ）。
 // タブやファイルを作る操作（terminal create、file open、session.tabs.create、worktree.create など）は一覧になく、送らずに拒む。
 import { type CliOutcome, type OrcaCli, READ_COMMANDS } from './orca-cli.ts';
 import { READ_METHODS, type RpcCallOptions, type RpcOutcome, type RpcTransport } from './rpc.ts';
@@ -9,7 +9,7 @@ export const OPEN_COMMANDS: readonly (readonly string[])[] = [
   ['terminal', 'switch'],
 ];
 
-/** 開く口が送れる書き込みの RPC。どちらも `navigation: "host"` のときだけ送る。 */
+/** 開く口が送れる書き込みの RPC。どちらも `navigation` が `host`（ホストの窓）か `clients`（接続中の端末）のときだけ送る。`all`・`caller`・なしは拒む。 */
 export const OPEN_WRITE_METHODS: readonly string[] = ['session.tabs.activate', 'worktree.activate'];
 
 /** 接続先を変えるフラグ。 */
@@ -44,7 +44,7 @@ export class OpenOrcaCli {
   }
 }
 
-/** 読む RPC と、`navigation: "host"` の activate だけを送れる口。 */
+/** 読む RPC と、`navigation` が `host` か `clients` の activate だけを送れる口。 */
 export class OpenRpc implements RpcTransport {
   readonly #transport: RpcTransport;
 
@@ -54,8 +54,8 @@ export class OpenRpc implements RpcTransport {
 
   call<T = unknown>(method: string, params: unknown, options?: RpcCallOptions): Promise<RpcOutcome<T>> {
     if (OPEN_WRITE_METHODS.includes(method)) {
-      if (!isRecord(params) || params.navigation !== 'host') {
-        return Promise.reject(new Error(`${method} must navigate the host only`));
+      if (!isRecord(params) || (params.navigation !== 'host' && params.navigation !== 'clients')) {
+        return Promise.reject(new Error(`${method} must navigate the host or the clients only`));
       }
     } else if (!READ_METHODS.includes(method)) {
       return Promise.reject(new Error(`${method} is not allowed for opening`));

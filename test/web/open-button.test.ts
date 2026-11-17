@@ -94,6 +94,12 @@ for (const [data, width, height] of SIZES) {
   });
 }
 
+test('T-11：iframe の sandbox は外部の protocol への移動だけを足した印で、上の窓の移動は許さない', () => {
+  const { frame } = run({ worktree: '/w' });
+  assert.equal(frame.attrs.sandbox, 'allow-scripts allow-same-origin allow-top-navigation-to-custom-protocols');
+  assert.doesNotMatch(frame.attrs.sandbox, /allow-top-navigation(?!-to-custom-protocols)|allow-popups/);
+});
+
 test('T-07：data-width で幅を上書きでき、高さは形と大きさのまま', () => {
   const { frame } = run({ worktree: '/w', size: 'sm', width: '260' });
   assert.equal(frame.width, '260');

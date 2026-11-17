@@ -134,7 +134,13 @@ SpecDock の画面に1行のスクリプトを置く。スクリプトが自分�
 - 押すと、途中は回る印、開けたらチェックの印（2秒で戻る）、開けなかったら線とロゴが琥珀になり title に理由が出る（横に文字を出さない。読み上げには目に見えない status の領域で伝える）。
 - 置ける画面は `ORCA_WEB_READ_ORIGINS` のオリジンだけ（`frame-ancestors`）。
 - 親の画面の幅が 390px 以下の間は、ボタンを出さず、読み込まない（スマホでは出ない）。
-- 押すと、この Mac の Orca で既存のタブを前面に出す。新しいタブやファイルは作らない（スリープ中のエージェントの復元と、タブのない worktree を選んだときに Orca が作る最初の端末は、Orca の通常の動きとして起こりうる）。
+- 押すと、押した端末の Orca で、その worktree を表示してから既存のタブを選ぶ（Orca の左の一覧を押してからタブを押すのと同じ順。`worktree.activate` の後に `terminal switch` か `session.tabs.activate`）。新しいタブやファイルは作らない（スリープ中のエージェントの復元と、タブのない worktree を選んだときに Orca が作る最初の端末は、Orca の通常の動きとして起こりうる）。
+- 押した端末は、`POST /api/open` の TCP の元のアドレスで決める（頭は使わない）。
+  - loopback か、ホストのネットワークの口が持つアドレス（tailnet のアドレスを含む）なら、ホストの Orca（`navigation: "host"`）。開いた後に `open -b com.stablyai.orca` で Orca を前面に出す（結果の `raised`）。
+  - そうでなく、Orca のランタイムの websocket の口に、そのアドレスから確立した接続がある（lsof で読む）なら、接続中のクライアントの Orca（`navigation: "clients"`）。ホストの画面は動かさない。**`clients` は、ホストのランタイムに接続中のすべての端末（ほかのクライアントの PC、iPhone のアプリ）を動かす**（Orca に1台に絞る引数がない）。ボタンは開いた後に `orca://` へ移り、その端末の macOS に Orca を前面に出させる（デスクトップ版の `orca://` は worktree を開かず、前面に出すだけ）。
+  - どちらでもなければ開かず `device_not_connected`（「この端末から Orca のホストへの接続が見つかりません」）、接続を読めなければ `device_unknown`。relay で接続する端末と、orca-web を開いたアドレスと違うアドレス（同じ Wi-Fi の LAN、tailnet の IPv6 など）で接続する端末は見分けられない。
+- ボタンの iframe は `open-button.js` が作り、sandbox は `allow-scripts allow-same-origin allow-top-navigation-to-custom-protocols`（外部の protocol への移動だけを足す。上の窓のページは移さない）。置く側の画面に sandbox を足す必要はない。
+- 結果の文書は `{ok: true, status: "opened", route, reason, worktreeId, device: "host" | "client", screen: "unverified", raised?}`。Orca には窓の今の worktree を読む口がないので、orca-web は切り替わったかを確かめない（`screen: "unverified"`）。ボタンの言葉も「Orca に切り替えを送りました」（クライアントは「この端末の Orca に…」）。worktree の表示の後にタブを選べなかったときは `ok: false` と `worktreeShown: true`。
 
 ### エージェントの詳細とチャット
 

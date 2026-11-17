@@ -10,7 +10,12 @@ export const OPEN_MESSAGES = {
   unknown_shape: 'Orca の応答を読めません',
   orca_error: 'Orca が誤りを返しました',
   unconfirmed: '開いたか確かめられません',
+  device_not_connected: 'この端末から Orca のホストへの接続が見つかりません',
+  device_unknown: '押した端末を確かめられません',
 };
+
+/** worktree は表示できたが、2つめの送信（タブを選ぶ）で失敗したときに先に出す言葉。 */
+export const WORKTREE_SHOWN_MESSAGE = 'worktree は表示しましたが、タブを選べませんでした';
 
 /**
  * @param {{ kind: 'response', status: number, body: Record<string, unknown> } | { kind: 'network' }} outcome
@@ -19,20 +24,20 @@ export const OPEN_MESSAGES = {
 export function openResult(outcome) {
   if (outcome.kind === 'network') return { state: 'error', message: 'orca-web につながりません' };
   if (outcome.kind === 'response' && outcome.body.ok !== true) {
+    const reason =
+      typeof outcome.body.error === 'string' && Object.hasOwn(OPEN_MESSAGES, outcome.body.error)
+        ? OPEN_MESSAGES[/** @type {keyof typeof OPEN_MESSAGES} */ (outcome.body.error)]
+        : `開けません（${outcome.status}）`;
     return {
       state: 'error',
-      message:
-        typeof outcome.body.error === 'string' && Object.hasOwn(OPEN_MESSAGES, outcome.body.error)
-          ? OPEN_MESSAGES[/** @type {keyof typeof OPEN_MESSAGES} */ (outcome.body.error)]
-          : `開けません（${outcome.status}）`,
+      message: outcome.body.worktreeShown === true ? `${WORKTREE_SHOWN_MESSAGE}（${reason}）` : reason,
     };
   }
+  const sent =
+    outcome.body.device === 'client' ? 'この端末の Orca に切り替えを送りました' : 'Orca に切り替えを送りました';
   return {
     state: 'done',
-    message:
-      outcome.kind === 'response' && outcome.body.mayCreateInitialTerminal
-        ? '開きました（Orca が端末を作ることがあります）'
-        : '開きました',
+    message: outcome.body.mayCreateInitialTerminal ? `${sent}（Orca が端末を作ることがあります）` : sent,
   };
 }
 
