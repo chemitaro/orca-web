@@ -53,7 +53,7 @@ design: {
 		text: """
 			`raiseOrca(runner)`：`/usr/bin/open -b com.stablyai.orca` を引数の配列で、時間切れ 5 秒で呼び、終了コード 0 なら true、ほかは false（投げない）。`OpenService` は、ホストで成功したときだけ1回呼び、`raised` を成功の文書に入れる。失敗とクライアントでは呼ばない（`raised` を出さない）。依存の `raise?: () => Promise<boolean>` として注入する（なければ呼ばず `raised` を出さない）。
 			画面：`runOpen(control, send, {raiseClient})` に `raiseClient` を足す。既定は `() => { globalThis.location.href = 'orca://'; }` を try で包む。結果が done で `body.device === 'client'` のときだけ1回呼ぶ。投げても結果は変えない。
-			SpecDock の iframe：sandbox が `allow-scripts allow-same-origin` だけだと、Chrome は iframe からの外部の protocol への移動を止める。要る印は `allow-top-navigation-to-custom-protocols`（いちばん狭い）。README に書き、統括に知らせる（SpecDock は変えない）。
+			埋め込みの iframe：iframe とその sandbox は orca-web の `web/embed/open-button.js` が作る（SpecDock は script を置くだけ。統括の確かめ 2026-11-18）。sandbox を `allow-scripts allow-same-origin allow-top-navigation-to-custom-protocols` にする（外部の protocol への移動だけを足す、いちばん狭い印。上の窓のページの移動は許さない）。`orca://` へ移るのは結果が client のときだけ。Chrome と Safari の両方で sandbox の iframe から `orca://` へ移れるかを実機で確かめ、だめな方は理由と代わりの形を report.md に書く。SpecDock の CSP（frame-src）で止まるところが見つかったら統括に知らせる。
 			"""
 		satisfies: ["R-04"]
 	}

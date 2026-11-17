@@ -34,7 +34,7 @@ includes: [
 
 excludes: [
 	"Orca の不具合そのものの修正（Orca に出す報告の下書きは report.md に書く）",
-	"SpecDock の iframe の sandbox の変更（要るものを統括に知らせ、統括が別の Issue にする）",
+	"SpecDock のリポジトリの変更（CSP で止まるときは統括に知らせる）",
 	"タブやファイルを作る操作、送信、統括の連絡を既読にする読み方",
 	"iPhone のアプリで開くリンク（`orca://h/<hostId>/session/...`）",
 	"押した端末だけに絞る仕組み（Orca に引数がない。制約として記録する）",
@@ -84,11 +84,12 @@ requirements: {
 		title: "開いた端末の Orca を前面に出す"
 		text: """
 			ホストで開いたら、orca-web が `open -b com.stablyai.orca`（絶対パス、引数の配列）で Orca を前面に出す。結果に `raised`（true か false）を出す。前面に出せなくても開いた結果は変えない。
-			クライアントで開いたら、画面（ボタンの部品）が `orca://` へ移ってその端末の macOS に Orca を前面に出させる。SpecDock の iframe がそれを許さない（sandbox）ときは前面に出ない。要る sandbox の印を README に書き、統括に知らせる。
+			クライアントで開いたら、画面（ボタンの部品）が `orca://` へ移ってその端末の macOS に Orca を前面に出させる。埋め込みのボタンの iframe（`open-button.js` が作る）の sandbox に `allow-top-navigation-to-custom-protocols` を足す。Chrome と Safari で確かめ、だめな方は理由と代わりの形を report.md に書く。
 			"""
 		acceptance: [
 			"ホストで送った後に1回だけ Orca を前面に出す命令を呼び、失敗しても ok のまま `raised: false` を返す。クライアントと失敗のときは呼ばない（テスト）",
 			"ボタンの部品は、結果の `device` が `client` のときだけ `orca://` へ移る口を1回呼ぶ（テスト）",
+			"`open-button.js` の iframe の sandbox が `allow-scripts allow-same-origin allow-top-navigation-to-custom-protocols` である（テスト）",
 		]
 	}
 	"R-05": {
@@ -116,6 +117,6 @@ constraints: [
 	"本人の環境に特化した決まり（固定の IP や名前）を入れない",
 ]
 
-questions: [
-	"Q-01：`clients` が接続中のすべての端末を動かす制約を、そのまま受け入れるか（統括に問う）",
+decisions: [
+	"`clients` が接続中のすべての端末を動かす制約を受け入れ、README と結果の device に出す（統括、2026-11-18）",
 ]
