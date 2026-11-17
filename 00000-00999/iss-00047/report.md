@@ -94,3 +94,4 @@ sandbox の iframe の中のボタンを押し（`Input.dispatchMouseEvent`、�
 ## 逸脱と判断
 
 - S-01 の実装担当：Codex GPT-6.1 Sol / medium（ctx_90ef40473b08）は、sandbox の初期化で chat-scratch の writable root が symlink を含むとして拒まれ、何も変えずに止まった。統括の了承済みの手順どおり worker-stop し、Claude Opus 5.5 / medium（ctx_41e98a4ba9e0）に切り替えた。
+- final-quality-gate（iss-00047-fqg1）：5a8bad4 で **pass**。レビュー attempt 01 fail（FQG-001：実機の記録の未完。記録を書いて応答）→ attempt 02 pass（P2 1：Safari 未確かめ）。2人目 ChatGPT GPT-6 / Extra High pass（P2 2：未送信の 2 の route、lsof の終了コード 1 と stderr）。テスト lint 0・test 752 合格・build 0。closure：`closure.md`。
