@@ -6,12 +6,15 @@
 // 自動で送り直さない。照会は「確かめる」を押したときだけ。値は文字にして返し、HTML として解かない（描く側は textContent を使う）。
 import {
   checkOperation,
+  confirmRefused,
   initialFlow,
   QUESTION_REASONS,
   readSameOrigin,
   reasonTextFrom,
   reduceFlow,
   sendIntentConfirm,
+  timing,
+  withTimeout,
 } from './question-view.js';
 
 /** 理由と結果の言葉（1か所）。質問の表を引き継ぎ、「質問」と書く言葉を承認の言葉で上書きする。 */
@@ -304,12 +307,18 @@ const DELIVERED = new Set(['submitted', 'accepted', 'input_accepted']);
 /**
  * 端末のエージェントの許可の確認の手段（iss-00054 D-06）。promptId で指し、意図と確定を続けて1回ずつ送る。
  * 送れるかは status の answerKeys（端末の質問のキーの組と同じ確かめ）。押せない形はどれも「Orca で開く」を出す（open 真）。
+ * 時間切れと確定の拒みの読み方は質問の答えと同じ（question-view.js の timing・withTimeout・confirmRefused。iss-00059）：
+ * 意図は既定 30 秒、確定は既定 60 秒待つ。意図の時間切れ・通信の誤りは送っていない（押し直せる refused）。
  * 確定の 200 の refused は、送る前の記録を書いた後なので同じ promptId には送れない（blocked）。
- * 確定の 200 の unknown・応答の欠け・通信の誤りは届いたか分からない（partial）。照会（check）は持たず、送り直さない。
+ * 確定の ok: false は、4xx と 5xx の送る前の識別子（confirmRefused）だけを送る前の拒みと読み、ほか（internal_error や知らない識別子）と
+ * 確定の 200 の unknown・応答の欠け・通信の誤り・時間切れは届いたか分からない（partial）。照会（check）は持たず、送り直さない。
  * @param {{
  *   agentId: string,
  *   writer: { send: (path: string, method: 'POST', body: unknown) => Promise<{ status: number, body: any }> },
  *   read?: (url: string) => Promise<{ status: number, body: any }>,
+ *   timeouts?: { intentMs?: number, confirmMs?: number },
+ *   setTimer?: (fn: () => void, ms: number) => unknown,
+ *   clearTimer?: (id: any) => void,
  * }} deps read は他の手段と同じ形で受けるが、照会しないので使わない
  */
 export function createTerminalApprover(deps) {
@@ -318,6 +327,7 @@ export function createTerminalApprover(deps) {
   const cannot = (reason) => ({ ok: false, reason, open: true });
   /** @param {string | null} operationId @returns {import('./question-view.js').FlowResult} */
   const lost = (operationId) => ({ kind: 'partial', operationId, note: APPROVAL_REASONS.unconfirmed });
+  const clock = timing(deps);
   return {
     /** status は GET /api/send/status の本体、読めなければ 'failed'、まだなら null。 @returns {Availability} */
     availability(part, status) {
@@ -338,12 +348,16 @@ export function createTerminalApprover(deps) {
         return { kind: 'refused', reason: APPROVAL_REASONS.unknown_shape };
       let intent;
       try {
-        intent = await deps.writer.send('/api/approval/intent', 'POST', {
-          agent: deps.agentId,
-          promptId: part.promptId,
-          optionId,
-          confirmPersistent: confirmPersistent === true,
-        });
+        intent = await withTimeout(
+          deps.writer.send('/api/approval/intent', 'POST', {
+            agent: deps.agentId,
+            promptId: part.promptId,
+            optionId,
+            confirmPersistent: confirmPersistent === true,
+          }),
+          clock.intentMs,
+          clock,
+        );
       } catch {
         return { kind: 'refused', reason: APPROVAL_REASONS.network };
       }
@@ -352,7 +366,11 @@ export function createTerminalApprover(deps) {
       const operationId = body.operationId;
       let confirm;
       try {
-        confirm = await deps.writer.send('/api/approval/confirm', 'POST', { ticket: body.ticket, optionId });
+        confirm = await withTimeout(
+          deps.writer.send('/api/approval/confirm', 'POST', { ticket: body.ticket, optionId }),
+          clock.confirmMs,
+          clock,
+        );
       } catch {
         return lost(operationId);
       }
@@ -362,8 +380,8 @@ export function createTerminalApprover(deps) {
         if (result.outcome === 'refused') return { kind: 'blocked', reason: APPROVAL_REASONS.keys_refused };
         return lost(operationId);
       }
-      // 送る前の拒み（ok: false と error）は送っていない。ほかの形は届いたか分からない。
-      if (result.ok === false && isText(result.error)) return terminalRefusal(result);
+      // 送る前の拒み（confirmRefused）は送っていない。ほかの形（5xx の知らない誤りを含む）は届いたか分からない。
+      if (confirmRefused(confirm)) return terminalRefusal(result);
       return lost(operationId);
     },
   };

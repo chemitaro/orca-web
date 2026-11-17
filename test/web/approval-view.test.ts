@@ -829,3 +829,189 @@ test('iss-00055 T-07：承認の意図は 30 秒で refused network、確定は 
   await settle();
   assert.deepEqual(sent2, ['/api/approval/intent', '/api/approval/confirm']);
 });
+
+// ---- iss-00059：端末の承認の手段の確定の 5xx と時間切れ（質問の答えと同じ扱い） ----
+
+/** 注入する時計。fire は止められていない最後の時計を進める。 */
+const fakeClock = () => {
+  const timers: Array<{ fn: () => void; ms: number; cleared: boolean }> = [];
+  return {
+    timers,
+    setTimer: (fn: () => void, ms: number) => timers.push({ fn, ms, cleared: false }) - 1,
+    clearTimer: (id: number) => {
+      const t = timers[id];
+      if (t) t.cleared = true;
+    },
+    fire: () => {
+      const t = [...timers].reverse().find((x) => !x.cleared);
+      assert.ok(t, '進める時計がある');
+      t.cleared = true;
+      t.fn();
+    },
+  };
+};
+const LOST = { kind: 'partial', operationId: 'op-1', note: APPROVAL_REASONS.unconfirmed };
+
+test('iss-00059 T-01：端末の承認の確定の 500 internal_error と 5xx の知らない識別子は partial で、送るのは2回だけ。板では帯で押し直しで送らない', async () => {
+  const run = async (status: number, body: Any) => {
+    const { sent, writer } = scripted([INTENT_OK, { status, body }]);
+    const result = await createTerminalApprover({ agentId: 'a1', writer }).submit(keysPart(), 'allow_once', {});
+    assert.equal(sent.length, 2, '送り直さない');
+    return result;
+  };
+  assert.deepEqual(await run(500, { ok: false, error: 'internal_error' }), LOST);
+  assert.deepEqual(await run(503, { ok: false, error: 'something_new' }), LOST);
+  assert.deepEqual(await run(500, { ok: false, error: 'internal_error', reason: 'question_gone' }), LOST);
+
+  const { sent, writer } = scripted([INTENT_OK, { status: 500, body: { ok: false, error: 'internal_error' } }]);
+  const terminal = createTerminalApprover({ agentId: 'a1', writer });
+  const board = createApprovalBoard({
+    approvers: { chat: createChatApprover({ agentId: 'a1', writer }), readOnly: readOnlyApprover, terminal },
+  });
+  const part = keysPart();
+  await board.choose('k', part, 'allow_once', KEYS_OK);
+  assert.equal(board.state('k').flow.phase, 'partial');
+  const view = buildApprovalCard(part, {
+    key: 'k',
+    state: board.state('k'),
+    availability: terminal.availability(part, KEYS_OK),
+  });
+  assert.deepEqual(view.partial, { text: APPROVAL_REASONS.unconfirmed });
+  assert.equal(view.open, true);
+  assert.ok(view.options.every((o: Any) => o.disabled));
+  await board.choose('k', part, 'reject_once', KEYS_OK);
+  assert.equal(sent.length, 2, '押し直しで送らない');
+});
+
+test('iss-00059 T-02：端末の承認の確定の 503 unreachable・500 record_failed は押し直せる refused（表の言葉）', async () => {
+  const run = async (status: number, body: Any) => {
+    const { sent, writer } = scripted([INTENT_OK, { status, body }]);
+    const result = await createTerminalApprover({ agentId: 'a1', writer }).submit(keysPart(), 'allow_once', {});
+    assert.equal(sent.length, 2);
+    return result;
+  };
+  assert.deepEqual(await run(503, { ok: false, error: 'unreachable' }), {
+    kind: 'refused',
+    reason: APPROVAL_REASONS.unreachable,
+  });
+  assert.deepEqual(await run(500, { ok: false, error: 'record_failed' }), {
+    kind: 'refused',
+    reason: APPROVAL_REASONS.record_failed,
+  });
+});
+
+test('iss-00059 T-03：端末の承認の意図は 30 秒で確定を送らず refused network、確定は 60 秒で partial（2回だけ）。板は sending から抜ける', async () => {
+  // 意図の時間切れ。
+  const late = deferred<Any>();
+  const sent: string[] = [];
+  const c1 = fakeClock();
+  const writer1 = {
+    send: (path: string) => {
+      sent.push(path);
+      return late.promise;
+    },
+  };
+  const terminal1 = createTerminalApprover({
+    agentId: 'a1',
+    writer: writer1,
+    setTimer: c1.setTimer,
+    clearTimer: c1.clearTimer,
+  });
+  const board1 = createApprovalBoard({
+    approvers: {
+      chat: createChatApprover({ agentId: 'a1', writer: writer1 }),
+      readOnly: readOnlyApprover,
+      terminal: terminal1,
+    },
+  });
+  const chosen1 = board1.choose('k', keysPart(), 'allow_once', KEYS_OK);
+  await settle();
+  assert.equal(board1.state('k').flow.phase, 'sending');
+  assert.equal(c1.timers[0]?.ms, 30_000);
+  c1.fire();
+  await chosen1;
+  assert.equal(board1.state('k').flow.phase, 'refused');
+  assert.deepEqual(board1.state('k').flow.result, { kind: 'refused', reason: APPROVAL_REASONS.network });
+  late.resolve(INTENT_OK);
+  await settle();
+  assert.deepEqual(sent, ['/api/approval/intent'], '確定を送らない');
+
+  // 確定の時間切れ。
+  const lateConfirm = deferred<Any>();
+  const replies: Array<Promise<Any> | Any> = [INTENT_OK, lateConfirm.promise];
+  const sent2: string[] = [];
+  const c2 = fakeClock();
+  const writer2 = {
+    send: async (path: string) => {
+      sent2.push(path);
+      return replies.shift();
+    },
+  };
+  const terminal2 = createTerminalApprover({
+    agentId: 'a1',
+    writer: writer2,
+    setTimer: c2.setTimer,
+    clearTimer: c2.clearTimer,
+  });
+  const board2 = createApprovalBoard({
+    approvers: {
+      chat: createChatApprover({ agentId: 'a1', writer: writer2 }),
+      readOnly: readOnlyApprover,
+      terminal: terminal2,
+    },
+  });
+  const part = keysPart();
+  const chosen2 = board2.choose('k', part, 'allow_once', KEYS_OK);
+  await settle();
+  assert.equal(board2.state('k').flow.phase, 'sending');
+  assert.equal(c2.timers[1]?.ms, 60_000);
+  c2.fire();
+  await chosen2;
+  assert.equal(board2.state('k').flow.phase, 'partial');
+  assert.deepEqual(board2.state('k').flow.result, LOST);
+  await board2.choose('k', part, 'reject_once', KEYS_OK);
+  assert.deepEqual(sent2, ['/api/approval/intent', '/api/approval/confirm'], '送り直さない');
+});
+
+test('iss-00059 T-03：端末の承認の時間切れの長さは timeouts で差し替えられる', async () => {
+  const c = fakeClock();
+  const pending = deferred<Any>();
+  const approver = createTerminalApprover({
+    agentId: 'a1',
+    writer: { send: () => pending.promise },
+    timeouts: { intentMs: 5, confirmMs: 7 },
+    setTimer: c.setTimer,
+    clearTimer: c.clearTimer,
+  });
+  const p = approver.submit(keysPart(), 'allow_once', {});
+  await settle();
+  assert.equal(c.timers[0]?.ms, 5);
+  c.fire();
+  assert.deepEqual(await p, { kind: 'refused', reason: APPROVAL_REASONS.network });
+});
+
+test('iss-00059 T-04：端末の承認の確定の時間切れの後に input_accepted が届いても partial のままで、送り直さない', async () => {
+  const lateConfirm = deferred<Any>();
+  const replies: Array<Promise<Any> | Any> = [INTENT_OK, lateConfirm.promise];
+  const sent: string[] = [];
+  const c = fakeClock();
+  const approver = createTerminalApprover({
+    agentId: 'a1',
+    writer: {
+      send: async (path: string) => {
+        sent.push(path);
+        return replies.shift();
+      },
+    },
+    setTimer: c.setTimer,
+    clearTimer: c.clearTimer,
+  });
+  const p = approver.submit(keysPart(), 'allow_once', {});
+  await settle();
+  c.fire();
+  const result = await p;
+  lateConfirm.resolve({ status: 200, body: { ok: true, outcome: 'input_accepted', detail: { code: 'keys_sent' } } });
+  await settle();
+  assert.deepEqual(result, LOST);
+  assert.deepEqual(sent, ['/api/approval/intent', '/api/approval/confirm']);
+});
