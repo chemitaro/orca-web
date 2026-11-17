@@ -46,23 +46,28 @@ test('OpenOrcaCli は読むコマンドと terminal switch だけを呼び、作
   ]);
 });
 
-test('OpenRpc は読む RPC と navigation: host の activate だけを送り、ほかを送らずに拒む', async () => {
+test('OpenRpc は読む RPC と navigation が host か clients の activate だけを送り、all・caller・なしとほかを送らずに拒む', async () => {
   const inner = new RecordingRpc();
   const rpc = new OpenRpc(inner);
   await rpc.call('session.tabs.list', { worktree: 'id:w' });
   await rpc.call('session.tabs.activate', { worktree: 'id:w', tabId: 't', navigation: 'host' });
   await rpc.call('worktree.activate', { worktree: 'id:w', navigation: 'host' });
-  for (const navigation of [undefined, 'all', 'clients', 'caller']) {
-    await assert.rejects(rpc.call('session.tabs.activate', { worktree: 'id:w', tabId: 't', navigation }), /host only/);
-    await assert.rejects(rpc.call('worktree.activate', { worktree: 'id:w', navigation }), /host only/);
+  await rpc.call('session.tabs.activate', { worktree: 'id:w', tabId: 't', navigation: 'clients' });
+  await rpc.call('worktree.activate', { worktree: 'id:w', navigation: 'clients' });
+  for (const navigation of [undefined, 'all', 'caller', 'HOST', 'client', ['host']]) {
+    await assert.rejects(
+      rpc.call('session.tabs.activate', { worktree: 'id:w', tabId: 't', navigation }),
+      /host or the clients only/,
+    );
+    await assert.rejects(rpc.call('worktree.activate', { worktree: 'id:w', navigation }), /host or the clients only/);
   }
-  await assert.rejects(rpc.call('worktree.activate', null), /host only/);
+  await assert.rejects(rpc.call('worktree.activate', null), /host or the clients only/);
   for (const method of ['session.tabs.create', 'terminal.create', 'terminal.send', 'worktree.create', 'file.open']) {
     await assert.rejects(rpc.call(method, { navigation: 'host' }), /not allowed/, method);
   }
   assert.deepEqual(
     inner.calls.map((c) => c.method),
-    ['session.tabs.list', 'session.tabs.activate', 'worktree.activate'],
+    ['session.tabs.list', 'session.tabs.activate', 'worktree.activate', 'session.tabs.activate', 'worktree.activate'],
   );
 });
 

@@ -32,7 +32,14 @@ function snap(tabs: unknown[], activeTabId: string | null = null) {
 test('指定の paneKey の動いている端末は terminal switch（handle）で開く', () => {
   const s = snap([term('a', '1', agent(5)), term('b', '1', agent(9))]);
   assert.deepEqual(chooseTarget(s, 'a:1'), {
-    target: { route: 'terminal-switch', handle: 'term_a_1', tabId: 'a::1', paneKey: 'a:1', reason: 'requested-agent' },
+    target: {
+      route: 'terminal-switch',
+      handle: 'term_a_1',
+      tabId: 'a::1',
+      leafId: '1',
+      paneKey: 'a:1',
+      reason: 'requested-agent',
+    },
     requestedAgentFound: true,
   });
 });
@@ -48,7 +55,14 @@ test('指定の paneKey のスリープ中の端末は session.tabs.activate（�
 test('指定の paneKey が一覧になければ、最後に動いたエージェントを選び、見つからなかったことを返す', () => {
   const s = snap([term('a', '1', agent(5)), term('b', '1', agent(9))]);
   assert.deepEqual(chooseTarget(s, 'gone:1'), {
-    target: { route: 'terminal-switch', handle: 'term_b_1', tabId: 'b::1', paneKey: 'b:1', reason: 'last-agent' },
+    target: {
+      route: 'terminal-switch',
+      handle: 'term_b_1',
+      tabId: 'b::1',
+      leafId: '1',
+      paneKey: 'b:1',
+      reason: 'last-agent',
+    },
     requestedAgentFound: false,
   });
 });
@@ -79,6 +93,7 @@ test('最後に見ていた端末のタブは、同じ親の leaf のうち acti
     route: 'terminal-switch',
     handle: 'term_a_2',
     tabId: 'a::2',
+    leafId: '2',
     paneKey: 'a:2',
     reason: 'last-tab',
   });

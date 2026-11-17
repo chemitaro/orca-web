@@ -114,19 +114,31 @@ export function createOpenControl(doc, { size = 'sm', label = 'text' } = {}) {
 /** done から idle に戻す時計（部品ごと）。 */
 const timers = new WeakMap();
 
+/** 押した端末（client）の Orca を前面に出す既定の口。orca:// へ移るだけで、投げても外へ出さない。 */
+function raiseThisDevice() {
+  globalThis.location.href = 'orca://';
+}
+
 /**
  * 押したときの流れ。busy にして send を1回だけ呼び、結果を done か error にする。done は OPEN_DONE_MS の後に idle に戻す。
  * busy と missing の間は送らない（null を返す）。onState は状態が変わるたびに呼ぶ（受け箱が描き直した部品に写す）。
+ * 結果が done で、応答の device が client のときだけ raiseClient を1回呼ぶ（押した端末の Orca を前面に出す）。投げても結果は変えない。
  * @param {OpenControl} control
  * @param {() => Promise<{ status: number, body: any }>} send 呼び手が `writer.send('/api/open', 'POST', 本体)` を呼ぶ関数
  * @param {{ onState?: (state: OpenControlState, message?: string) => void,
- *   setTimer?: (fn: () => void, ms: number) => any, clearTimer?: (id: any) => void }} [options]
+ *   setTimer?: (fn: () => void, ms: number) => any, clearTimer?: (id: any) => void,
+ *   raiseClient?: () => void }} [options]
  * @returns {Promise<{ state: 'done' | 'error', message: string } | null>}
  */
 export async function runOpen(
   control,
   send,
-  { onState, setTimer = globalThis.setTimeout, clearTimer = globalThis.clearTimeout } = {},
+  {
+    onState,
+    setTimer = globalThis.setTimeout,
+    clearTimer = globalThis.clearTimeout,
+    raiseClient = raiseThisDevice,
+  } = {},
 ) {
   if (control.state === 'busy' || control.state === 'missing') return null;
   if (timers.has(control)) {
@@ -139,13 +151,23 @@ export async function runOpen(
   };
   apply('busy');
   let result;
+  let device = null;
   try {
     const { status, body } = await send();
-    result = openResult({ kind: 'response', status, body: body && typeof body === 'object' ? body : {} });
+    const read = body && typeof body === 'object' ? body : {};
+    device = read.device;
+    result = openResult({ kind: 'response', status, body: read });
   } catch {
     result = openResult({ kind: 'network' });
   }
   apply(result.state, result.message);
+  if (result.state === 'done' && device === 'client') {
+    try {
+      raiseClient();
+    } catch {
+      // 前面に出せなくても、送った結果は変えない。
+    }
+  }
   if (result.state === 'done') {
     timers.set(
       control,

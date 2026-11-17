@@ -38,8 +38,8 @@ export interface AppOptions {
   inbox?: { snapshot(): Promise<InboxInputs>; noteViewer(): void };
   stallMinutes?: number;
   settings?: SettingsStore;
-  /** 開く処理。main.ts が OpenService を渡し、テストは偽の処理を渡す。 */
-  open?: (request: OpenRequest) => Promise<OpenOutcome>;
+  /** 開く処理。address は要求の TCP の元のアドレス（頭は使わない）。main.ts が wiring の openFrom を渡し、テストは偽の処理を渡す。 */
+  open?: (request: OpenRequest, address: string | undefined) => Promise<OpenOutcome>;
   /** 書き込みの短期のトークン。待ち受けのアドレスごとのサーバーで共有する。 */
   tokens?: TokenStore;
   /** SpecDock の正確なオリジン。読み取りの CORS と、画面の frame-ancestors に使う。 */
@@ -118,6 +118,8 @@ export const OPEN_ERROR_STATUS: Record<OpenErrorCode, number> = {
   orca_error: 502,
   unknown_shape: 502,
   unconfirmed: 504,
+  device_not_connected: 409,
+  device_unknown: 503,
 };
 
 /** 配るファイル（道 → web/ の中の固定のファイルと型）。利用者のパスを受けない。page は CSP を付ける画面。 */
@@ -374,7 +376,7 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
       sendError(res, 503, 'open_unavailable');
       return;
     }
-    const outcome = await options.open(request);
+    const outcome = await options.open(request, req.socket.remoteAddress);
     sendJson(res, outcome.ok ? 200 : (OPEN_ERROR_STATUS[outcome.error] ?? 502), outcome);
   }
 
