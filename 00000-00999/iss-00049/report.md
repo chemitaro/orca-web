@@ -45,6 +45,8 @@ ID: "iss-00049"
 
 ## 逸脱と判断
 
+- 最終品質ゲート fqg3 attempt 1 の2人目の指摘（タスク担当の判断、2026-11-18）：(1) キーの組の2組目からは、送る前に前面のプロセスを読み直し、シェル・別のプロセス・読めない・端末がないなら残りを送らず止める（R-03・R-04 の意味の中の直し。D-04 の文と食い違わない）。(2) 別のエージェントが送った role user の件（Orca の from.kind agent）は、R-05 の『利用者の発言』でないので、サーバーとカードの両方で答え済みの判定から除く。
+
 - 仕様レビュー round-6 の P2（タスク担当の判断、2026-11-18）：後の発言の質問の送る前の確かめ（サーバーの findCallQuestion を送る前と照会で使うとき）は、R-05 のとおり、届いたかによらず引用の利用者の発言があれば question_answered で拒む（二重の答えを避ける安全側）。カードを答え済みに閉じるのは届いた発言だけ（D-03・D-07）。
 
 - 逸脱（実装担当の切り替え）：Codex GPT-6.1 Sol / medium の実装担当（dispatch ctx_6a5fea160dad）が、最初の読みのコマンドで、書き込みの許された根の Orca の Application Support の symlink を拒まれ（symlinked writable roots are not supported）、何もせずに止まった（変更なし）。統括の依頼書の補足に従い worker-stop し、Claude Opus 5.5 / medium（dispatch ctx_0b314dede454）で S-01〜S-02 を始め直した。
