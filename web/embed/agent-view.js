@@ -261,8 +261,10 @@ export function buildChat(messages) {
         }
         rows.push(row);
       } else if (part.type === 'approval') {
-        // 承認はツールの結果と結びつけない（iss-00050 D-06）。
-        rows.push({ kind: 'approval', key, at: m.at, part });
+        // 承認はツールの結果と結びつけない（iss-00050 D-06）。端末の許可の確認は key に promptId を含め、
+        // 新しい確認に前の確認の流れの状態を持ち越さない（iss-00054 D-06）。
+        const promptId = part.source === 'terminal' && typeof part.promptId === 'string' ? part.promptId : '';
+        rows.push({ kind: 'approval', key: promptId ? `${key}:${promptId}` : key, at: m.at, part });
       } else if (part.type === 'tool-result') {
         const question = part.callId ? questionsByCall.get(part.callId) : undefined;
         if (question && question.answerText === null) {

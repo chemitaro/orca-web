@@ -135,6 +135,19 @@ export function renderApprovalCard(doc, view, { open = false, detailOpen = false
     root.append(band);
   }
   if (view.reasonText) root.append(make(doc, 'p', view.reasonText, 'question-reason'));
+  // 端末の許可の確認の、届いたか分からない帯と二度と送らない理由（iss-00054）。照会も閉じるも置かず、「Orca で開く」を足に出す。
+  const stop = view.partial
+    ? { kind: 'partial', text: view.partial.text }
+    : view.blocked
+      ? { kind: 'blocked', text: view.blocked.text }
+      : null;
+  if (stop) {
+    const band = make(doc, 'div', null, 'approval-band');
+    band.dataset.kind = stop.kind;
+    band.setAttribute('role', 'status');
+    band.append(make(doc, 'p', stop.text, 'approval-band-text'));
+    root.append(band);
+  }
   if (view.unknown) {
     const band = make(doc, 'div', null, 'question-unknown');
     band.append(make(doc, 'p', view.unknown.text, 'question-unknown-text'));

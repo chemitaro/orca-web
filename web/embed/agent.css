@@ -852,6 +852,29 @@ li.row.approval {
   margin-top: 8px;
 }
 
+/* 端末の許可の確認の帯（iss-00054 D-06）。届いたか分からない（partial）と二度と送らない（blocked）。質問のカードの帯と同じ見た目で、
+   照会のボタンを置かず「Orca で開く」だけを足に出す。幅 390px でも折り返して隠さない。 */
+.approval-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--chat-danger-line);
+  border-radius: var(--ds-radius, 6px);
+  background: var(--chat-danger-bg);
+  color: var(--chat-danger-ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.approval-band-text {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+}
+
 /* 送る欄（D-05）。知らせの欄の下に、角の丸い入力の箱（入力欄と送るボタン）。幅 390px でも横にはみ出さない。 */
 #send {
   flex: none;
