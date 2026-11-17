@@ -1,0 +1,90 @@
+[
+  {
+    "width": 1280,
+    "theme": "light",
+    "enabled": {
+      "band": true,
+      "yesDisabled": false,
+      "noDisabled": false,
+      "yesH": 44,
+      "reason": null,
+      "scrollWidth": 1280,
+      "innerWidth": 1280
+    },
+    "disabled": {
+      "band": true,
+      "yesDisabled": true,
+      "noDisabled": false,
+      "yesH": 44,
+      "reason": "送信が無効です（設定の sendEnabled が偽）",
+      "scrollWidth": 1280,
+      "innerWidth": 1280
+    }
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "enabled": {
+      "band": true,
+      "yesDisabled": false,
+      "noDisabled": false,
+      "yesH": 44,
+      "reason": null,
+      "scrollWidth": 1280,
+      "innerWidth": 1280
+    },
+    "disabled": {
+      "band": true,
+      "yesDisabled": true,
+      "noDisabled": false,
+      "yesH": 44,
+      "reason": "送信が無効です（設定の sendEnabled が偽）",
+      "scrollWidth": 1280,
+      "innerWidth": 1280
+    }
+  },
+  {
+    "width": 390,
+    "theme": "light",
+    "enabled": {
+      "band": true,
+      "yesDisabled": false,
+      "noDisabled": false,
+      "yesH": 59,
+      "reason": null,
+      "scrollWidth": 390,
+      "innerWidth": 390
+    },
+    "disabled": {
+      "band": true,
+      "yesDisabled": true,
+      "noDisabled": false,
+      "yesH": 59,
+      "reason": "送信が無効です（設定の sendEnabled が偽）",
+      "scrollWidth": 390,
+      "innerWidth": 390
+    }
+  },
+  {
+    "width": 390,
+    "theme": "dark",
+    "enabled": {
+      "band": true,
+      "yesDisabled": false,
+      "noDisabled": false,
+      "yesH": 59,
+      "reason": null,
+      "scrollWidth": 390,
+      "innerWidth": 390
+    },
+    "disabled": {
+      "band": true,
+      "yesDisabled": true,
+      "noDisabled": false,
+      "yesH": 59,
+      "reason": "送信が無効です（設定の sendEnabled が偽）",
+      "scrollWidth": 390,
+      "innerWidth": 390
+    }
+  }
+]

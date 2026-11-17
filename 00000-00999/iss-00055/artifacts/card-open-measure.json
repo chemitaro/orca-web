@@ -1,0 +1,138 @@
+[
+  {
+    "width": 1280,
+    "theme": "light",
+    "cards": [
+      {
+        "kind": "question",
+        "open": {
+          "h": 44,
+          "w": 81.31,
+          "left": 1173.6875,
+          "right": 1255
+        },
+        "inside": true
+      },
+      {
+        "kind": "approval",
+        "open": {
+          "h": 44,
+          "w": 81.31,
+          "left": 1173.6875,
+          "right": 1255
+        },
+        "inside": true
+      }
+    ],
+    "header": {
+      "h": 28,
+      "w": 81.31,
+      "left": 1186.6875,
+      "right": 1268
+    },
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "cards": [
+      {
+        "kind": "question",
+        "open": {
+          "h": 44,
+          "w": 81.31,
+          "left": 1173.6875,
+          "right": 1255
+        },
+        "inside": true
+      },
+      {
+        "kind": "approval",
+        "open": {
+          "h": 44,
+          "w": 81.31,
+          "left": 1173.6875,
+          "right": 1255
+        },
+        "inside": true
+      }
+    ],
+    "header": {
+      "h": 28,
+      "w": 81.31,
+      "left": 1186.6875,
+      "right": 1268
+    },
+    "scrollWidth": 1280,
+    "innerWidth": 1280
+  },
+  {
+    "width": 390,
+    "theme": "light",
+    "cards": [
+      {
+        "kind": "question",
+        "open": {
+          "h": 44,
+          "w": 81.31,
+          "left": 283.6875,
+          "right": 365
+        },
+        "inside": true
+      },
+      {
+        "kind": "approval",
+        "open": {
+          "h": 44,
+          "w": 81.31,
+          "left": 283.6875,
+          "right": 365
+        },
+        "inside": true
+      }
+    ],
+    "header": {
+      "h": 0,
+      "w": 0,
+      "left": 0,
+      "right": 0
+    },
+    "scrollWidth": 390,
+    "innerWidth": 390
+  },
+  {
+    "width": 390,
+    "theme": "dark",
+    "cards": [
+      {
+        "kind": "question",
+        "open": {
+          "h": 44,
+          "w": 81.31,
+          "left": 283.6875,
+          "right": 365
+        },
+        "inside": true
+      },
+      {
+        "kind": "approval",
+        "open": {
+          "h": 44,
+          "w": 81.31,
+          "left": 283.6875,
+          "right": 365
+        },
+        "inside": true
+      }
+    ],
+    "header": {
+      "h": 0,
+      "w": 0,
+      "left": 0,
+      "right": 0
+    },
+    "scrollWidth": 390,
+    "innerWidth": 390
+  }
+]
