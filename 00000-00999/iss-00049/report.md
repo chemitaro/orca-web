@@ -41,3 +41,4 @@ ID: "iss-00049"
   - 今の送信と構造化 Chat の答えのテストは、status の期待値に answerKeys・answerMessage を足したほかは変えずに通る（`test/server/send-api.test.ts` の偽の status にも同じ2つの項目を足した）。
   - FeatureName に answerKeys を足したので、能力の表を手で組む `test/orca/open.test.ts`、`test/state/helpers.ts`、`test/transcript/fixture.ts` に `answerKeys: feature(false)` を1行ずつ足した（計画の対象の外。型の検査のため）。
   - 読み方：`SendDeps.readTranscript` は任意にした（ないときは callId の答えは unreachable）。サーバーの組み立ては `src/server/main.ts` で `transcriptTail(transcriptReader)` をつなぐ。status は端末の確かめを1回だけ読み、permission の違いだけで送信とキーの組を使い分ける（端末の失敗のときの rpc の answer は2回目の preflight を読まずに terminal_route）。keys の invalid_answer の reason は、64組を超えると too_large、組が0なら no_choice。
+- CP-1 の直し（コミット b86a91f）：レビュー（3b7aece..f40c8ee、P0・P1 なし）の P2「terminalPromptOf が tab.id だけで探し、分割した端末で別のペインの agentStatus を読む」を直した。resolveTarget と同じく id と leafId の両方で照合する（宛先の leafId が null なら leafId のない項目）。同じ id で leafId の違う2つのペインのテストを先に足して失敗を確かめた。`npm run lint` 成功、`npm test` 897 pass・0 fail、`npm run build` 成功。
