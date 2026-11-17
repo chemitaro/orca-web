@@ -257,6 +257,86 @@ test('T-14：renderChatRow は approval の行をカードに任せ、「詳し�
   assert.equal(byClass(fallback, 'approval-card').length, 1, '組み立てを渡さなくても読む形で描く');
 });
 
+// iss-00054 T-11：端末の承認のカードの partial の帯と blocked の理由は textContent だけで描き、「Orca で開く」を出す。
+const keysPart = (over: Record<string, unknown> = {}): Any =>
+  part({
+    source: 'terminal',
+    prompt: null,
+    promptId: 'ta_0123456789abcdef0123',
+    title: null,
+    reason: null,
+    blockedPath: null,
+    detail: null,
+    options: [
+      { id: 'allow_once', label: 'Allow once', description: null, intent: 'allow_once' },
+      { id: 'reject_once', label: 'Reject', description: null, intent: 'reject_once' },
+    ],
+    ...over,
+  });
+const stopped = (phase: string, result: Any) => ({ ...initialApprovalState(), flow: { phase, result } }) as Any;
+
+test('iss-00054 T-11：partial の帯は role status の1行で、照会と閉じるを持たず、選択肢は押せず、「Orca で開く」を出す', () => {
+  const view = buildApprovalCard(keysPart(), {
+    key: 'k',
+    state: stopped('partial', { kind: 'partial', operationId: 'op', note: DANGER }),
+    availability: { ok: true },
+  });
+  const { root, openControl } = renderCard(view);
+  const band = byClass(root, 'approval-band');
+  assert.equal(band.length, 1);
+  assert.equal(band[0]?.dataset.kind, 'partial');
+  assert.equal(band[0]?.attrs.role, 'status');
+  assert.equal(band[0]?.textContent, DANGER, 'HTML の文字は文字のまま');
+  assert.ok(root.all().every(allowedTag));
+  assert.equal(root.all().filter((e) => e.dataset.action === 'query' || e.dataset.action === 'dismiss').length, 0);
+  const options = root.all().filter((e) => e.dataset.action === 'option');
+  assert.equal(options.length, 2);
+  assert.ok(options.every((o) => o.disabled));
+  assert.ok(openControl, '「Orca で開く」');
+  assert.ok(root.all().includes(openControl.root));
+});
+
+test('iss-00054 T-11：blocked の理由は帯の1行で、文字のまま描き、知らせと二重にせず、「Orca で開く」を出す', () => {
+  const view = buildApprovalCard(keysPart(), {
+    key: 'k',
+    state: stopped('blocked', { kind: 'blocked', reason: DANGER }),
+    availability: { ok: true },
+  });
+  const { root, openControl } = renderCard(view);
+  const band = byClass(root, 'approval-band');
+  assert.equal(band.length, 1);
+  assert.equal(band[0]?.dataset.kind, 'blocked');
+  assert.equal(
+    countOf(root, DANGER),
+    countOf(renderCard(buildApprovalCard(keysPart(), { key: 'k', availability: { ok: true } })).root, DANGER) + 1,
+    '理由は1回だけ',
+  );
+  assert.ok(root.all().every(allowedTag));
+  assert.ok(
+    root
+      .all()
+      .filter((e) => e.dataset.action === 'option')
+      .every((o) => o.disabled),
+  );
+  assert.ok(openControl);
+});
+
+test('iss-00054 T-11：押せる端末の承認のカードは2つの選択肢と「Orca で開く」を持つ', () => {
+  const { root, openControl } = renderCard(
+    buildApprovalCard(keysPart({ tool: 'Bash', description: 'ls' }), { key: 'k', availability: { ok: true } }),
+  );
+  const options = root.all().filter((e) => e.dataset.action === 'option');
+  assert.deepEqual(
+    options.map((o) => [o.dataset.option, o.disabled]),
+    [
+      ['allow_once', false],
+      ['reject_once', false],
+    ],
+  );
+  assert.ok(openControl);
+  assert.equal(byClass(root, 'approval-band').length, 0);
+});
+
 test('iss-00055 T-05：送れないときの確かめの段は「<ラベル>で答える」が disabled で理由が出て、「やめる」は押せる。ok なら押せる', () => {
   const p = part();
   const state = choose(initialApprovalState(), p, 'always').state;

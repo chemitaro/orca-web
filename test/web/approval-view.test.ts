@@ -10,6 +10,7 @@ import {
   choose,
   createApprovalBoard,
   createChatApprover,
+  createTerminalApprover,
   DEFAULT_APPROVAL_TITLE,
   detailPreview,
   initialApprovalState,
@@ -438,6 +439,269 @@ test('T-13：端末と answerable 偽の承認は読むだけの手段で、選�
   // 手段が ok でも answerable 偽なら押せない。
   assert.ok(buildApprovalCard(url, { availability: OK }).options.every((o: Any) => o.disabled));
   assert.equal((await readOnlyApprover.submit(terminalPart(), 'yes', {})).kind, 'refused');
+});
+
+// iss-00054（端末の承認の答え）。端末の承認の部分は promptId と2つの選択肢、answerable を持つ。
+const TERMINAL_OPTIONS = [
+  { id: 'allow_once', label: 'Allow once', description: null, intent: 'allow_once' },
+  { id: 'reject_once', label: 'Reject', description: null, intent: 'reject_once' },
+];
+const PROMPT_ID = 'ta_0123456789abcdef0123';
+const keysPart = (over: Record<string, unknown> = {}): Any => ({
+  ...terminalPart(),
+  promptId: PROMPT_ID,
+  tool: 'Bash',
+  description: 'rm -rf build',
+  reason: null,
+  blockedPath: null,
+  detail: null,
+  options: TERMINAL_OPTIONS,
+  answerable: true,
+  unanswerableReason: null,
+  ...over,
+});
+const KEYS_OK = { ...STATUS_OK, agentType: 'claude', answerKeys: { available: true, reason: null } };
+const noWriter = { send: async () => ({ status: 500, body: {} }) };
+/** 返事を順に返す writer と、送った物の記録。 */
+const scripted = (replies: Any[]) => {
+  const sent: Any[] = [];
+  return {
+    sent,
+    writer: {
+      send: async (path: string, method: string, body: unknown) => {
+        sent.push({ path, method, body });
+        const next = replies.shift();
+        if (next instanceof Error) throw next;
+        return next;
+      },
+    },
+  };
+};
+const INTENT_OK = { status: 200, body: { ok: true, ticket: 't1', operationId: 'op-1' } };
+
+test('iss-00054 T-09：端末の手段は promptId・answerable・status・sendEnabled・answerKeys で押せるかを決め、押せない形はみな理由と open 真', () => {
+  const approver = createTerminalApprover({ agentId: 'a1', writer: noWriter });
+  const part = keysPart();
+  assert.deepEqual(approver.availability(part, KEYS_OK), OK);
+  const cases: [Any, Any, string][] = [
+    [keysPart({ promptId: null }), KEYS_OK, APPROVAL_REASONS.unknown_shape],
+    [keysPart({ promptId: undefined }), KEYS_OK, APPROVAL_REASONS.unknown_shape],
+    [
+      keysPart({ answerable: false, unanswerableReason: 'terminal', truncated: true }),
+      KEYS_OK,
+      TERMINAL_APPROVAL_REASON,
+    ],
+    [part, 'failed', APPROVAL_REASONS.status_unavailable],
+    [part, { ...KEYS_OK, enabled: false }, APPROVAL_REASONS.send_disabled],
+    [part, { ...KEYS_OK, answerKeys: undefined }, APPROVAL_REASONS.unknown_shape],
+    [
+      part,
+      { ...KEYS_OK, answerKeys: { available: false, reason: 'agent_keys_unknown' } },
+      'このエージェントの許可の確認は、ここからは答えられません',
+    ],
+    [
+      part,
+      { ...KEYS_OK, answerKeys: { available: false, reason: 'unsupported' } },
+      'この Orca の版では、ここから許可に答えられません',
+    ],
+  ];
+  for (const [p, status, reason] of cases) {
+    const got = approver.availability(p, status);
+    assert.deepEqual(got, { ok: false, reason, open: true }, reason);
+    const view = buildApprovalCard(p, { availability: got });
+    assert.ok(
+      view.options.every((o: Any) => o.disabled),
+      reason,
+    );
+    assert.equal(view.reasonText, reason);
+    assert.equal(view.open, true);
+  }
+  assert.deepEqual(approver.availability(part, null), { ok: false, reason: APPROVAL_REASONS.loading });
+  assert.equal(
+    buildApprovalCard(part, { availability: approver.availability(part, null) }).open,
+    true,
+    '読み込み中も開ける',
+  );
+});
+
+test('iss-00054 T-09：端末の手段の submit は意図と確定を1回ずつ {agent, promptId, optionId, confirmPersistent}・{ticket, optionId} で送り、approverFor は端末に terminal の手段を選ぶ', async () => {
+  const { sent, writer } = scripted([
+    INTENT_OK,
+    { status: 200, body: { ok: true, operationId: 'op-1', outcome: 'input_accepted', detail: { code: 'keys_sent' } } },
+  ]);
+  const approver = createTerminalApprover({ agentId: 'a1', writer });
+  const result = await approver.submit(keysPart(), 'allow_once', { confirmPersistent: false });
+  assert.deepEqual(result, { kind: 'done', note: '答えを送りました。エージェントの続きを待っています' });
+  assert.deepEqual(sent, [
+    {
+      path: '/api/approval/intent',
+      method: 'POST',
+      body: { agent: 'a1', promptId: PROMPT_ID, optionId: 'allow_once', confirmPersistent: false },
+    },
+    { path: '/api/approval/confirm', method: 'POST', body: { ticket: 't1', optionId: 'allow_once' } },
+  ]);
+  assert.equal('check' in approver, false, '照会しない');
+  const chat = createChatApprover({ agentId: 'a1', writer: noWriter });
+  const approvers = { chat, readOnly: readOnlyApprover, terminal: approver };
+  assert.equal(approverFor(keysPart(), approvers), approver);
+  assert.equal(approverFor(keysPart({ answerable: false }), approvers), approver);
+  assert.equal(approverFor(chatPart(), approvers), chat);
+  // promptId のない部分は送らない。
+  const none = scripted([]);
+  const bare = createTerminalApprover({ agentId: 'a1', writer: none.writer });
+  assert.equal((await bare.submit(keysPart({ promptId: null }), 'allow_once', {})).kind, 'refused');
+  assert.equal(none.sent.length, 0);
+});
+
+test('iss-00054 T-10：確定の結果は done・blocked（200 の refused）・partial（200 の unknown、応答の欠け、通信の誤り）で、送り直さない', async () => {
+  const run = async (confirm: Any) => {
+    const { sent, writer } = scripted([INTENT_OK, confirm]);
+    const result = await createTerminalApprover({ agentId: 'a1', writer }).submit(keysPart(), 'reject_once', {});
+    assert.equal(sent.length, 2, '送り直さない');
+    return result;
+  };
+  assert.deepEqual(await run({ status: 200, body: { ok: true, outcome: 'refused', detail: { code: 'not_sent' } } }), {
+    kind: 'blocked',
+    reason: '送っていません。この許可の確認には、ここからはもう送れません。Orca で答えてください',
+  });
+  const partial = { kind: 'partial', operationId: 'op-1', note: '届いたか分かりません。Orca で確かめてください' };
+  assert.deepEqual(
+    await run({ status: 200, body: { ok: true, outcome: 'unknown', detail: { code: 'unconfirmed' } } }),
+    partial,
+  );
+  assert.deepEqual(await run({ status: 200, body: {} }), partial);
+  assert.deepEqual(await run({ status: 502, body: null }), partial);
+  assert.deepEqual(await run(new Error('lost')), partial);
+  // 確定の送る前の拒みは送っていない。押し直せる拒みと二度と送らない拒みを reason で分ける。
+  assert.deepEqual(await run({ status: 409, body: { ok: false, error: 'target_changed', reason: 'question_gone' } }), {
+    kind: 'blocked',
+    reason: APPROVAL_REASONS.question_gone,
+  });
+  assert.deepEqual(await run({ status: 409, body: { ok: false, error: 'busy' } }), {
+    kind: 'refused',
+    reason: APPROVAL_REASONS.busy,
+  });
+});
+
+test('iss-00054 T-10：意図の already_sent・question_gone・prompt_mismatch・prompt_unsupported・agent_keys_unknown は blocked、prompt_unverified などは押し直せる refused', async () => {
+  const intent = async (body: Any, status = 409) => {
+    const { sent, writer } = scripted([{ status, body }]);
+    const result = await createTerminalApprover({ agentId: 'a1', writer }).submit(keysPart(), 'allow_once', {});
+    assert.equal(sent.length, 1, '確定を送らない');
+    return result;
+  };
+  for (const reason of [
+    'already_sent',
+    'question_answered',
+    'question_gone',
+    'prompt_mismatch',
+    'prompt_unsupported',
+    'agent_keys_unknown',
+  ])
+    assert.deepEqual(
+      await intent({ ok: false, error: 'not_sendable', reason }),
+      {
+        kind: 'blocked',
+        reason: APPROVAL_REASONS[reason as keyof typeof APPROVAL_REASONS],
+      },
+      reason,
+    );
+  assert.deepEqual(await intent({ ok: false, error: 'not_sendable', reason: 'prompt_unverified' }), {
+    kind: 'refused',
+    reason: '端末がこの許可の確認を出しているか確かめられません',
+  });
+  assert.deepEqual(await intent({ ok: false, error: 'unreachable' }, 503), {
+    kind: 'refused',
+    reason: APPROVAL_REASONS.unreachable,
+  });
+  const thrown = scripted([new Error('down')]);
+  assert.deepEqual(
+    await createTerminalApprover({ agentId: 'a1', writer: thrown.writer }).submit(keysPart(), 'allow_once', {}),
+    {
+      kind: 'refused',
+      reason: APPROVAL_REASONS.network,
+    },
+  );
+});
+
+test('iss-00054 T-10：板の流れ：done は知らせ、partial は帯で押し直し・閉じる・照会を受けず、blocked は理由で押せず、refused は押し直せる。どれも送ったと偽らず open 真', async () => {
+  const flowFor = async (replies: Any[]) => {
+    const { sent, writer } = scripted(replies);
+    const terminal = createTerminalApprover({ agentId: 'a1', writer });
+    const board = createApprovalBoard({
+      approvers: { chat: createChatApprover({ agentId: 'a1', writer }), readOnly: readOnlyApprover, terminal },
+    });
+    const part = keysPart();
+    await board.choose('k', part, 'allow_once', KEYS_OK);
+    const view = () =>
+      buildApprovalCard(part, {
+        key: 'k',
+        state: board.state('k'),
+        availability: terminal.availability(part, KEYS_OK),
+      });
+    return { board, part, sent, view };
+  };
+
+  const done = await flowFor([
+    INTENT_OK,
+    { status: 200, body: { ok: true, outcome: 'input_accepted', detail: { code: 'keys_sent' } } },
+  ]);
+  assert.equal(done.board.state('k').flow.phase, 'done');
+  assert.deepEqual(done.view().notice, { kind: 'info', text: '答えを送りました。エージェントの続きを待っています' });
+  assert.ok(done.view().options.every((o: Any) => o.disabled));
+  assert.equal(done.view().open, true);
+
+  const partial = await flowFor([
+    INTENT_OK,
+    { status: 200, body: { ok: true, outcome: 'unknown', detail: { code: 'unconfirmed' } } },
+  ]);
+  assert.equal(partial.board.state('k').flow.phase, 'partial');
+  let view = partial.view();
+  assert.deepEqual(view.partial, { text: '届いたか分かりません。Orca で確かめてください' });
+  assert.equal(view.unknown, null, '照会の帯を出さない');
+  assert.equal(view.blocked, null);
+  assert.equal(view.open, true);
+  assert.ok(view.options.every((o: Any) => o.disabled));
+  assert.doesNotMatch(JSON.stringify(view.notice ?? ''), /答えました|送りました/);
+  await partial.board.choose('k', partial.part, 'reject_once', KEYS_OK);
+  await partial.board.query('k', partial.part);
+  partial.board.dismiss('k');
+  assert.equal(partial.board.state('k').flow.phase, 'partial');
+  assert.equal(partial.sent.length, 2, '押し直し・照会・閉じるで送らない');
+
+  const blocked = await flowFor([{ status: 409, body: { ok: false, error: 'not_sendable', reason: 'already_sent' } }]);
+  view = blocked.view();
+  assert.equal(blocked.board.state('k').flow.phase, 'blocked');
+  assert.deepEqual(view.blocked, { text: APPROVAL_REASONS.already_sent });
+  assert.equal(view.partial, null);
+  assert.equal(view.open, true);
+  assert.ok(view.options.every((o: Any) => o.disabled));
+  await blocked.board.choose('k', blocked.part, 'allow_once', KEYS_OK);
+  assert.equal(blocked.sent.length, 1, '押し直せない');
+
+  const refused = await flowFor([
+    { status: 409, body: { ok: false, error: 'not_sendable', reason: 'prompt_unverified' } },
+    INTENT_OK,
+    { status: 200, body: { ok: true, outcome: 'input_accepted', detail: { code: 'keys_sent' } } },
+  ]);
+  view = refused.view();
+  assert.equal(refused.board.state('k').flow.phase, 'refused');
+  assert.deepEqual(view.notice, { kind: 'error', text: '端末がこの許可の確認を出しているか確かめられません' });
+  assert.equal(view.open, true);
+  assert.ok(
+    view.options.every((o: Any) => !o.disabled),
+    '押し直せる',
+  );
+  await refused.board.choose('k', refused.part, 'allow_once', KEYS_OK);
+  assert.equal(refused.board.state('k').flow.phase, 'done');
+
+  // 未回答の押せる端末のカードも「Orca で開く」を出す。
+  const fresh = buildApprovalCard(keysPart(), { availability: OK });
+  assert.equal(fresh.open, true);
+  assert.ok(fresh.options.every((o: Any) => !o.disabled));
+  assert.equal(fresh.confirm, null);
+  // 構造化 Chat の押せるカードは今のまま開くを出さない。
+  assert.equal(buildApprovalCard(chatPart(), { availability: OK }).open, false);
 });
 
 // ---- iss-00055（S-02）：確かめの段の押せない形、確定の 5xx、時間切れ ----

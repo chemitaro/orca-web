@@ -1,7 +1,8 @@
 // 承認のカードの組み立て（iss-00050 D-06）。選択、常に許可の確かめの段、カードの描く物、送る流れの状態は純粋な関数で、DOM に触らない。
-// 流れ（idle → sending → done | refused | unknown）は question-view.js の initialFlow・reduceFlow を使う。
+// 流れ（idle → sending → done | refused | unknown | partial | blocked）は question-view.js の initialFlow・reduceFlow を使う。
 // 答える手段（approver）は `{ availability(part, status), submit(part, optionId, { confirmPersistent }), check?(operationId) }`。
-// 構造化 Chat は createChatApprover（意図と確定を1回ずつ）、端末と答えられない承認は読むだけの readOnlyApprover。
+// 構造化 Chat は createChatApprover（意図と確定を1回ずつ）、端末の許可の確認は createTerminalApprover（promptId で指し、
+// 1キーを送る。iss-00054）、答えられない承認は読むだけの readOnlyApprover。
 // 自動で送り直さない。照会は「確かめる」を押したときだけ。値は文字にして返し、HTML として解かない（描く側は textContent を使う）。
 import {
   checkOperation,
@@ -34,6 +35,9 @@ export const APPROVAL_REASONS = {
   prompt_mismatch: '端末の許可の確認が変わりました',
   prompt_unsupported: 'この形の許可の確認は、ここからは答えられません',
   agent_keys_unknown: 'このエージェントの許可の確認は、ここからは答えられません',
+  // 端末の許可の確認の答え（iss-00054）。
+  keys_sent: '答えを送りました。エージェントの続きを待っています',
+  keys_refused: '送っていません。この許可の確認には、ここからはもう送れません。Orca で答えてください',
 };
 
 export const TERMINAL_APPROVAL_REASON = APPROVAL_REASONS.terminal_route;
@@ -117,7 +121,7 @@ function noticeOf(flow) {
     case 'checking':
       return { kind: 'info', text: '記録と Orca に問い合わせています…' };
     case 'done':
-      return { kind: 'info', text: '答えました' };
+      return { kind: 'info', text: isText(flow.result?.note) ? flow.result.note : '答えました' };
     case 'refused':
       return { kind: 'error', text: flow.result?.reason ?? APPROVAL_REASONS.not_sent };
     case 'unknown':
@@ -151,6 +155,8 @@ export function buildApprovalCard(part, options = {}) {
         })()
       : null;
   const terminalLike = availability.ok !== true && availability.open === true;
+  // 端末の未回答と、途中で止まった流れ（届いたか分からない・二度と送らない）は、いつも「Orca で開く」を出す。
+  const stopped = flow.phase === 'partial' || flow.phase === 'blocked';
   return {
     key: options.key ?? '',
     closed,
@@ -189,7 +195,10 @@ export function buildApprovalCard(part, options = {}) {
       !closed && (flow.phase === 'unknown' || flow.phase === 'checking')
         ? { text: UNKNOWN_TEXT, busy: flow.phase === 'checking' }
         : null,
-    open: !closed && terminalLike,
+    partial: !closed && flow.phase === 'partial' ? { text: flow.result?.note ?? APPROVAL_REASONS.unconfirmed } : null,
+    blocked:
+      !closed && flow.phase === 'blocked' ? { text: flow.result?.reason ?? APPROVAL_REASONS.keys_refused } : null,
+    open: !closed && (terminalLike || stopped || part.source === 'terminal'),
     truncated: part.truncated === true,
   };
 }
@@ -268,6 +277,95 @@ export function createChatApprover(deps) {
       });
     },
     check: (operationId) => checkOperation(read, operationId, APPROVAL_REASONS),
+  };
+}
+
+/** 端末の許可の確認への二度と送らない拒み。理由と「Orca で開く」を出し、押し直しを受けない。 */
+const TERMINAL_BLOCKING = new Set([
+  'already_sent',
+  'question_answered',
+  'question_gone',
+  'prompt_mismatch',
+  'prompt_unsupported',
+  'agent_keys_unknown',
+]);
+
+/** 意図・確定の拒み（ok: false）の結果。TERMINAL_BLOCKING の理由は blocked、ほかは押し直せる refused。 */
+function terminalRefusal(body) {
+  const known = isRecord(body) && isText(body.reason) && Object.hasOwn(APPROVAL_REASONS, body.reason);
+  const reason = known
+    ? APPROVAL_REASONS[body.reason]
+    : reasonText(isRecord(body) && isText(body.error) ? body.error : 'unknown_shape');
+  return known && TERMINAL_BLOCKING.has(body.reason) ? { kind: 'blocked', reason } : { kind: 'refused', reason };
+}
+
+const DELIVERED = new Set(['submitted', 'accepted', 'input_accepted']);
+
+/**
+ * 端末のエージェントの許可の確認の手段（iss-00054 D-06）。promptId で指し、意図と確定を続けて1回ずつ送る。
+ * 送れるかは status の answerKeys（端末の質問のキーの組と同じ確かめ）。押せない形はどれも「Orca で開く」を出す（open 真）。
+ * 確定の 200 の refused は、送る前の記録を書いた後なので同じ promptId には送れない（blocked）。
+ * 確定の 200 の unknown・応答の欠け・通信の誤りは届いたか分からない（partial）。照会（check）は持たず、送り直さない。
+ * @param {{
+ *   agentId: string,
+ *   writer: { send: (path: string, method: 'POST', body: unknown) => Promise<{ status: number, body: any }> },
+ *   read?: (url: string) => Promise<{ status: number, body: any }>,
+ * }} deps read は他の手段と同じ形で受けるが、照会しないので使わない
+ */
+export function createTerminalApprover(deps) {
+  /** @typedef {{ ok: true } | { ok: false, reason: string, open?: true }} Availability */
+  /** @param {string} reason @returns {Availability} */
+  const cannot = (reason) => ({ ok: false, reason, open: true });
+  /** @param {string | null} operationId @returns {import('./question-view.js').FlowResult} */
+  const lost = (operationId) => ({ kind: 'partial', operationId, note: APPROVAL_REASONS.unconfirmed });
+  return {
+    /** status は GET /api/send/status の本体、読めなければ 'failed'、まだなら null。 @returns {Availability} */
+    availability(part, status) {
+      if (!isText(part?.promptId)) return cannot(APPROVAL_REASONS.unknown_shape);
+      // 切った承認は、全部を見せられない許可を小窓から許さない（answerable 偽）。
+      if (part.answerable !== true) return cannot(TERMINAL_APPROVAL_REASON);
+      if (status === null || status === undefined) return { ok: false, reason: APPROVAL_REASONS.loading };
+      if (!isRecord(status)) return cannot(APPROVAL_REASONS.status_unavailable);
+      if (status.enabled !== true) return cannot(APPROVAL_REASONS.send_disabled);
+      const keys = isRecord(status.answerKeys) ? status.answerKeys : null;
+      if (!keys || typeof keys.available !== 'boolean') return cannot(APPROVAL_REASONS.unknown_shape);
+      if (!keys.available) return cannot(reasonText(keys.reason ?? 'unsupported'));
+      return { ok: true };
+    },
+    /** @returns {Promise<import('./question-view.js').FlowResult>} */
+    async submit(part, optionId, { confirmPersistent = false } = {}) {
+      if (!isText(part?.promptId) || !isText(optionId))
+        return { kind: 'refused', reason: APPROVAL_REASONS.unknown_shape };
+      let intent;
+      try {
+        intent = await deps.writer.send('/api/approval/intent', 'POST', {
+          agent: deps.agentId,
+          promptId: part.promptId,
+          optionId,
+          confirmPersistent: confirmPersistent === true,
+        });
+      } catch {
+        return { kind: 'refused', reason: APPROVAL_REASONS.network };
+      }
+      const body = isRecord(intent?.body) ? intent.body : {};
+      if (intent?.status !== 200 || !isText(body.ticket) || !isText(body.operationId)) return terminalRefusal(body);
+      const operationId = body.operationId;
+      let confirm;
+      try {
+        confirm = await deps.writer.send('/api/approval/confirm', 'POST', { ticket: body.ticket, optionId });
+      } catch {
+        return lost(operationId);
+      }
+      const result = isRecord(confirm?.body) ? confirm.body : {};
+      if (confirm?.status === 200 && typeof result.outcome === 'string') {
+        if (DELIVERED.has(result.outcome)) return { kind: 'done', note: APPROVAL_REASONS.keys_sent };
+        if (result.outcome === 'refused') return { kind: 'blocked', reason: APPROVAL_REASONS.keys_refused };
+        return lost(operationId);
+      }
+      // 送る前の拒み（ok: false と error）は送っていない。ほかの形は届いたか分からない。
+      if (result.ok === false && isText(result.error)) return terminalRefusal(result);
+      return lost(operationId);
+    },
   };
 }
 

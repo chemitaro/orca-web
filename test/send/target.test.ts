@@ -8,6 +8,7 @@ import {
   resolveTarget,
   targetFingerprint,
   terminalPromptOf,
+  terminalStatusOf,
 } from '../../src/send/target.ts';
 import { agent, fact, repo, state, worktree } from '../runs/fixture.ts';
 import {
@@ -297,4 +298,51 @@ test('CP-1 terminalPromptOf：分割した端末では、id と leafId の両方
     terminalPromptOf(inventory([pane('leaf-other', 'waiting', ask)]), { tabId: 'terminal-test', leafId: null }),
     null,
   );
+});
+
+test('iss-00054 T-03 terminalStatusOf：id と leafId で照合し、agentStatus の state・interactivePrompt・stateStartedAt を手を加えずに返す', () => {
+  const pane = (leafId: string | undefined, agentStatus: unknown) => ({ ...terminalTab(), leafId, agentStatus });
+  const status = {
+    agentType: 'claude',
+    state: 'waiting',
+    interactivePrompt: '{"approval":{"tool":"Bash"}}',
+    stateStartedAt: 7,
+    toolName: 'Bash',
+  };
+  assert.deepEqual(
+    terminalStatusOf(
+      inventory([pane('leaf-other', { state: 'working' }), pane('leaf-test', status)]),
+      terminalTarget(),
+    ),
+    {
+      state: 'waiting',
+      interactivePrompt: '{"approval":{"tool":"Bash"}}',
+      stateStartedAt: 7,
+    },
+  );
+  // 文字でない値も手を加えない（readTerminalApproval が分ける）。
+  assert.deepEqual(
+    terminalStatusOf(
+      inventory([pane('leaf-test', { state: 3, interactivePrompt: '', stateStartedAt: '7' })]),
+      terminalTarget(),
+    ),
+    {
+      state: 3,
+      interactivePrompt: '',
+      stateStartedAt: '7',
+    },
+  );
+  assert.deepEqual(terminalStatusOf(inventory([pane('leaf-test', {})]), terminalTarget()), {
+    state: undefined,
+    interactivePrompt: undefined,
+    stateStartedAt: undefined,
+  });
+  assert.equal(terminalStatusOf(inventory([pane('leaf-test', undefined)]), terminalTarget()), null);
+  assert.equal(terminalStatusOf(inventory([pane('leaf-test', 'waiting')]), terminalTarget()), null);
+  assert.equal(terminalStatusOf(inventory([pane('leaf-other', status)]), terminalTarget()), null);
+  assert.equal(
+    terminalStatusOf(inventory([pane(undefined, status)]), { tabId: 'terminal-test', leafId: null })?.state,
+    'waiting',
+  );
+  assert.equal(terminalStatusOf({ nope: 1 }, terminalTarget()), null);
 });

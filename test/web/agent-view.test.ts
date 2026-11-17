@@ -423,3 +423,54 @@ test('FQG3 T-15：ほかのエージェントからの（fromAgent の）引用�
   ]);
   assert.equal(rows[0].part.state, 'pending');
 });
+
+// iss-00054 T-11：端末の承認の行の key は promptId を含み、新しい許可の確認に前の確認の流れの状態を持ち越さない。
+test('iss-00054 T-11：buildChat は端末の承認の行の key に promptId を含め、構造化 Chat の承認の key は今のまま', async () => {
+  const { buildApprovalCard, createApprovalBoard, readOnlyApprover } = await import('../../web/embed/approval-view.js');
+  const terminal = (promptId: string | null) => ({
+    type: 'approval',
+    source: 'terminal',
+    prompt: null,
+    promptId,
+    title: null,
+    tool: 'Bash',
+    description: null,
+    reason: null,
+    blockedPath: null,
+    plan: null,
+    detail: null,
+    options: [
+      { id: 'allow_once', label: 'Allow once', description: null, intent: 'allow_once' },
+      { id: 'reject_once', label: 'Reject', description: null, intent: 'reject_once' },
+    ],
+    answerable: true,
+    unanswerableReason: null,
+    state: 'pending',
+    selectedOptionId: null,
+  });
+  const chatApproval = { ...terminal(null), source: 'chat', prompt: { itemId: 'i', revision: 1 }, promptId: null };
+  const at = '2026-11-18T00:00:00.000Z';
+  const first = buildChat([{ id: 'live', role: 'assistant', at, parts: [terminal('ta_aaaaaaaaaaaaaaaaaaaa')] }]);
+  const second = buildChat([{ id: 'live', role: 'assistant', at, parts: [terminal('ta_bbbbbbbbbbbbbbbbbbbb')] }]);
+  assert.equal(first[0].key, 'live:0:ta_aaaaaaaaaaaaaaaaaaaa');
+  assert.equal(second[0].key, 'live:0:ta_bbbbbbbbbbbbbbbbbbbb');
+  assert.equal(buildChat([{ id: 'live', role: 'assistant', at, parts: [terminal(null)] }])[0].key, 'live:0');
+  assert.equal(buildChat([{ id: 'm', role: 'assistant', at, parts: [chatApproval] }])[0].key, 'm:0');
+
+  // 前の確認で止まった流れは、promptId の違う確認のカードに持ち越さない。
+  const blocked = {
+    availability: () => ({ ok: true }),
+    submit: async () => ({ kind: 'blocked', reason: '止めた' }),
+  };
+  const board = createApprovalBoard({ approvers: { chat: blocked, readOnly: readOnlyApprover, terminal: blocked } });
+  await board.choose(first[0].key, first[0].part, 'allow_once', {});
+  assert.equal(board.state(first[0].key).flow.phase, 'blocked');
+  board.prune(new Set([second[0].key]));
+  const view = buildApprovalCard(second[0].part, {
+    key: second[0].key,
+    state: board.state(second[0].key),
+    availability: { ok: true },
+  });
+  assert.equal(view.blocked, null);
+  assert.ok(view.options.every((o: { disabled: boolean }) => !o.disabled));
+});

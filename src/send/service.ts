@@ -1,4 +1,5 @@
-// 確認票の消費と記録の順序を所有する送信サービス（本文の送信と、質問への答え：構造化 Chat の rpc、端末のキーの組 keys、後の発言 message。構造化 Chat の承認への答え）。
+// 確認票の消費と記録の順序を所有する送信サービス（本文の送信と、質問への答え：構造化 Chat の rpc、端末のキーの組 keys、後の発言 message。
+// 承認への答え：構造化 Chat の respondToApproval と、端末の許可の確認への1キー（promptId で指す））。
 import type { CapabilityReport, FeatureName } from '../orca/capabilities.ts';
 import type { TranscriptErrorCode, TranscriptReader, TranscriptSource } from '../orca/read-transcript.ts';
 import type { SendAdapter, SendRead, SendReadFailure, SendResult } from '../orca/send.ts';
@@ -10,14 +11,22 @@ import {
   type QuestionPart,
   type TranscriptMessage,
 } from '../transcript/normalize.ts';
+import { matchTerminalApproval, TERMINAL_APPROVAL_OPTIONS } from '../transcript/terminal-approval.ts';
 import { checkAnswers, digestAnswers, type QuestionAnswer } from './answer.ts';
 import { checkOption, digestOption } from './approval.ts';
 import type { BeforeRecord, SendJournal, SendRecord } from './journal.ts';
-import { formatAsyncAnswer, planKeys } from './keys.ts';
+import { approvalKey, formatAsyncAnswer, planKeys } from './keys.ts';
 import type { ChatSendTarget, SendPreview, SendTarget, TerminalSendTarget } from './model.ts';
 import { findCallQuestion, promptMatches, sameQuestions } from './question-state.ts';
-import { buildPreview, compareTargets, resolveTarget, targetFingerprint, terminalPromptOf } from './target.ts';
-import { checkText, digestText, newOperationId, TicketStore } from './ticket.ts';
+import {
+  buildPreview,
+  compareTargets,
+  resolveTarget,
+  targetFingerprint,
+  terminalPromptOf,
+  terminalStatusOf,
+} from './target.ts';
+import { checkText, digestText, newOperationId, type SendTicket, TicketStore } from './ticket.ts';
 
 export interface SendFailure {
   ok: false;
@@ -116,7 +125,10 @@ export interface SendDeps {
   capabilities(): Promise<CapabilityReport>;
   rpc: SendRpc;
   adapter: SendAdapter;
-  journal: Pick<SendJournal, 'appendBefore' | 'appendAfter' | 'appendCheck' | 'appendRefused' | 'read' | 'hasAnswer'>;
+  journal: Pick<
+    SendJournal,
+    'appendBefore' | 'appendAfter' | 'appendCheck' | 'appendRefused' | 'read' | 'hasAnswer' | 'hasApproval'
+  >;
   readSendEnabled(): Promise<boolean>;
   /** 会話の記録の末尾（端末の質問と後の発言の質問への答えが使う）。なければ、その答えは unreachable。 */
   readTranscript?: TranscriptTail;
@@ -161,6 +173,8 @@ type PreflightMode = 'send' | 'answer' | 'approval' | 'keys' | 'status';
 /** 答えの道の、能力の名前と止めた鍵。 */
 const ANSWER_FEATURES = { answer: 'answerChat', approval: 'answerApproval' } as const;
 type Resolved = { ok: true; cap: CapabilityReport; listAll: unknown; target: SendTarget };
+/** 送り始めた答えの指し方。 */
+type StartedId = { callId: string } | { promptId: string };
 /** 答えの票の種類。call は callId で指す端末の質問（keys）か後の発言の質問（message）。 */
 type CallMode = 'keys' | 'message';
 type CallPlan =
@@ -180,7 +194,7 @@ export class SendService {
   /** method_not_found で止めた RPC。鍵は経路（terminal・chat）か、答えの 'answer'・'approval'。 */
   readonly #blocked = new Map<string, Set<string>>();
   readonly #inFlight = new Set<string>();
-  /** 送り始めた答え（記録を書いた直後に足す）。鍵はエージェントの id と callId。 */
+  /** 送り始めた答え（記録を書いた直後に足す）。鍵はエージェントの id と callId、端末の承認は 'approval:' と promptId。 */
   readonly #startedCalls = new Set<string>();
   readonly #tickets: TicketStore;
   readonly #operationId: () => string;
@@ -468,7 +482,7 @@ export class SendService {
       // take と印の間に await を置かない。照会はこの印か未使用の票を必ず見る。
       this.#inFlight.add(operationId);
       activeId = operationId;
-      if (taken.value.prompt || taken.value.call || taken.value.approval)
+      if (taken.value.prompt || taken.value.call || taken.value.approval || taken.value.terminalApproval)
         return await this.#refuse(
           { ok: false, error: 'ticket_invalid', reason: 'wrong_kind' },
           operationId,
@@ -554,13 +568,15 @@ export class SendService {
       const result =
         before.action === 'answer' && before.mode === 'keys'
           ? await this.#checkKeys(before)
-          : before.action === 'answer' && before.mode === undefined && target.route === 'chat'
-            ? await this.#deps.adapter.checkAnswer(target, before.prompt, before.digest, operationId)
-            : before.action === 'approval' && target.route === 'chat'
-              ? await this.#deps.adapter.checkApproval(target, before.prompt, before.digest, operationId)
-              : target.route === 'terminal'
-                ? await this.#deps.adapter.checkTerminal(target, operationId)
-                : await this.#deps.adapter.checkChat(target, operationId);
+          : before.action === 'approval' && before.mode === 'keys'
+            ? await this.#deps.adapter.checkTerminalApproval(before.target, before.promptId)
+            : before.action === 'answer' && before.mode === undefined && target.route === 'chat'
+              ? await this.#deps.adapter.checkAnswer(target, before.prompt, before.digest, operationId)
+              : before.action === 'approval' && target.route === 'chat'
+                ? await this.#deps.adapter.checkApproval(target, before.prompt, before.digest, operationId)
+                : target.route === 'terminal'
+                  ? await this.#deps.adapter.checkTerminal(target, operationId)
+                  : await this.#deps.adapter.checkChat(target, operationId);
       if (!result.ok && result.error === 'unreachable')
         return { ok: true, operationId, state: 'recorded', record, checkError: 'unreachable' };
       if (!result.ok && result.error === 'unsupported' && result.method) {
@@ -661,7 +677,7 @@ export class SendService {
       activeId = operationId;
       const refuse = (failure: SendRefusal) => this.#refuse(failure, operationId, target.agentId);
       if (taken.value.call) return await this.#callConfirm(taken.value, answers, refuse);
-      if (!prompt || !questions || target.route !== 'chat')
+      if (!prompt || !questions || taken.value.terminalApproval || target.route !== 'chat')
         return await refuse({ ok: false, error: 'ticket_invalid', reason: 'wrong_kind' });
       const shown = checkAnswers(questions, answers);
       if (!shown.ok || digestAnswers(shown.answers) !== digest)
@@ -737,13 +753,20 @@ export class SendService {
     if (found.part.truncated) return { ok: false, error: 'not_sendable', reason: 'prompt_unsupported' };
     return { ok: true, part: found.part, session: read.session };
   }
-  /** 同じエージェントの同じ callId に送り始めた答えがあれば already_sent。記録が読めなければ record_unreadable。 */
-  async #alreadyStarted(agentId: string, callId: string): Promise<SendFailure | null> {
-    if (this.#startedCalls.has(`${agentId}\u0000${callId}`))
+  /** 送り始めた答えの集まりの鍵。callId の答えは callId、端末の承認は 'approval:' と promptId。 */
+  static #startedKey(agentId: string, id: StartedId): string {
+    return 'callId' in id ? `${agentId}\u0000${id.callId}` : `${agentId}\u0000approval:${id.promptId}`;
+  }
+  /** 同じエージェントの同じ callId（端末の承認は promptId）に送り始めた答えがあれば already_sent。記録が読めなければ record_unreadable。 */
+  async #alreadyStarted(agentId: string, id: StartedId): Promise<SendFailure | null> {
+    if (this.#startedCalls.has(SendService.#startedKey(agentId, id)))
       return { ok: false, error: 'not_sendable', reason: 'already_sent' };
     try {
-      if (await this.#deps.journal.hasAnswer(agentId, callId))
-        return { ok: false, error: 'not_sendable', reason: 'already_sent' };
+      const recorded =
+        'callId' in id
+          ? await this.#deps.journal.hasAnswer(agentId, id.callId)
+          : await this.#deps.journal.hasApproval(agentId, id.promptId);
+      if (recorded) return { ok: false, error: 'not_sendable', reason: 'already_sent' };
     } catch {
       return { ok: false, error: 'record_unreadable' };
     }
@@ -789,7 +812,7 @@ export class SendService {
     if (!(await this.#deps.readSendEnabled())) return { ok: false, error: 'send_disabled' };
     const question = await this.#readCallQuestion(agent, callId);
     if (!question.ok) return question;
-    const started = await this.#alreadyStarted(agent, callId);
+    const started = await this.#alreadyStarted(agent, { callId });
     if (started) return started;
     const plan = await this.#planCall(agent, question.part, answers);
     if (!plan.ok) return plan as SendFailure;
@@ -810,7 +833,7 @@ export class SendService {
   }
   /** callId の答えの確定。確かめ直し、送る前の記録の後に、keys は組を1組ずつ、message は発言を1回だけ送る。 */
   async #callConfirm(
-    ticket: import('./ticket.ts').SendTicket,
+    ticket: SendTicket,
     answers: unknown,
     refuse: (failure: SendRefusal) => Promise<SendFailure>,
   ): Promise<ConfirmAnswer> {
@@ -824,7 +847,7 @@ export class SendService {
     // digest は選択肢の id だけなので、問いの文やラベルが変わっていないかも比べる。
     if (question.part.answerVia !== call.mode || !sameQuestions(questions, question.part.questions))
       return await refuse({ ok: false, error: 'target_changed', reason: 'question_changed' });
-    const started = await this.#alreadyStarted(target.agentId, call.callId);
+    const started = await this.#alreadyStarted(target.agentId, { callId: call.callId });
     if (started) return started.error === 'record_unreadable' ? started : await refuse(started as SendRefusal);
     const plan = await this.#planCall(target.agentId, question.part, answers);
     if (!plan.ok) return await refuse(SendService.#confirmRefusal(plan as SendRefusal));
@@ -861,7 +884,7 @@ export class SendService {
       return await refuse({ ok: false, error: 'record_failed' });
     }
     // 送り始めた答えは、結果によらず二度と送らない（起動し直した後は記録の before の行から分かる）。
-    this.#startedCalls.add(`${target.agentId}\u0000${call.callId}`);
+    this.#startedCalls.add(SendService.#startedKey(target.agentId, { callId: call.callId }));
     const result = plan.groups
       ? await this.#deps.adapter.answerKeys(
           target as TerminalSendTarget,
@@ -901,20 +924,31 @@ export class SendService {
       detail: { code: found.state === 'answered' ? 'resolved_unverified' : 'prompt_pending' },
     };
   }
-  /** 承認への答えの意図。送らずに確かめ、使い捨ての票を出す。常に許可・常に拒否は confirmPersistent が true のときだけ。 */
-  async approvalIntent({
-    agent,
-    prompt,
-    optionId,
-    confirmPersistent,
-    target,
-  }: {
-    agent: string;
-    prompt: { itemId: string; revision: number };
-    optionId: unknown;
-    confirmPersistent?: unknown;
-    target?: string;
-  }): Promise<SendAnswer<ApprovalIntentResult>> {
+  /**
+   * 承認への答えの意図。送らずに確かめ、使い捨ての票を出す。常に許可・常に拒否は confirmPersistent が true のときだけ。
+   * prompt は構造化 Chat の承認（itemId と revision）、promptId は端末の許可の確認（ちょうど片方）。
+   */
+  async approvalIntent(
+    input:
+      | {
+          agent: string;
+          prompt: { itemId: string; revision: number };
+          promptId?: never;
+          optionId: unknown;
+          confirmPersistent?: unknown;
+          target?: string;
+        }
+      | {
+          agent: string;
+          promptId: string;
+          prompt?: never;
+          optionId: unknown;
+          confirmPersistent?: unknown;
+          target?: string;
+        },
+  ): Promise<SendAnswer<ApprovalIntentResult>> {
+    if (input.promptId !== undefined) return this.#terminalApprovalIntent(input);
+    const { agent, prompt, optionId, confirmPersistent, target } = input;
     if (!(await this.#deps.readSendEnabled())) return { ok: false, error: 'send_disabled' };
     const checked = await this.#preflight(agent, 'approval');
     if (!checked.ok) return checked;
@@ -953,7 +987,8 @@ export class SendService {
       this.#inFlight.add(operationId);
       activeId = operationId;
       const refuse = (failure: SendRefusal) => this.#refuse(failure, operationId, target.agentId);
-      if (!approval || taken.value.prompt || target.route !== 'chat')
+      if (taken.value.terminalApproval) return await this.#terminalApprovalConfirm(taken.value, optionId, refuse);
+      if (!approval || taken.value.prompt || taken.value.call || target.route !== 'chat')
         return await refuse({ ok: false, error: 'ticket_invalid', reason: 'wrong_kind' });
       if (optionId !== approval.optionId)
         return await refuse({ ok: false, error: 'target_changed', reason: 'answer_changed' });
@@ -1008,5 +1043,126 @@ export class SendService {
       if (activeId) this.#inFlight.delete(activeId);
       this.#busy = false;
     }
+  }
+  // ---- 端末の許可の確認への答え（promptId で指す。iss-00054） ----
+
+  /** 宛先のペインが promptId の許可の確認をまだ出しているか。外れたら決めた理由で拒む。 */
+  static #terminalApprovalRefusal(listAll: unknown, target: TerminalSendTarget, promptId: string): SendRefusal | null {
+    const match = matchTerminalApproval(terminalStatusOf(listAll, target), promptId);
+    if (match === 'unverified') return { ok: false, error: 'not_sendable', reason: 'prompt_unverified' };
+    if (match === 'gone') return { ok: false, error: 'target_changed', reason: 'question_gone' };
+    if (match === 'mismatch') return { ok: false, error: 'target_changed', reason: 'prompt_mismatch' };
+    if (match === 'truncated') return { ok: false, error: 'not_sendable', reason: 'prompt_unsupported' };
+    return null;
+  }
+  /** 選択肢の検査（allow_once・reject_once だけ）と、エージェントの種類のキー。 */
+  static #terminalApprovalOption(
+    agentType: string,
+    optionId: unknown,
+    confirmPersistent: unknown,
+  ):
+    | { ok: true; optionId: string; intent: ApprovalIntent | null; key: string }
+    | SendRefusal
+    | { ok: false; error: 'invalid_answer'; reason: string } {
+    const valid = checkOption({ options: TERMINAL_APPROVAL_OPTIONS, answerable: true }, optionId, confirmPersistent);
+    if (!valid.ok) return valid;
+    const key = approvalKey(agentType, valid.option.id);
+    if (key === null) return { ok: false, error: 'not_sendable', reason: 'agent_keys_unknown' };
+    return { ok: true, optionId: valid.option.id, intent: valid.option.intent, key };
+  }
+  async #terminalApprovalIntent({
+    agent,
+    promptId,
+    optionId,
+    confirmPersistent,
+    target,
+  }: {
+    agent: string;
+    promptId: string;
+    optionId: unknown;
+    confirmPersistent?: unknown;
+    target?: string;
+  }): Promise<SendAnswer<ApprovalIntentResult>> {
+    if (!(await this.#deps.readSendEnabled())) return { ok: false, error: 'send_disabled' };
+    const checked = await this.#preflight(agent, 'keys');
+    if (!checked.ok) return checked;
+    if (target !== undefined && target !== targetFingerprint(checked.target))
+      return { ok: false, error: 'target_changed', reason: 'changed_since_shown' };
+    const terminal = checked.target as TerminalSendTarget;
+    const shown = SendService.#terminalApprovalRefusal(checked.listAll, terminal, promptId);
+    if (shown) return shown;
+    const started = await this.#alreadyStarted(agent, { promptId });
+    if (started) return started;
+    const option = SendService.#terminalApprovalOption(terminal.agentType, optionId, confirmPersistent);
+    if (!option.ok) return option as SendFailure;
+    const operationId = this.#operationId();
+    const digest = digestOption(option.optionId);
+    const ticket = this.#tickets.issue({
+      target: checked.target,
+      digest,
+      operationId,
+      terminalApproval: { promptId, optionId: option.optionId, intent: option.intent },
+    });
+    return { ok: true, ...ticket, operationId, preview: checked.preview, digest, intent: option.intent };
+  }
+  /** 端末の承認の答えの確定。確かめ直し、送る前の記録の後、送る直前にもう一度読んでから、1キーを1組だけ送る。 */
+  async #terminalApprovalConfirm(
+    ticket: SendTicket,
+    optionId: unknown,
+    refuse: (failure: SendRefusal) => Promise<SendFailure>,
+  ): Promise<ConfirmAnswer> {
+    const { operationId, target, digest, terminalApproval } = ticket;
+    if (!terminalApproval || ticket.approval || ticket.prompt || ticket.call || target.route !== 'terminal')
+      return await refuse({ ok: false, error: 'ticket_invalid', reason: 'wrong_kind' });
+    if (optionId !== terminalApproval.optionId)
+      return await refuse({ ok: false, error: 'target_changed', reason: 'answer_changed' });
+    const { promptId } = terminalApproval;
+    const checked = await this.#preflight(target.agentId, 'keys');
+    if (!checked.ok) return await refuse(SendService.#confirmRefusal(checked));
+    const change = compareTargets(target, checked.target);
+    if (change) return await refuse({ ok: false, error: 'target_changed', reason: change });
+    const shown = SendService.#terminalApprovalRefusal(checked.listAll, target, promptId);
+    if (shown) return await refuse(shown);
+    const started = await this.#alreadyStarted(target.agentId, { promptId });
+    if (started) return started.error === 'record_unreadable' ? started : await refuse(started as SendRefusal);
+    // 常に許可の確かめは意図で済ませた（端末の承認の選択肢にはない）。ここでは今の選択肢にあり、intent が意図のときと同じことを確かめる。
+    const option = SendService.#terminalApprovalOption(target.agentType, terminalApproval.optionId, true);
+    if (!option.ok) return await refuse(option as SendRefusal);
+    if (option.intent !== terminalApproval.intent)
+      return await refuse({ ok: false, error: 'target_changed', reason: 'question_changed' });
+    const preview = checked.preview;
+    try {
+      await this.#deps.journal.appendBefore({
+        operationId,
+        action: 'approval',
+        mode: 'keys',
+        route: 'terminal',
+        target: {
+          ...target,
+          repoName: preview.repoName,
+          worktreePath: preview.worktreePath,
+          branch: preview.branch,
+          title: preview.title,
+        },
+        promptId,
+        intent: terminalApproval.intent,
+        digest,
+        totalGroups: 1,
+        generation: { runtimeId: target.runtimeId, incarnationId: target.incarnationId },
+      });
+    } catch {
+      return await refuse({ ok: false, error: 'record_failed' });
+    }
+    // 送り始めた答えは、結果によらず二度と送らない（起動し直した後は記録の before の行から分かる）。
+    this.#startedCalls.add(SendService.#startedKey(target.agentId, { promptId }));
+    const result = await this.#deps.adapter.answerApprovalKey(target, option.key, promptId);
+    if (result.detail.code === 'method_not_found' && result.detail.method) this.#block(target, result.detail.method);
+    const recorded = await this.#deps.journal.appendAfter({ operationId, ...result });
+    return {
+      ok: true,
+      operationId,
+      ...result,
+      ...(recorded ? {} : { recordWarning: 'after_record_failed' as const }),
+    };
   }
 }

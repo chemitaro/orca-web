@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { RpcOutcome } from '../../src/orca/rpc.ts';
 import * as send from '../../src/orca/send.ts';
 import { parseTerminalQuestions } from '../../src/transcript/normalize.ts';
+import { terminalApprovalId } from '../../src/transcript/terminal-approval.ts';
 import { inventory, terminalTab, terminalTarget } from '../send/fixture.ts';
 
 const ok = (result: unknown): RpcOutcome => ({ ok: true, result, runtimeId: 'runtime-test' });
@@ -1192,5 +1193,146 @@ test('FQG3-2 answerKeys：1組目の前に問いが外れたら1組も送らず 
       detail: { code: 'not_sent', sentGroups: 0, totalGroups: 1 },
     });
     assert.equal(calls.length, 0);
+  }
+});
+
+// ---- 端末の承認の答え（iss-00054 D-03、T-05） ----
+
+const APPROVAL_PROMPT = JSON.stringify({ approval: { tool: 'Bash', summary: 'ls' } });
+const APPROVAL_STARTED = 1_700_000_000_000;
+const APPROVAL_ID = terminalApprovalId(APPROVAL_PROMPT, APPROVAL_STARTED);
+const approvalTabs = (status: Record<string, unknown> = {}) =>
+  promptTabs({
+    state: 'blocked',
+    toolName: 'Bash',
+    interactivePrompt: APPROVAL_PROMPT,
+    stateStartedAt: APPROVAL_STARTED,
+    ...status,
+  });
+const keyParams = (text: string) => ({
+  method: 'terminal.send',
+  params: {
+    terminal: 'term_test',
+    text,
+    enter: false,
+    requireWriteSettlement: true,
+    client: { id: 'orca-web', type: 'desktop' },
+  },
+  options: { timeoutMs: 10000 },
+});
+
+test('T-05 answerApprovalKey：送る直前に前面と listAll を読み、通れば terminal.send を1回だけ呼び、結果を分ける', async () => {
+  const cases: [RpcOutcome, unknown][] = [
+    [settled('accepted'), { outcome: 'input_accepted', detail: { code: 'keys_sent', sentGroups: 1, totalGroups: 1 } }],
+    [settled('refused', false), { outcome: 'refused', detail: { code: 'not_sent', sentGroups: 0, totalGroups: 1 } }],
+    [
+      { ok: false, kind: 'unavailable', message: 'private' },
+      { outcome: 'refused', detail: { code: 'not_sent', sentGroups: 0, totalGroups: 1 } },
+    ],
+    [
+      { ok: false, kind: 'orca-error', code: 'invalid_argument', message: 'private' },
+      { outcome: 'refused', detail: { code: 'not_sent', sentGroups: 0, totalGroups: 1 } },
+    ],
+    [
+      { ok: false, kind: 'orca-error', code: 'method_not_found', message: 'private' },
+      {
+        outcome: 'refused',
+        detail: { code: 'method_not_found', method: 'terminal.send', sentGroups: 0, totalGroups: 1 },
+      },
+    ],
+    [
+      ok({ send: { accepted: true } }),
+      { outcome: 'unknown', detail: { code: 'unconfirmed', sentGroups: 0, totalGroups: 1 } },
+    ],
+    [
+      { ok: false, kind: 'timeout', message: 'private' },
+      { outcome: 'unknown', detail: { code: 'unconfirmed', sentGroups: 0, totalGroups: 1 } },
+    ],
+  ];
+  for (const [outcome, expected] of cases) {
+    const { adapter, calls, inspects, order } = keyRpc([outcome], [], [approvalTabs()]);
+    assert.deepEqual(
+      await adapter.answerApprovalKey(terminalTarget(), '\x1b', APPROVAL_ID),
+      expected,
+      JSON.stringify(outcome),
+    );
+    assert.deepEqual(calls, [keyParams('\x1b')]);
+    assert.deepEqual(order, ['terminal.inspectProcess', 'session.tabs.listAll', 'terminal.send']);
+    assert.deepEqual(inspects, [{ terminal: 'term_test', expectedIncarnationId: 'inc-test' }]);
+  }
+});
+
+test('T-05 answerApprovalKey：前面がシェル・違う・読めないときは terminal.send を呼ばず refused（not_sent）', async () => {
+  for (const foreground of [
+    ok({ process: { foregroundProcess: 'zsh' } }),
+    ok({ process: { foregroundProcess: 'claude' } }),
+    ok({ process: { foregroundProcess: null } }),
+    { ok: false, kind: 'orca-error', code: 'terminal_gone', message: 'private' } as RpcOutcome,
+    { ok: false, kind: 'timeout', message: 'private' } as RpcOutcome,
+  ]) {
+    const { adapter, calls } = keyRpc([settled('accepted')], [foreground], [approvalTabs()]);
+    assert.deepEqual(
+      await adapter.answerApprovalKey(terminalTarget(), '1', APPROVAL_ID),
+      { outcome: 'refused', detail: { code: 'not_sent', sentGroups: 0, totalGroups: 1 } },
+      JSON.stringify(foreground),
+    );
+    assert.equal(calls.length, 0);
+  }
+});
+
+test('T-05 answerApprovalKey：許可の確認が消えた・変わった・読めないときは terminal.send を呼ばず refused（not_sent）', async () => {
+  for (const changed of [
+    approvalTabs({ state: 'working' }),
+    approvalTabs({ stateStartedAt: APPROVAL_STARTED + 1 }),
+    approvalTabs({ interactivePrompt: JSON.stringify({ approval: { tool: 'Edit' } }) }),
+    approvalTabs({ interactivePrompt: KEY_PROMPT }),
+    approvalTabs({ interactivePrompt: undefined }),
+    approvalTabs({ interactivePrompt: JSON.stringify({ approval: { tool: 'T'.repeat(501) } }) }),
+    ok(inventory([{ ...terminalTab(), agentStatus: undefined }])),
+    ok({ nope: 1 }),
+    { ok: false, kind: 'timeout', message: 'private' } as RpcOutcome,
+  ]) {
+    const { adapter, calls } = keyRpc([settled('accepted')], [], [changed]);
+    assert.deepEqual(
+      await adapter.answerApprovalKey(terminalTarget(), '1', APPROVAL_ID),
+      { outcome: 'refused', detail: { code: 'not_sent', sentGroups: 0, totalGroups: 1 } },
+      JSON.stringify(changed).slice(0, 120),
+    );
+    assert.equal(calls.length, 0);
+  }
+});
+
+test('T-05 checkTerminalApproval：listAll だけを読み、match で prompt_pending、unverified で prompt_unverified、ないか違えば resolved_unverified', async () => {
+  const cases: [RpcOutcome, unknown][] = [
+    [approvalTabs(), { ok: true, outcome: 'unknown', detail: { code: 'prompt_pending' } }],
+    [approvalTabs({ interactivePrompt: '' }), { ok: true, outcome: 'unknown', detail: { code: 'prompt_unverified' } }],
+    [
+      ok(inventory([{ ...terminalTab(), agentStatus: undefined }])),
+      { ok: true, outcome: 'unknown', detail: { code: 'prompt_unverified' } },
+    ],
+    [approvalTabs({ state: 'working' }), { ok: true, outcome: 'unknown', detail: { code: 'resolved_unverified' } }],
+    [approvalTabs({ stateStartedAt: 1 }), { ok: true, outcome: 'unknown', detail: { code: 'resolved_unverified' } }],
+    [
+      approvalTabs({ interactivePrompt: KEY_PROMPT }),
+      { ok: true, outcome: 'unknown', detail: { code: 'resolved_unverified' } },
+    ],
+    [
+      { ok: false, kind: 'timeout', message: 'private' },
+      { ok: false, error: 'unreachable' },
+    ],
+    [
+      { ok: false, kind: 'orca-error', code: 'method_not_found', message: 'private' },
+      { ok: false, error: 'unsupported', method: 'session.tabs.listAll' },
+    ],
+  ];
+  for (const [tabs, expected] of cases) {
+    const { adapter, calls, order } = keyRpc([], [], [tabs]);
+    assert.deepEqual(
+      await adapter.checkTerminalApproval(terminalTarget(), APPROVAL_ID),
+      expected,
+      JSON.stringify(tabs).slice(0, 100),
+    );
+    assert.equal(calls.length, 0);
+    assert.deepEqual(order, ['session.tabs.listAll']);
   }
 });

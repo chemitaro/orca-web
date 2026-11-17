@@ -367,6 +367,20 @@ test('T-15：確かめの段のボタンは min-height が 44px 以上で折り�
     assert.doesNotMatch(rule.selector, /approval/, rule.selector);
 });
 
+// iss-00054 T-12：端末の承認の帯（partial・blocked）。色は --chat-*、角丸は var(--ds-…, 既定)、折り返し、390px でも隠さない。
+test('iss-00054 T-12：承認の帯の規則は var(--ds-…, 既定) の角丸と --chat-* の色を使い、折り返す', () => {
+  const band = rule('.approval-band');
+  assert.equal(band.get('border-radius'), 'var(--ds-radius, 6px)');
+  for (const prop of ['border', 'background', 'color'])
+    assert.match(band.get(prop) ?? '', /var\(--chat-[a-z-]+\)/, `.approval-band の ${prop}`);
+  assert.equal(band.get('flex-wrap'), 'wrap');
+  assert.equal(band.get('min-width'), '0');
+  assert.equal(band.get('overflow-wrap'), 'anywhere');
+  const text = rule('.approval-band-text');
+  assert.equal(text.get('min-width'), '0');
+  assert.equal(text.get('margin'), '0');
+});
+
 test('iss-00055 T-09：カードの「Orca で開く」（.question-foot の中）は --orca-open-height 44px で、open-control.css の大きさの表は変わらない', () => {
   const foot = only('.question-foot .orca-open[data-size]', (m) => m === null);
   assert.equal(foot.get('--orca-open-height'), '44px');

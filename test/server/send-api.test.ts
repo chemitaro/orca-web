@@ -834,3 +834,75 @@ test('T-10 承認の誤りは今の SEND_ERROR_STATUS で返し、承認の口�
     );
   });
 });
+
+// ---- 端末の承認への答えの口（iss-00054 D-05、T-08） ----
+
+const terminalApprovalBody = { agent: 'tab:leaf', promptId: `ta_${'0a'.repeat(10)}`, optionId: 'allow_once' };
+
+test('iss-00054 T-08 /api/approval/intent は promptId の物を受けてサービスに渡し、ok を除いて返し、CORS を付けない', async () => {
+  const calls: unknown[] = [];
+  await withApp({ send: approvalService(calls) }, async (send) => {
+    const full = { ...terminalApprovalBody, confirmPersistent: false, target: 'b'.repeat(32) };
+    const intent = await send('/api/approval/intent', 'POST', JSON.stringify(full));
+    assert.equal(intent.status, 200);
+    assert.equal(intent.cors, undefined);
+    assert.equal('ok' in intent.body, false);
+    const plain = await send('/api/approval/intent', 'POST', JSON.stringify(terminalApprovalBody));
+    assert.equal(plain.status, 200);
+    // 確定は今のまま {ticket, optionId}
+    const confirm = await send(
+      '/api/approval/confirm',
+      'POST',
+      JSON.stringify({ ticket: 't', optionId: 'reject_once' }),
+    );
+    assert.equal(confirm.status, 200);
+    assert.equal(confirm.cors, undefined);
+  });
+  assert.deepEqual(calls, [
+    ['approvalIntent', { ...terminalApprovalBody, confirmPersistent: false, target: 'b'.repeat(32) }],
+    ['approvalIntent', terminalApprovalBody],
+    ['approvalConfirm', { ticket: 't', optionId: 'reject_once' }],
+  ]);
+});
+
+test('iss-00054 T-08 /api/approval/intent は prompt と promptId の両方・どちらもない・形の違う promptId・余分な鍵を 400 で拒み、守りは今のまま', async () => {
+  const calls: unknown[] = [];
+  await withApp({ send: approvalService(calls) }, async (send) => {
+    for (const bad of [
+      { ...terminalApprovalBody, prompt: approvalBody.prompt },
+      { agent: 'tab:leaf', optionId: 'allow_once' },
+      { ...terminalApprovalBody, promptId: 'ta_short' },
+      { ...terminalApprovalBody, promptId: `ta_${'A'.repeat(20)}` },
+      { ...terminalApprovalBody, promptId: `ta_${'0'.repeat(21)}` },
+      { ...terminalApprovalBody, promptId: `xx_${'0'.repeat(20)}` },
+      { ...terminalApprovalBody, promptId: 1 },
+      { ...terminalApprovalBody, promptId: '' },
+      { ...terminalApprovalBody, extra: 1 },
+      { ...terminalApprovalBody, answers: [] },
+      { ...terminalApprovalBody, callId: 'c' },
+      { ...terminalApprovalBody, agent: '' },
+      { ...terminalApprovalBody, optionId: '' },
+      { ...terminalApprovalBody, optionId: 1 },
+      { ...terminalApprovalBody, optionId: 'o'.repeat(1025) },
+      { ...terminalApprovalBody, confirmPersistent: 'true' },
+      { ...terminalApprovalBody, target: 'short' },
+      { agent: 'tab:leaf', promptId: terminalApprovalBody.promptId },
+    ]) {
+      const result = await send('/api/approval/intent', 'POST', JSON.stringify(bad));
+      assert.equal(result.status, 400, JSON.stringify(bad));
+      assert.equal(result.body.error, 'invalid_request');
+    }
+    for (const [headers, status, error] of [
+      [{ host: 'evil' }, 421, 'misdirected_host'],
+      [{ origin: 'http://evil.example' }, 403, 'origin_rejected'],
+      [{ 'x-orca-web-token': 'bad' }, 401, 'token_invalid'],
+      [{ 'content-type': 'text/plain' }, 415, 'unsupported_media_type'],
+    ] as const) {
+      const result = await send('/api/approval/intent', 'POST', JSON.stringify(terminalApprovalBody), headers);
+      assert.equal(result.status, status);
+      assert.equal(result.body.error, error);
+      assert.equal(result.cors, undefined);
+    }
+  });
+  assert.deepEqual(calls, []);
+});

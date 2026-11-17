@@ -38,7 +38,10 @@ function terminalSend(params: unknown, options?: RpcCallOptions): boolean {
 }
 
 const ESC = '\u001b';
-/** 質問への答えのキー（Orca の buildAskAnswerKeys・buildCodexAskAnswerKeys が使う raw の組）。 */
+/**
+ * 質問への答えのキー（Orca の buildAskAnswerKeys・buildCodexAskAnswerKeys が使う raw の組）と、
+ * 端末の承認の答えのキー（allowSend の '1' と denySend の ESC だけ。parseNativeChatApprovalEnvelope）。
+ */
 const ANSWER_KEYS: ReadonlySet<string> = new Set([
   ...'123456789',
   '\r',
@@ -48,6 +51,7 @@ const ANSWER_KEYS: ReadonlySet<string> = new Set([
   '\t',
   'n',
   '\x7f',
+  ESC,
 ]);
 const PASTE_START = `${ESC}[200~`;
 const PASTE_END = `${ESC}[201~`;

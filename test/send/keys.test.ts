@@ -5,6 +5,7 @@ import test from 'node:test';
 import type { QuestionAnswer } from '../../src/send/answer.ts';
 import {
   ANSWER_STEP_MS,
+  approvalKey,
   buildClaudeKeys,
   buildCodexKeys,
   formatAsyncAnswer,
@@ -208,4 +209,19 @@ test('T-04 formatAsyncAnswer と quoteOf：Orca の formatAskAnswer（replyAsMes
   );
   // ラベルとその他の文は「, 」で並べる
   assert.equal(formatAsyncAnswer([first], [ans('0', ['0'], 'x')]), '> 一つ目 続き\n\n甲, x');
+});
+
+// iss-00054 T-03：Orca v1.4.261 の parseNativeChatApprovalEnvelope（allowSend は nativeChatApprovalAcceptKey、denySend は ESC）。
+test('iss-00054 T-03 approvalKey：claude と codex で allow_once が 1、reject_once が ESC、ほかは null', () => {
+  for (const agent of ['claude', 'codex']) {
+    assert.equal(approvalKey(agent, 'allow_once'), '1', agent);
+    assert.equal(approvalKey(agent, 'reject_once'), ESC, agent);
+    for (const optionId of ['allow_always', 'reject_always', '1', '2', '']) {
+      assert.equal(approvalKey(agent, optionId), null, `${agent} ${optionId}`);
+    }
+  }
+  for (const agent of ['opencode', 'gemini', 'antigravity', '']) {
+    assert.equal(approvalKey(agent, 'allow_once'), null, agent);
+    assert.equal(approvalKey(agent, 'reject_once'), null, agent);
+  }
 });

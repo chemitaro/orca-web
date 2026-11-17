@@ -1,6 +1,7 @@
 // 送信先の解決。Orca を読まず、session.tabs.listAll の写しだけを扱う。
 import { createHash } from 'node:crypto';
 import type { StateDocument } from '../state/model.ts';
+import type { TerminalApprovalStatus } from '../transcript/terminal-approval.ts';
 import type { SendPreview, SendTarget, TargetChange, TargetResolution, TerminalSendTarget } from './model.ts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -166,6 +167,33 @@ export function terminalPromptOf(
         state: text(status.state),
         toolName: text(status.toolName),
         interactivePrompt: text(status.interactivePrompt),
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * session.tabs.listAll の結果から、宛先のペインの agentStatus の state・interactivePrompt・stateStartedAt を手を加えずに読む
+ * （terminalPromptOf と同じ照合。read-transcript.ts の terminalPromptFromTabs と同じ形で、readTerminalApproval に渡す）。
+ * ペインがないか、agentStatus が物でなければ null。
+ */
+export function terminalStatusOf(
+  listAll: unknown,
+  target: Pick<TerminalSendTarget, 'tabId' | 'leafId'>,
+): TerminalApprovalStatus | null {
+  if (!isRecord(listAll) || !Array.isArray(listAll.snapshots)) return null;
+  for (const snap of listAll.snapshots) {
+    if (!isRecord(snap) || !Array.isArray(snap.tabs)) continue;
+    for (const tab of snap.tabs) {
+      if (!isRecord(tab) || tab.type !== 'terminal' || tab.id !== target.tabId || text(tab.leafId) !== target.leafId)
+        continue;
+      const status = tab.agentStatus;
+      if (!isRecord(status)) return null;
+      return {
+        state: status.state,
+        interactivePrompt: status.interactivePrompt,
+        stateStartedAt: status.stateStartedAt,
       };
     }
   }

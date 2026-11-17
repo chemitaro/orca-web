@@ -277,7 +277,6 @@ test('T-06 キーの組：決めていない ESC の列、制御文字を含む�
   const badTexts = [
     '',
     `${ESC}[D`,
-    `${ESC}`,
     `a${ESC}[201~b`,
     `${ESC}[200~a${ESC}[201~b${ESC}[201~`,
     `${ESC}[200~${ESC}[201~`,
@@ -323,6 +322,26 @@ test('T-06 キーの組：決めていない ESC の列、制御文字を含む�
   );
   assert.equal(calls.length, 0);
   // 今の agentPrompt の形は変わらない
+  assert.ok((await rpc.call('terminal.send', terminal(), options)).ok);
+});
+
+test('iss-00054 T-04 キーの組：ESC だけの text（端末の承認の拒否）を通し、ESC で始まる決めていない列は今のとおり拒む', async () => {
+  const { rpc, calls } = setup();
+  assert.ok((await rpc.call('terminal.send', keyGroup(ESC), keyOptions)).ok);
+  assert.deepEqual(calls, [{ method: 'terminal.send', params: keyGroup(ESC), options: keyOptions }]);
+  for (const text of [`${ESC}[D`, `${ESC}a`, `${ESC}1`, `${ESC}${ESC}`, `${ESC}\r`, `1${ESC}`]) {
+    await assert.rejects(rpc.call('terminal.send', keyGroup(text), keyOptions), /not allowed/, JSON.stringify(text));
+  }
+  // 形の守りは ESC でも同じ（enter 真、封筒付き、agentPrompt 付きは拒む）
+  await assert.rejects(rpc.call('terminal.send', { ...keyGroup(ESC), enter: true }, keyOptions), /not allowed/);
+  await assert.rejects(rpc.call('terminal.send', { ...keyGroup(ESC), agentPrompt: true }, keyOptions), /not allowed/);
+  await assert.rejects(
+    rpc.call('terminal.send', keyGroup(ESC), { envelope: { orchestrationRequestId: operationId } }),
+    /not allowed/,
+  );
+  assert.equal(calls.length, 1);
+  // 今のキーの組と agentPrompt の形は変わらない
+  assert.ok((await rpc.call('terminal.send', keyGroup('1'), keyOptions)).ok);
   assert.ok((await rpc.call('terminal.send', terminal(), options)).ok);
 });
 

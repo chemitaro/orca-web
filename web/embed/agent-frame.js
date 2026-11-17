@@ -6,14 +6,21 @@
 // message は後の発言。どれも callId か prompt で指す）で選ぶ。送れるかは送る欄と同じ /api/send/status の読み
 // （enabled、answer、answerKeys、answerMessage、agentType）を使う。
 // 会話の承認もカード（D-06、iss-00050）で描く。状態は approval-view.js の板がカードの key ごとに持ち、手段は approver の表
-// （構造化 Chat は意図と確定、端末と答えられない承認は読むだけで「Orca で開く」）で選ぶ。送れるかは /api/send/status の approval。
+// （構造化 Chat は意図と確定で、送れるかは /api/send/status の approval。端末の許可の確認は promptId で指す意図と確定で、
+// 送れるかは answerKeys（iss-00054）。答えられない承認は読むだけで「Orca で開く」）で選ぶ。
 // 文字はすべて textContent で入れる（会話の本文、ツールの出力、題名、送る本文、質問と選択肢は信頼しないデータ）。
 
 import { createWriter } from '../write.js';
 import { refreshTimes, renderChatRow, renderDetail, renderDetailMark } from './agent-dom.js';
 import { watchWorktreeSummary } from './agent-marks.js';
 import { buildChat, buildDetail, errorLabel, initialChat, olderResult, reduceChat } from './agent-view.js';
-import { buildApprovalCard, createApprovalBoard, createChatApprover, readOnlyApprover } from './approval-view.js';
+import {
+  buildApprovalCard,
+  createApprovalBoard,
+  createChatApprover,
+  createTerminalApprover,
+  readOnlyApprover,
+} from './approval-view.js';
 import { createOpenBoard, createOpenControl, runOpen } from './open-control.js';
 import {
   buildQuestionCard,
@@ -109,7 +116,11 @@ const questionBoard = createQuestionBoard({
 /** 今の会話の承認の行（key ごと）。 */
 let approvalRows = new Map();
 const approvalBoard = createApprovalBoard({
-  approvers: { chat: createChatApprover({ agentId, writer, read }), readOnly: readOnlyApprover },
+  approvers: {
+    chat: createChatApprover({ agentId, writer, read }),
+    terminal: createTerminalApprover({ agentId, writer, read }),
+    readOnly: readOnlyApprover,
+  },
   onChange: (key) => renderQuestionRow(key),
 });
 /** 質問と承認のカードの行を、みな描き直す（送れるかや開く先が変わったとき）。 */

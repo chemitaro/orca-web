@@ -5,7 +5,7 @@ import { digestOption } from '../send/approval.ts';
 import { ANSWER_STEP_MS } from '../send/keys.ts';
 import type { ChatSendTarget, TerminalSendTarget } from '../send/model.ts';
 import { promptMatches } from '../send/question-state.ts';
-import { terminalPromptOf } from '../send/target.ts';
+import { terminalPromptOf, terminalStatusOf } from '../send/target.ts';
 import {
   type ApprovalOptionView,
   type JournalQuestionAnswer,
@@ -14,6 +14,7 @@ import {
   type QuestionState,
   type QuestionView,
 } from '../transcript/normalize.ts';
+import { matchTerminalApproval } from '../transcript/terminal-approval.ts';
 import type { RpcOutcome } from './rpc.ts';
 
 export type SendOutcome = 'refused' | 'unknown' | 'accepted' | 'submitted' | 'input_accepted';
@@ -396,6 +397,38 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
         return { outcome: 'unknown', detail: { code: 'unconfirmed', sentGroups, totalGroups } };
       }
       return { outcome: 'input_accepted', detail: { code: 'keys_sent', sentGroups, totalGroups } };
+    },
+    /**
+     * 端末の承認の答えのキーを1組だけ送る。送る直前に前面のプロセスと、宛先のペインが promptId の許可の確認をまだ出しているかを読み、
+     * どちらかが外れたら送らない（refused、not_sent）。自動で送り直さない。
+     */
+    async answerApprovalKey(target: TerminalSendTarget, bytes: string, promptId: string): Promise<SendResult> {
+      const notSent: SendResult = { outcome: 'refused', detail: { code: 'not_sent', sentGroups: 0, totalGroups: 1 } };
+      const foreground = await readForeground(target.handle, target.incarnationId, target.agentType);
+      if (!foreground.ok || foreground.isShell || !foreground.matchesAgent) return notSent;
+      const tabs = await rpc.call('session.tabs.listAll', {});
+      if (!tabs.ok || matchTerminalApproval(terminalStatusOf(tabs.result, target), promptId) !== 'match')
+        return notSent;
+      const { ack, code } = await sendGroup(target, bytes);
+      if (ack === 'accepted')
+        return { outcome: 'input_accepted', detail: { code: 'keys_sent', sentGroups: 1, totalGroups: 1 } };
+      if (ack === 'refused')
+        return code === 'method_not_found'
+          ? {
+              outcome: 'refused',
+              detail: { code, method: 'terminal.send', sentGroups: 0, totalGroups: 1 },
+            }
+          : notSent;
+      return { outcome: 'unknown', detail: { code: 'unconfirmed', sentGroups: 0, totalGroups: 1 } };
+    },
+    /** 結果不明の端末の承認の答えの照会。宛先のペインの今の agentStatus だけを読み、送り直さない（どちらの答えで抜けたかは分からない）。 */
+    async checkTerminalApproval(target: TerminalSendTarget, promptId: string): Promise<SendRead<SendResult>> {
+      const tabs = await rpc.call('session.tabs.listAll', {});
+      if (!tabs.ok) return readFailure(tabs, 'session.tabs.listAll');
+      const match = matchTerminalApproval(terminalStatusOf(tabs.result, target), promptId);
+      const code =
+        match === 'match' ? 'prompt_pending' : match === 'unverified' ? 'prompt_unverified' : 'resolved_unverified';
+      return { ok: true, outcome: 'unknown', detail: { code } };
     },
     async checkChat(target: ChatSendTarget, operationId: string): Promise<SendRead<SendResult>> {
       const result = await rpc.call('agentSession.sendRecorded', {
