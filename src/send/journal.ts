@@ -3,7 +3,7 @@ import { chmod, mkdir, open, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { SendResult } from '../orca/send.ts';
 import type { ApprovalIntent } from '../transcript/normalize.ts';
-import type { SendPreview, SendTarget } from './model.ts';
+import type { SendPreview, SendTarget, TerminalSendTarget } from './model.ts';
 
 const SCHEMA = 'orca-web.send-record/v1';
 interface RowBase {
@@ -51,9 +51,30 @@ export interface ApprovalBeforeInput extends BeforeBase {
   route: 'chat';
   prompt: { itemId: string; revision: number };
   intent: ApprovalIntent | null;
+  mode?: never;
   text?: never;
 }
-export type BeforeInput = SendBeforeInput | AnswerBeforeInput | CallAnswerBeforeInput | ApprovalBeforeInput;
+/**
+ * 端末の承認への答え（キー）の before。選択肢の id・ラベル、キーのバイト、道具の名前、要約は書かず、
+ * promptId と intent と digest と組の数（いつも 1）だけを持つ。
+ */
+export interface TerminalApprovalBeforeInput extends BeforeBase {
+  action: 'approval';
+  mode: 'keys';
+  route: 'terminal';
+  target: TerminalSendTarget & Pick<SendPreview, 'repoName' | 'worktreePath' | 'branch' | 'title'>;
+  promptId: string;
+  intent: ApprovalIntent | null;
+  totalGroups: 1;
+  prompt?: never;
+  text?: never;
+}
+export type BeforeInput =
+  | SendBeforeInput
+  | AnswerBeforeInput
+  | CallAnswerBeforeInput
+  | ApprovalBeforeInput
+  | TerminalApprovalBeforeInput;
 export type BeforeRecord = RowBase & BeforeInput & { kind: 'before' };
 export type ResultInput = SendResult & { operationId: string };
 export type ResultRecord = RowBase & SendResult & { kind: 'after' | 'check' };
@@ -96,7 +117,21 @@ function isAnswerBefore(row: Record<string, unknown>): boolean {
   );
 }
 const INTENTS: readonly unknown[] = ['allow_once', 'allow_always', 'reject_once', 'reject_always', null];
+const TERMINAL_APPROVAL_ID = /^ta_[0-9a-f]{20}$/;
+function isTerminalApprovalBefore(row: Record<string, unknown>): boolean {
+  return (
+    row.mode === 'keys' &&
+    row.route === 'terminal' &&
+    row.prompt === undefined &&
+    row.text === undefined &&
+    typeof row.promptId === 'string' &&
+    TERMINAL_APPROVAL_ID.test(row.promptId) &&
+    INTENTS.includes(row.intent) &&
+    row.totalGroups === 1
+  );
+}
 function isApprovalBefore(row: Record<string, unknown>): boolean {
+  if (row.action === 'approval' && row.mode !== undefined) return isTerminalApprovalBefore(row);
   const prompt = row.prompt;
   return (
     row.action === 'approval' &&
@@ -242,6 +277,27 @@ export class SendJournal {
           row.action === 'answer' &&
           row.mode !== undefined &&
           row.callId === callId &&
+          row.target.agentId === agentId,
+      );
+  }
+  /** 同じエージェントの同じ promptId に、送り始めた端末の承認の答え（before の行）があるか。記録が読めなければ投げる。 */
+  async hasApproval(agentId: string, promptId: string): Promise<boolean> {
+    let raw: string;
+    try {
+      raw = await readFile(path.join(this.#dir, 'sends.jsonl'), 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
+    }
+    return raw
+      .split('\n')
+      .map(parseRow)
+      .some(
+        (row) =>
+          row?.kind === 'before' &&
+          row.action === 'approval' &&
+          row.mode === 'keys' &&
+          row.promptId === promptId &&
           row.target.agentId === agentId,
       );
   }

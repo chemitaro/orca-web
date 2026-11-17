@@ -1759,6 +1759,7 @@ test('T-09 answerConfirm：before の記録を書けないか、記録が読め�
     },
     appendRefused: (input) => f.journal.appendRefused(input),
     hasAnswer: (a, c) => f.journal.hasAnswer(a, c),
+    hasApproval: (a, p) => f.journal.hasApproval(a, p),
     read: (id) => f.journal.read(id),
     appendAfter: (input) => f.journal.appendAfter(input),
     appendCheck: (input) => f.journal.appendCheck(input),

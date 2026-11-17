@@ -4,6 +4,8 @@
 // - src/shared/native-chat/input/native-chat-paste-bytes.ts（buildNativeChatPasteBytes）
 // - src/shared/terminal/input/terminal-bracketed-paste-text.ts（sanitizeBracketedPasteText、wrapTerminalBracketedPasteText）
 // - src/shared/native-chat/input/questions/native-chat-answer-stepping.ts（NATIVE_CHAT_QUESTION_STEP_MS）
+// - src/shared/native-chat/input/approvals/native-chat-approval-envelope.ts（parseNativeChatApprovalEnvelope の allowSend・denySend）と
+//   src/shared/native-chat/native-chat-agent-support.ts（nativeChatApprovalAcceptKey）
 import type { QuestionView } from '../transcript/normalize.ts';
 import type { QuestionAnswer } from './answer.ts';
 
@@ -184,4 +186,15 @@ export function formatAsyncAnswer(questions: readonly QuestionView[], answers: r
       return answer ? [`${quoteOf(q)}${answer}`] : [];
     })
     .join('\n\n');
+}
+
+/**
+ * 端末の承認の答えのキー。claude と codex だけ：allow_once は nativeChatApprovalAcceptKey の '1'（opencode の CR は扱わない）、
+ * reject_once は denySend の ESC。ほかの種類とほかの optionId は null。
+ */
+export function approvalKey(agentType: string, optionId: string): string | null {
+  if (agentType !== 'claude' && agentType !== 'codex') return null;
+  if (optionId === 'allow_once') return '1';
+  if (optionId === 'reject_once') return ESC;
+  return null;
 }

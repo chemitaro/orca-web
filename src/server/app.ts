@@ -298,23 +298,52 @@ function parseAnswerIntent(body: unknown): AnswerIntentBody | null {
   return { ...rest, answers: raw.answers as unknown[] };
 }
 
-/** 承認の意図 `{agent, prompt: {itemId, revision}, optionId, confirmPersistent?, target?}`。選択肢はサービスが確かめる。 */
-function parseApprovalIntent(body: unknown): {
+/** 端末の承認の同一性（terminal-approval.ts の terminalApprovalId）。 */
+const TERMINAL_APPROVAL_ID = /^ta_[0-9a-f]{20}$/;
+
+type ApprovalIntentBody = {
   agent: string;
-  prompt: { itemId: string; revision: number };
   optionId: string;
   confirmPersistent?: boolean;
   target?: string;
-} | null {
-  const parsed = parsePromptIntent(body, ['optionId', 'confirmPersistent']);
-  if (!parsed || !isBoundedText(parsed.body.optionId, MAX_OPTION_ID_CHARS)) return null;
-  const { body: raw, ...rest } = parsed;
-  if ('confirmPersistent' in raw && typeof raw.confirmPersistent !== 'boolean') return null;
-  return {
-    ...rest,
-    optionId: raw.optionId as string,
-    ...('confirmPersistent' in raw ? { confirmPersistent: raw.confirmPersistent as boolean } : {}),
+} & ({ prompt: { itemId: string; revision: number } } | { promptId: string });
+
+/**
+ * 承認の意図。構造化 Chat は `{agent, prompt: {itemId, revision}, optionId, confirmPersistent?, target?}`、
+ * 端末は `{agent, promptId, optionId, confirmPersistent?, target?}`（prompt と promptId はちょうど片方）。選択肢はサービスが確かめる。
+ */
+function parseApprovalIntent(body: unknown): ApprovalIntentBody | null {
+  const options = (raw: Record<string, unknown>) => {
+    if (!isBoundedText(raw.optionId, MAX_OPTION_ID_CHARS)) return null;
+    if ('confirmPersistent' in raw && typeof raw.confirmPersistent !== 'boolean') return null;
+    return {
+      optionId: raw.optionId,
+      ...('confirmPersistent' in raw ? { confirmPersistent: raw.confirmPersistent as boolean } : {}),
+    };
   };
+  if (isRecord(body) && 'promptId' in body) {
+    if (
+      Object.keys(body).some((k) => !['agent', 'promptId', 'optionId', 'confirmPersistent', 'target'].includes(k)) ||
+      !isBoundedText(body.agent, MAX_AGENT_CHARS) ||
+      typeof body.promptId !== 'string' ||
+      !TERMINAL_APPROVAL_ID.test(body.promptId) ||
+      ('target' in body && !isTargetFingerprint(body.target))
+    )
+      return null;
+    const chosen = options(body);
+    if (!chosen) return null;
+    return {
+      agent: body.agent,
+      promptId: body.promptId,
+      ...chosen,
+      ...('target' in body ? { target: body.target as string } : {}),
+    };
+  }
+  const parsed = parsePromptIntent(body, ['optionId', 'confirmPersistent']);
+  if (!parsed) return null;
+  const { body: raw, ...rest } = parsed;
+  const chosen = options(raw);
+  return chosen ? { ...rest, ...chosen } : null;
 }
 
 /** 承認の確定 `{ticket, optionId}`。 */

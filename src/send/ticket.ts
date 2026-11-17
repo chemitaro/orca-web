@@ -39,6 +39,8 @@ export interface TicketInput {
   questions?: QuestionView[];
   /** 承認の答えの票だけが持つ。答える承認の位置と、意図で確かめた選択肢とその intent。 */
   approval?: { itemId: string; revision: number; optionId: string; intent: ApprovalIntent | null };
+  /** 端末の承認の答えの票だけが持つ。答える許可の確認の promptId と、意図で確かめた選択肢とその intent。キーは持たず、確定で作り直す。 */
+  terminalApproval?: { promptId: string; optionId: string; intent: ApprovalIntent | null };
 }
 export interface SendTicket extends TicketInput {
   expiresAt: number;
@@ -68,6 +70,7 @@ export class TicketStore {
       ...(input.call ? { call: { ...input.call } } : {}),
       ...(input.questions ? { questions: structuredClone(input.questions) } : {}),
       ...(input.approval ? { approval: { ...input.approval } } : {}),
+      ...(input.terminalApproval ? { terminalApproval: { ...input.terminalApproval } } : {}),
       expiresAt,
     });
     if (this.#tickets.size > 32) {

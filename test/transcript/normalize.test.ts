@@ -23,6 +23,7 @@ import {
   parseJournalApproval,
   TRANSCRIPT_SCHEMA,
 } from '../../src/transcript/normalize.ts';
+import { terminalApprovalId } from '../../src/transcript/terminal-approval.ts';
 import { journalItems, nativeMessages, SESSION_CLAUDE, TRANSCRIPT_PATH } from './fixture.ts';
 
 test('端末の会話：本文、ツールの呼び出しと結果、表示できない印、system の知らせを返し、思考を印も付けずに落とし、並べ替えない', () => {
@@ -862,6 +863,7 @@ const approvalBase = {
   type: 'approval',
   source: 'chat',
   prompt: { itemId: 'ap-item', revision: 2 },
+  promptId: null,
   title: '仮の題',
   tool: null,
   description: null,
@@ -1098,6 +1100,7 @@ test('T-02 端末：blocked・waiting で interactivePrompt が approval の JSO
           type: 'approval',
           source: 'terminal',
           prompt: null,
+          promptId: terminalApprovalId(approvalJson({ tool: 'Bash', summary: 'ls -la' }), Date.UTC(2026, 10, 18)),
           title: null,
           tool: 'Bash',
           description: 'ls -la',
@@ -1105,9 +1108,12 @@ test('T-02 端末：blocked・waiting で interactivePrompt が approval の JSO
           blockedPath: null,
           plan: null,
           detail: null,
-          options: [],
-          answerable: false,
-          unanswerableReason: 'terminal',
+          options: [
+            { id: 'allow_once', label: 'Allow once', description: null, intent: 'allow_once' },
+            { id: 'reject_once', label: 'Reject', description: null, intent: 'reject_once' },
+          ],
+          answerable: true,
+          unanswerableReason: null,
           state: 'pending',
           selectedOptionId: null,
         },
@@ -1165,7 +1171,37 @@ test('T-02 端末：interactivePrompt のほかの項目は出さず、上限を
   assert.equal((part.tool as string).length, MAX_APPROVAL_LABEL_CHARS);
   assert.equal((part.description as string).length, MAX_APPROVAL_DESCRIPTION_CHARS);
   assert.equal(part.truncated, true);
+  // 全部を見せられない許可は、小窓から答えさせない（選択肢は同じ）。
+  assert.equal(part.answerable, false);
+  assert.equal(part.unanswerableReason, 'terminal');
+  assert.deepEqual(
+    (part.options as { id: string }[]).map((o) => o.id),
+    ['allow_once', 'reject_once'],
+  );
+  assert.match(part.promptId as string, /^ta_[0-9a-f]{20}$/);
   assert.ok(!JSON.stringify(messages).includes('仮の秘密'));
+});
+
+test('T-02 端末：promptId は stateStartedAt が違えば違い、同じなら同じ。部分の options は写しで、元の表を変えない', () => {
+  const part = (stateStartedAt: unknown) =>
+    normalizePage(
+      nativePage({ state: 'waiting', interactivePrompt: approvalJson({ tool: 'Bash' }), stateStartedAt }),
+    )?.at(-1)?.parts[0] as { promptId: string; options: unknown[] };
+  assert.equal(part(1).promptId, part(1).promptId);
+  assert.notEqual(part(1).promptId, part(2).promptId);
+  const first = part(1);
+  first.options.length = 0;
+  assert.equal(part(1).options.length, 2);
+  // summary が空の文字なら、Orca と同じく要約なし。
+  const empty = normalizePage(
+    nativePage({ state: 'waiting', interactivePrompt: approvalJson({ tool: 'Bash', summary: '' }), stateStartedAt: 1 }),
+  )?.at(-1)?.parts[0] as { description: unknown };
+  assert.equal(empty.description, null);
+});
+
+test('T-02 構造化 Chat の承認の部分は promptId が null', () => {
+  const part = parseJournalApproval(approvalItem({ options: claudeOptions }));
+  assert.equal(part?.promptId, null);
 });
 
 test('FQG2 端末の role user の件のうち、Orca の届いた発言に当たらないものに undelivered: true を付ける', () => {

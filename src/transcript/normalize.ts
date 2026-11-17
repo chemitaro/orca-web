@@ -3,6 +3,14 @@
 // 形は stablyai/orca v1.4.256 の src/shared/native-chat/native-chat-types.ts と src/shared/agent-session/journal/agent-session-journal-types.ts に合わせる。
 
 import type { PagePosition, RawPage, TranscriptSource, TranscriptTarget } from '../orca/read-transcript.ts';
+import {
+  MAX_APPROVAL_DESCRIPTION_CHARS,
+  MAX_APPROVAL_LABEL_CHARS,
+  readTerminalApproval,
+  TERMINAL_APPROVAL_OPTIONS,
+} from './terminal-approval.ts';
+
+export { MAX_APPROVAL_DESCRIPTION_CHARS, MAX_APPROVAL_LABEL_CHARS };
 
 export const TRANSCRIPT_SCHEMA = 'orca-web.transcript/v1';
 
@@ -16,8 +24,6 @@ export const MAX_QUESTION_OTHER_CHARS = 4_000;
 /** Orca の答えは1〜4件、1つの答えの optionIds は64件まで。これを超える質問は部分にしない。 */
 export const MAX_QUESTIONS = 4;
 export const MAX_QUESTION_OPTIONS = 64;
-export const MAX_APPROVAL_LABEL_CHARS = 500;
-export const MAX_APPROVAL_DESCRIPTION_CHARS = 2_000;
 export const MAX_APPROVAL_PATH_CHARS = 1_000;
 export const MAX_APPROVAL_DETAIL_CHARS = 8_000;
 export const MAX_APPROVAL_PLAN_CHARS = 16_000;
@@ -96,6 +102,8 @@ export interface ApprovalPart {
   type: 'approval';
   source: 'chat' | 'terminal';
   prompt: { itemId: string; revision: number } | null;
+  /** 端末の承認の同一性（terminal-approval.ts の terminalApprovalId。'ta_' と16進20字）。構造化 Chat の承認では null。 */
+  promptId: string | null;
   title: string | null;
   tool: string | null;
   description: string | null;
@@ -763,6 +771,7 @@ export function parseJournalApproval(item: unknown): ApprovalPart | null {
       type: 'approval',
       source: 'chat',
       prompt: { itemId: item.itemId, revision },
+      promptId: null,
       title: c.clip(body.title, MAX_APPROVAL_LABEL_CHARS),
       tool: displayName === undefined ? null : c.clip(displayName, MAX_APPROVAL_LABEL_CHARS),
       description: description === undefined ? null : c.clip(description, MAX_APPROVAL_DESCRIPTION_CHARS),
@@ -785,37 +794,30 @@ export function parseJournalApproval(item: unknown): ApprovalPart | null {
   );
 }
 
-const WAITING_STATES: ReadonlySet<unknown> = new Set(['blocked', 'waiting']);
-
-/** 端末のエージェントの待っている許可の確認（タブの agentStatus の3つの項目）を、会話の最後の件にする。読めなければ null（F-05）。 */
+/**
+ * 端末のエージェントの待っている許可の確認（タブの agentStatus の3つの項目）を、会話の最後の件にする。読めなければ null（F-05）。
+ * 選択肢は Orca の readAgentPromptAnswers と同じ2つ。道具の名前か要約を切った承認は答えさせない（answerable 偽、terminal）。
+ */
 function terminalApprovalMessage(prompt: RawPage['terminalPrompt']): TranscriptMessage | null {
-  if (!isRecord(prompt) || !WAITING_STATES.has(prompt.state) || typeof prompt.interactivePrompt !== 'string')
-    return null;
-  let value: unknown;
-  try {
-    value = JSON.parse(prompt.interactivePrompt);
-  } catch {
-    return null;
-  }
-  if (!isRecord(value) || !isRecord(value.approval)) return null;
-  const { tool, summary } = value.approval;
-  if (typeof tool !== 'string' || tool.length === 0) return null;
+  const read = readTerminalApproval(prompt ?? null);
+  if (read.kind !== 'approval' || !isRecord(prompt)) return null;
   const c = new Clipper();
   const part = withTruncated<ApprovalPart>(
     {
       type: 'approval',
       source: 'terminal',
       prompt: null,
+      promptId: read.promptId,
       title: null,
-      tool: c.clip(tool, MAX_APPROVAL_LABEL_CHARS),
-      description: typeof summary === 'string' ? c.clip(summary, MAX_APPROVAL_DESCRIPTION_CHARS) : null,
+      tool: c.clip(read.tool, MAX_APPROVAL_LABEL_CHARS),
+      description: read.summary === null ? null : c.clip(read.summary, MAX_APPROVAL_DESCRIPTION_CHARS),
       reason: null,
       blockedPath: null,
       plan: null,
       detail: null,
-      options: [],
-      answerable: false,
-      unanswerableReason: 'terminal',
+      options: TERMINAL_APPROVAL_OPTIONS.map((o) => ({ ...o })),
+      answerable: !read.truncated,
+      unanswerableReason: read.truncated ? 'terminal' : null,
       state: 'pending',
       selectedOptionId: null,
     },

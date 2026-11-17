@@ -463,3 +463,75 @@ test('T-10 hasAnswer は before の行から同じエージェントと callId �
   await mkdir(path.join(dir, 'sends.jsonl'));
   await assert.rejects(fresh.hasAnswer(terminalTarget().agentId, 'call-test'));
 });
+
+const PROMPT_ID = `ta_${'0123456789abcdef0123'}`;
+const terminalApprovalBefore = () => ({
+  operationId: 'terminal-approval-op',
+  action: 'approval' as const,
+  mode: 'keys' as const,
+  route: 'terminal' as const,
+  target: { ...terminalTarget(), repoName: 'repo', worktreePath: '/test/worktree', branch: 'test', title: 'test' },
+  promptId: PROMPT_ID,
+  intent: 'allow_once' as const,
+  digest: 'digest',
+  totalGroups: 1 as const,
+  generation: { runtimeId: 'runtime-test', incarnationId: 'inc-test' },
+});
+
+test('iss-00054 T-07 端末の承認の before は promptId・intent・digest・totalGroups 1 だけを持って読め、形の違う行は捨てる', async (t) => {
+  const dir = await directory(t);
+  const journal = new SendJournal(dir);
+  await journal.appendBefore(terminalApprovalBefore());
+  const record = await new SendJournal(dir).read('terminal-approval-op');
+  assert.equal(record?.outcome, 'unknown');
+  assert.deepEqual(record?.detail, { code: 'no_after_record' });
+  const read = record?.before;
+  assert.ok(read && read.action === 'approval' && read.mode === 'keys');
+  assert.equal(read.promptId, PROMPT_ID);
+  assert.equal(read.intent, 'allow_once');
+  assert.equal(read.totalGroups, 1);
+  for (const intent of ['reject_once', null] as const) {
+    await journal.appendBefore({ ...terminalApprovalBefore(), operationId: `ok-${intent}`, intent });
+    assert.equal((await new SendJournal(dir).read(`ok-${intent}`))?.before?.action, 'approval', String(intent));
+  }
+  for (const [id, broken] of [
+    ['chat-route', { route: 'chat' }],
+    ['bad-id', { promptId: 'ta_short' }],
+    ['upper-id', { promptId: `ta_${'A'.repeat(20)}` }],
+    ['no-id', { promptId: undefined }],
+    ['two-groups', { totalGroups: 2 }],
+    ['no-groups', { totalGroups: undefined }],
+    ['odd-intent', { intent: 'allow_forever' }],
+    ['no-intent', { intent: undefined }],
+    ['with-prompt', { prompt: { itemId: 'x', revision: 1 } }],
+    ['with-text', { text: 'x' }],
+    ['other-mode', { mode: 'message' }],
+  ] as const) {
+    await appendFile(
+      path.join(dir, 'sends.jsonl'),
+      `${JSON.stringify({ ...terminalApprovalBefore(), ...broken, operationId: id, schema: 'orca-web.send-record/v1', kind: 'before', at: new Date().toISOString() })}\n`,
+    );
+    assert.equal(await new SendJournal(dir).read(id), null, id);
+  }
+});
+
+test('iss-00054 T-07 hasApproval は before の行から同じエージェントと promptId を見つけ、構造化 Chat の承認と callId の答えは数えず、読めなければ投げる', async (t) => {
+  const dir = await directory(t);
+  const journal = new SendJournal(dir);
+  const agentId = terminalTarget().agentId;
+  assert.equal(await journal.hasApproval(agentId, PROMPT_ID), false);
+  await journal.appendBefore(before());
+  await journal.appendBefore(callBefore());
+  assert.equal(await new SendJournal(dir).hasApproval(agentId, PROMPT_ID), false);
+  await journal.appendBefore(terminalApprovalBefore());
+  const fresh = new SendJournal(dir);
+  assert.equal(await fresh.hasApproval(agentId, PROMPT_ID), true);
+  assert.equal(await fresh.hasApproval(agentId, `ta_${'f'.repeat(20)}`), false);
+  assert.equal(await fresh.hasApproval('other-agent', PROMPT_ID), false);
+  // 今の callId の答えの記録は変わらない
+  assert.equal(await fresh.hasAnswer(agentId, 'call-test'), true);
+  assert.equal(await fresh.hasAnswer(agentId, PROMPT_ID), false);
+  await rm(path.join(dir, 'sends.jsonl'));
+  await mkdir(path.join(dir, 'sends.jsonl'));
+  await assert.rejects(fresh.hasApproval(agentId, PROMPT_ID));
+});
