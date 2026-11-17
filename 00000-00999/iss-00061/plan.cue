@@ -14,7 +14,7 @@ steps: {
 		title:    "Markdown を木に解く純な関数（D-01）"
 		text:     "対象：`web/embed/markdown.js`（新）と `test/web/markdown.test.ts`（新）。DOM に触らない。確かめ：T-01〜T-03。完了：`node --test test/web/markdown.test.ts`、`npm run lint`、`npm test`、`npm run build` が通り、T-01〜T-03 のテストがある。実装担当 impl の手順で、区切りのレビュー CP-1 の最後の手順。止まって HEAD を報告する"
 		realizes: ["R-01", "R-02", "R-03", "F-02", "F-03"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -22,7 +22,7 @@ steps: {
 		text:     "対象：`web/embed/markdown-dom.js`（新）、`web/embed/agent-dom.js`、`web/embed/agent-frame.js`、`web/embed/agent.css`、`src/server/app.ts`（STATIC_FILES の2行だけ）と、`test/web/markdown-dom.test.ts`（新）、`test/web/agent-dom.test.ts`、`test/web/agent-css.test.ts`、配る口のテスト（今の STATIC_FILES のテストに足す）。`web/embed/markdown.js` は使うだけで、解き方の誤りを見つけたら直さずに報告する。質問・承認のカード、`open-control*.js`、`agent-marks*.js` は変えない。確かめ：T-04〜T-08。完了：`npm run lint`、`npm test`、`npm run build` が通り、T-04〜T-08 のテストがある。描画の確かめは、実装担当が自分で起動した orca-web（一時の port、一時の settings、偽の Orca の会話。実物の Orca には書き込まない）とヘッドレスの Chrome（`--disable-features=MacAppCodeSignClone`、CDP の Browser.close で閉じる）で、R-05 の偽の会話を、幅 1280px と 390px、明暗の4通りで描き、文書の横のはみ出しがないこと、pre と表の枠だけが横に動くことを DOM で数え、写しと数えた値を `.workbench/implement/iss-00061/render/` に置く。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-01", "R-02", "R-03", "R-04", "R-05", "F-01", "F-02", "F-03"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "ui"
 	}
 	"S-03": {
@@ -30,7 +30,7 @@ steps: {
 		text:     "タスク担当が行う。README.md と AGENTS.md の追記。S-02 の写しを Scope の artifacts に移す。試しのエージェント（haiku など。業務中のエージェントは使わない）を立て、見出し・表・コード・箇条書き・リンクを含む返事を書かせ、試しの orca-web（`npm run trial`、別の port と専用の settings。sendEnabled は偽のまま）の小窓で、1280 と 390、明暗の写しを撮り、試しのエージェントを止める。確かめ：T-09。完了：README.md と AGENTS.md に Markdown の描き方があり、report.md の Verification に写しの場所と確かめがあり、`npm run lint`、`npm test`、`npm run build` が通る。試しの画面は本人が見られるように動かしたまま報告する"
 		realizes: ["R-01", "R-05"]
 		after:    ["S-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }
