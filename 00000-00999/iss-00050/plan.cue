@@ -21,7 +21,7 @@ steps: {
 	}
 	"S-02": {
 		title:    "承認の答えの送る門・アダプター・サービス・HTTP の口（D-03、D-04、D-05）"
-		text:     "対象：`src/orca/send-gates.ts`、`src/orca/send.ts`、`src/orca/capabilities.ts`、`src/send/approval.ts`（新）、`src/send/ticket.ts`、`src/send/journal.ts`、`src/send/service.ts`、`src/server/app.ts` と、`test/orca/send-gates.test.ts`、`test/orca/send.test.ts`、`test/orca/capabilities.test.ts`、`test/send/approval.test.ts`（新）、`test/send/service.test.ts`、`test/send/journal.test.ts`、`test/server/approval-api.test.ts`（新。または今の答えの API のテストに足す）。確かめ：T-04〜T-10。完了：`npm run lint`、`npm test`、`npm run build` が通り、T-04〜T-10 のテストがあり、今の送信と質問の答えのテストが変えずに通る。実装担当 impl の最後の手順で、区切りのレビュー CP-1 の最後の手順。止まって HEAD を報告する"
+		text:     "対象：`src/orca/send-gates.ts`、`src/orca/send.ts`、`src/orca/capabilities.ts`、`src/send/approval.ts`（新）、`src/send/ticket.ts`、`src/send/journal.ts`、`src/send/service.ts`、`src/server/app.ts` と、`test/orca/send-gates.test.ts`、`test/orca/send.test.ts`、`test/orca/capabilities.test.ts`、`test/send/approval.test.ts`（新）、`test/send/service.test.ts`、`test/send/journal.test.ts`、`test/server/approval-api.test.ts`（新。または今の答えの API のテストに足す）。確かめ：T-04〜T-10。完了：`npm run lint`、`npm test`、`npm run build` が通り、T-04〜T-10 のテストがあり、今の送信と質問の答えのテストの振る舞いの主張を変えずに通す（status の応答の approval の項目と能力 answerApproval を足すための、期待の物と偽の能力の報告への追加だけは許す）。実装担当 impl の最後の手順で、区切りのレビュー CP-1 の最後の手順。止まって HEAD を報告する"
 		realizes: ["R-03", "R-04", "R-05", "R-06", "F-01", "F-02", "F-03"]
 		after:    ["S-01"]
 		status:   "todo"
@@ -29,7 +29,7 @@ steps: {
 	}
 	"S-03": {
 		title:    "承認のカードの部品と小窓への組み込み（D-06）"
-		text:     "対象：`web/embed/approval-view.js`（新）、`web/embed/approval-dom.js`（新）、`web/embed/question-view.js`（共有の関数と言葉の表だけ。質問の契約は変えない）、`web/embed/agent-view.js`、`web/embed/agent-dom.js`、`web/embed/agent-frame.js`、`web/embed/agent.css`、`src/server/app.ts` の STATIC_FILES と、`test/web/approval-view.test.ts`（新）、`test/web/approval-dom.test.ts`（新）、`test/web/agent-view.test.ts`、`test/web/agent-css.test.ts`、今の `test/web/question-*.test.ts`（変えずに通す）。`web/embed/agent-marks*.js`、`open-control*.js` は使うだけで変えない。確かめ：T-11〜T-15。完了：`node --test test/web/*.test.ts`、`npm run lint`、`npm test`、`npm run build` が通り、T-11〜T-15 のテストがある。描画の確かめは、実装担当が自分で起動した orca-web（一時の port、一時の settings で sendEnabled は偽のまま）とヘッドレスの Chrome（`--disable-features=MacAppCodeSignClone`、CDP の Browser.close で閉じる）で、幅 1280px と 390px、明暗で、偽の会話の承認のカード（道具、計画、長い detail、HTML の文字、常に許可の確かめの段、答え済み、取り消し、端末）が横にはみ出さないことを見る（答えを送らない）。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
+		text:     "対象：`web/embed/approval-view.js`（新）、`web/embed/approval-dom.js`（新）、`web/embed/question-view.js`（共有の関数と言葉の表だけ。質問の契約は変えない）、`web/embed/agent-view.js`、`web/embed/agent-dom.js`、`web/embed/agent-frame.js`、`web/embed/agent.css`、`src/server/app.ts` の STATIC_FILES と、`test/web/approval-view.test.ts`（新）、`test/web/approval-dom.test.ts`（新）、`test/web/agent-view.test.ts`、`test/web/agent-css.test.ts`、今の `test/web/question-*.test.ts`（振る舞いの主張を変えずに通す）。`web/embed/agent-marks*.js`、`open-control*.js` は使うだけで変えない。確かめ：T-11〜T-15。完了：`node --test test/web/*.test.ts`、`npm run lint`、`npm test`、`npm run build` が通り、T-11〜T-15 のテストがある。描画の確かめは、実装担当が自分で起動した orca-web（一時の port、一時の settings で sendEnabled は偽のまま）とヘッドレスの Chrome（`--disable-features=MacAppCodeSignClone`、CDP の Browser.close で閉じる）で、幅 1280px と 390px、明暗で、偽の会話の承認のカード（道具、計画、長い detail、HTML の文字、常に許可の確かめの段、答え済み、取り消し、端末）が横にはみ出さないことを見る（答えを送らない）。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-02", "R-03", "R-04", "R-06", "R-07", "F-01", "F-04"]
 		after:    ["S-02"]
 		status:   "todo"
