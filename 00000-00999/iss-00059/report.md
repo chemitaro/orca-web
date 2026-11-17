@@ -25,6 +25,8 @@ ID: "iss-00059"
 
 - 最終品質ゲート：キャンペーン `.workbench/final-quality-gate/iss-00059-fqg/`（範囲 `3ddeb95..90a503f`）の attempt 1 で合格。合格のコミット `90a503f5a45e93c0bd564c991297431b8a6d9348`。主（quality-gate-reviewer、Opus 5.5 / medium、観点 functional-correctness・requirements-closure・test-adequacy・reliability-recovery・e2e-user-flow）pass、P0〜P3 0。2人目 ChatGPT GPT-6 / Extra High（chatgpt-code-review-strict、GitHub の SHA の一致を確かめた、モデル選択の証拠 verified）pass、指摘 0。テスト lint 0・test 1075/1075・build 0。closure：`.workbench/final-quality-gate/iss-00059-fqg/closure.md`（写し `artifacts/closure.md`）。記録だけのコミットはない。PR の直前に origin/main を取り直し、3ddeb95 のままで取り込みは要らなかった。
 
+- PR #60（https://github.com/chemitaro/orca-web/pull/60、head 90a503f = 合格のコミット）：CI 合格（observer OBSERVED_CI_PASS、merge_readiness READY）。試しの画面 http://127.0.0.1:47940/ は動かしたまま（試しの orca-web 8797、sendEnabled 偽）。
+
 ## Verification
 
 - テスト（T-01〜T-04、`test/web/approval-view.test.ts`）：確定の `500 internal_error`・5xx の知らない識別子で partial、送る前の 5xx・4xx は今のとおり、注入した時計で意図と確定の時間切れ（既定 30000・60000 ミリ秒）、時間切れの後に遅れて届いた応答で結果を書き換えない。iss-00054 の今のテストは変えずに通る。
