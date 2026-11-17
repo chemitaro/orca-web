@@ -49,7 +49,7 @@ design: {
 		text: """
 			サーバー：`MAX_ANSWER_BODY_BYTES = 640 * 1024` を置き、`/api/answer/intent`・`/api/answer/confirm`（answering の道）だけ `readBody(req, MAX_ANSWER_BODY_BYTES)` にする。ほかの書き込みの道（`/api/send/*`、`/api/approval/*`）は今の 128KiB のまま。`parseAnswerConfirm` の ticket の長さの確かめは変えない。
 			根拠：問い4つ × その他 64KiB（制御文字は送れないので、JSON の逃がしで増えるのは `"` と `\\` の2倍まで）= 512KiB と、封筒（agent 512 字、callId、prompt、ticket、questionId・optionIds）の余り 128KiB。
-			画面：`buildAnswers` の最後に、`byteLength(JSON.stringify(answers)) > MAX_ANSWERS_JSON_BYTES`（512 * 1024）なら `{ok: false, reason: 'too_large'}` を返す（answerVia によらない。message の 16KB の確かめは今のまま先にある）。カードの今の reason の表示（too_large の言葉）を使う。
+			画面：`buildAnswers` の最後に、`byteLength(JSON.stringify(answers)) > MAX_ANSWERS_JSON_BYTES`（512 * 1024）なら `{ok: false, reason: 'answers_too_large'}` を返す（answerVia によらない。message の 16KB の確かめ（too_large）は今のまま先にある）。`QUESTION_REASONS` に `answers_too_large: '答えが長すぎます（その他の文の合計を短くしてください）'` を足し、カードは今の reason の表示の道でこの言葉を出す（too_large の「引用を含めて 16KB まで」は後の発言だけの言葉のまま）。
 			"""
 		satisfies: ["R-05"]
 	}

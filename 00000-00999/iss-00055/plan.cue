@@ -44,9 +44,9 @@ tests: {
 	"T-05": {title: "buildApprovalCard の confirm が、availability が ok でないか answerable が偽のとき disabled 真で reasonText を持ち、ok のとき disabled 偽。renderApprovalCard が「<ラベル>で答える」を disabled に、「やめる」を押せる形に描く", verifies: ["R-02"]}
 	"T-06": {title: "sendIntentConfirm・createCallAnswerer：確定が 500 internal_error（と知らない識別子の 5xx）で結果不明（承認と構造化 Chat と message は unknown と operationId、keys は partial）、503 record_failed・501 unsupported・409 target_changed で今のとおり refused（keys は callRefusal の形）。意図の 5xx は今のとおり refused", verifies: ["R-03", "F-02"]}
 	"T-07": {title: "注入した時計で、意図の時間切れが refused（network）、確定の時間切れが結果不明（keys は partial）になり、時間切れの後に届いた応答で結果が変わらず、writer.send がそれぞれ1回だけ呼ばれる。keys の確定の時間切れは 300 秒、ほかは 60 秒、意図は 30 秒", verifies: ["R-04", "F-01"]}
-	"T-08": {title: "buildAnswers が、answers の JSON が 512KiB を超える選択（64KiB に近いその他を4つ、`\"` を多く含む）で reason too_large を返し、64KiB のその他を2つ持つ選択では ok", verifies: ["R-05"]}
+	"T-08": {title: "buildAnswers が、answers の JSON が 512KiB を超える選択（64KiB に近いその他を4つ、`\"` を多く含む）で reason answers_too_large を返し（カードがその言葉を出す）、64KiB のその他を2つ持つ選択では ok", verifies: ["R-05"]}
 	"T-09": {title: "agent.css に `.question-foot .orca-open[data-size]` の `--orca-open-height: 44px` があり、open-control.css の大きさの表は変わらない（CSS を読むテスト）", verifies: ["R-08"]}
-	"T-10": {title: "試しの画面で、Mac の幅と 390px、明暗で、カードの「Orca で開く」の高さが 44px 以上で横にはみ出さないこと、確かめの段で sendEnabled を偽にすると「<ラベル>で答える」が押せず理由が出ることを DOM で数え、写す（タスク担当、実機）", verifies: ["R-02", "R-08"]}
+	"T-10": {title: "試しの画面で、Mac の幅と 390px、明暗で、カードの「Orca で開く」の高さが 44px 以上で横にはみ出さないこと、確かめの段で sendEnabled を偽にすると「<ラベル>で答える」が押せず理由が出ることを DOM で数え、写す（タスク担当、実機。承認のカードと確かめの段は、iss-00050 と同じく偽の会話の写し（実装担当の描画の確かめの仕組み）で出してよい。実機で出せないものは記録する）", verifies: ["R-02", "R-08"]}
 }
 
 verification: """
