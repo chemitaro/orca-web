@@ -24,6 +24,18 @@ ID: "iss-00048"
 
 ## Verification
 
+### 実機の確かめ（S-04、2026-11-18、タスク担当）
+
+- 試しの orca-web：`npm run trial -- --state-dir .workbench/trial-48 --orca-port 8794 --page-port 47920 --forbidden-port 47921`（8792・47900 は別の試しが使っていたので避けた）。専用の settings（`.workbench/trial-48/settings.json`）だけで `sendEnabled` を真にし、確かめた後に偽へ戻した。常駐の orca-web（8791）の設定は変えていない。
+- 試しのエージェント（Claude haiku 5.5 / low、構造化 Chat。`orca orchestration worker-start` で起動。`orca agent launch` は Run の外の起動としてフックが止めたため）に、無害な質問（見出し『試し』、問い『試し：好きな色はどれですか？』、選択肢『赤』『青』）を AskUserQuestion で出させた。
+  - 会話の API が `question` の部分（source chat、prompt の itemId と revision 1、問い1つ、選択肢2つと説明、allowOther 真、state pending）を返し、`GET /api/send/status` が `answer: {available: true}` を返した。
+  - `sendEnabled` 偽：カードの問いと選択肢が読め、選択肢3つ（赤・青・その他）と「答える」が押せず、理由『送信が無効です（設定の sendEnabled が偽）』が出た。幅 1280px と 390px、明暗の4通りで、カードのはみ出し 0、文書の横スクロールなし、選択肢と送るボタンの高さ 44px 以上。
+  - `sendEnabled` 真、390px：『青』を押すと「答える」が押せるようになり、押すと「答えました」、約1秒で答え済みの閉じた形（『答え済み 試し：好きな色はどれですか？ 青』）になった。エージェントは worker_done で『受け取った答え：青』と返した。
+  - 送信の記録（試しの `sends/sends.jsonl`）：before の行は `action: answer`、prompt、questionCount、digest などで、選んだ id・ラベルを含まない（『青』と option id の出現 0）。after の行は submitted（code resolved）。
+  - 試しのエージェントは worker-release で閉じた。
+- Codex（GPT-6.1 Sol / low、構造化 Chat）の試し：Codex は Orca の構造化 Chat では質問を `request_user_input_async`（すぐ受付を返し、答えは後の発言で受ける）で出した。この Issue の決めたとおりツールの行のまま（カードにしない）なので、Codex の答えの確かめはできなかった。worker-stop で止めた。引き継ぎは Residual Risks に書く。
+- 写し（Scope の `artifacts/`。カードの範囲だけで、会話のほかの中身は写していない）：`live-view-{1280,390}-{light,dark}.png`（sendEnabled 偽）、`live-answer-390-light.png`・`live-answer-selected-390-light.png`・`live-answer-done-390-light.png`（答える前・選んだ後・答え済み）、`fixture-card-*.png`（画面の実装担当の偽の会話による、複数問・複数選択・その他・長い語・HTML の文字・答え済み・取り消し・端末の未回答と答え済みのカード）。
+
 ## 逸脱と判断
 
 - 逸脱（実装担当の切り替え）：Codex GPT-6.1 Sol / medium の実装担当（dispatch ctx_a4e2e572c73b）が、実行の前に `exec_command` が書き込みの許された根の中の Orca の Application Support の symlink を拒んだため何もできずに止まった（変更なし）。統括の依頼書の補足（『Codex が chat-scratch の symlink の拒否で止まったら、待たずに worker-stop して Claude Opus 5.5 / medium に切り替える』）に従い、worker-stop して Claude Opus 5.5 / medium（dispatch ctx_498915367a33）で S-01〜S-02 を始め直した。
