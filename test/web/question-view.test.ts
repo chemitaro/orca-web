@@ -863,3 +863,242 @@ test('FQG3-3 画面の formatAsyncAnswer はサーバーの formatAsyncAnswer �
   assert.equal(formatAsyncAnswer(questions, answers), serverFormat(questions as Any, answers));
   assert.equal(formatAsyncAnswer(questions, answers), '> 一つ目 続き\n\n甲, 丙, 自由\n\n> 二つ目\n\n答え');
 });
+
+// ---- iss-00055（S-02）：確定の 5xx、時間切れ、長い答え ----
+
+/** 注入する偽の時計。setTimer の呼びを数え、fire で時間切れを起こす。 */
+function fakeClock() {
+  const timers: Array<{ fn: () => void; ms: number; cleared: boolean }> = [];
+  return {
+    timers,
+    setTimer: (fn: () => void, ms: number) => {
+      timers.push({ fn, ms, cleared: false });
+      return timers.length - 1;
+    },
+    clearTimer: (id: number) => {
+      const timer = timers[id];
+      if (timer) timer.cleared = true;
+    },
+    /** まだ止めていない最後の時計を鳴らす。 */
+    fire() {
+      const timer = [...timers].reverse().find((t) => !t.cleared);
+      assert.ok(timer, '鳴らす時計がある');
+      timer.cleared = true;
+      timer.fn();
+    },
+  };
+}
+
+/** 外から決められる応答。 */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+const settle = () => new Promise((r) => setImmediate(r));
+
+test('iss-00055 T-06：構造化 Chat の確定が 500 internal_error や知らない識別子の 5xx なら結果不明、503 record_failed・501 unsupported・409 target_changed は refused', async () => {
+  const run = async (status: number, body: Any) => {
+    const w = fakeWriter([INTENT_OK, { status, body }]);
+    const result = await createChatAnswerer({ agentId: 'a1', writer: w.writer }).submit(chatPart(), ANSWERS);
+    assert.equal(w.calls.length, 2, '送り直さない');
+    return result;
+  };
+  assert.deepEqual(await run(500, { ok: false, error: 'internal_error' }), { kind: 'unknown', operationId: 'op-1' });
+  assert.deepEqual(await run(502, { ok: false, error: 'future_error' }), { kind: 'unknown', operationId: 'op-1' });
+  assert.deepEqual(await run(503, { ok: false, error: 'record_failed' }), {
+    kind: 'refused',
+    reason: QUESTION_REASONS.record_failed,
+  });
+  assert.deepEqual(await run(501, { ok: false, error: 'unsupported' }), {
+    kind: 'refused',
+    reason: QUESTION_REASONS.unsupported,
+  });
+  assert.deepEqual(await run(409, { ok: false, error: 'target_changed' }), {
+    kind: 'refused',
+    reason: QUESTION_REASONS.target_changed,
+  });
+  // 意図の 5xx は今のとおり refused（意図は書き込みの RPC を送らない）
+  const intent = fakeWriter([{ status: 500, body: { ok: false, error: 'internal_error' } }]);
+  assert.equal(
+    (await createChatAnswerer({ agentId: 'a1', writer: intent.writer }).submit(chatPart(), ANSWERS)).kind,
+    'refused',
+  );
+  assert.equal(intent.calls.length, 1);
+});
+
+test('iss-00055 T-06：callId の答えの確定が 500 internal_error なら keys は partial・message は unknown、503 record_failed と 409 target_changed は callRefusal の形', async () => {
+  const run = async (mode: 'keys' | 'message', status: number, body: Any) => {
+    const w = fakeWriter([INTENT_OK, { status, body }]);
+    const answerer = createCallAnswerer({ agentId: 'a1', writer: w.writer, mode });
+    const result = await answerer.submit(mode === 'keys' ? keysPart() : messagePart(), KEY_ANSWERS);
+    assert.equal(w.calls.length, 2, '送り直さない');
+    return result;
+  };
+  const partial = { kind: 'partial', operationId: 'op-1', note: QUESTION_REASONS.unconfirmed };
+  assert.deepEqual(await run('keys', 500, { ok: false, error: 'internal_error' }), partial);
+  assert.deepEqual(await run('keys', 504, { ok: false, error: 'future_error' }), partial);
+  assert.deepEqual(await run('message', 500, { ok: false, error: 'internal_error' }), {
+    kind: 'unknown',
+    operationId: 'op-1',
+  });
+  assert.deepEqual(await run('keys', 503, { ok: false, error: 'record_failed' }), {
+    kind: 'refused',
+    reason: QUESTION_REASONS.record_failed,
+  });
+  assert.deepEqual(await run('message', 501, { ok: false, error: 'unsupported' }), {
+    kind: 'refused',
+    reason: QUESTION_REASONS.unsupported,
+  });
+  assert.deepEqual(await run('keys', 409, { ok: false, error: 'target_changed', reason: 'prompt_mismatch' }), {
+    kind: 'blocked',
+    reason: QUESTION_REASONS.prompt_mismatch,
+  });
+  // 意図の 5xx は今のとおり refused
+  const intent = fakeWriter([{ status: 500, body: { ok: false, error: 'internal_error' } }]);
+  const refused = await createCallAnswerer({ agentId: 'a1', writer: intent.writer, mode: 'keys' }).submit(
+    keysPart(),
+    KEY_ANSWERS,
+  );
+  assert.equal(refused.kind, 'refused');
+  assert.equal(intent.calls.length, 1);
+});
+
+test('iss-00055 T-07：構造化 Chat の意図の時間切れ（30 秒）は refused network、後に届いた応答で変わらず、送りは1回', async () => {
+  const clock = fakeClock();
+  const reply = deferred<Any>();
+  const w = fakeWriter([reply.promise]);
+  const answerer = createChatAnswerer({
+    agentId: 'a1',
+    writer: w.writer,
+    setTimer: clock.setTimer,
+    clearTimer: clock.clearTimer,
+  });
+  const pending = answerer.submit(chatPart(), ANSWERS);
+  await settle();
+  assert.equal(clock.timers[0]?.ms, 30_000);
+  clock.fire();
+  assert.deepEqual(await pending, { kind: 'refused', reason: QUESTION_REASONS.network });
+  reply.resolve(INTENT_OK);
+  await settle();
+  assert.equal(w.calls.length, 1);
+});
+
+test('iss-00055 T-07：構造化 Chat の確定の時間切れ（60 秒）は結果不明、後に届いた応答で変わらず、確定は1回', async () => {
+  const clock = fakeClock();
+  const reply = deferred<Any>();
+  const w = fakeWriter([INTENT_OK, reply.promise]);
+  const answerer = createChatAnswerer({
+    agentId: 'a1',
+    writer: w.writer,
+    setTimer: clock.setTimer,
+    clearTimer: clock.clearTimer,
+  });
+  const pending = answerer.submit(chatPart(), ANSWERS);
+  await settle();
+  assert.equal(clock.timers.length, 2);
+  assert.equal(clock.timers[0]?.cleared, true, '意図が届いたら時計を止める');
+  assert.equal(clock.timers[1]?.ms, 60_000);
+  clock.fire();
+  assert.deepEqual(await pending, { kind: 'unknown', operationId: 'op-1' });
+  reply.resolve({ status: 200, body: { outcome: 'submitted', detail: {} } });
+  await settle();
+  assert.deepEqual(
+    w.calls.map((c) => c.path),
+    ['/api/answer/intent', '/api/answer/confirm'],
+  );
+});
+
+test('iss-00055 T-07：keys の確定の時間切れは 300 秒で partial、message は 60 秒で unknown。意図の時間切れは 30 秒で refused network', async () => {
+  for (const mode of ['keys', 'message'] as const) {
+    const part = mode === 'keys' ? keysPart() : messagePart();
+    const clock = fakeClock();
+    const reply = deferred<Any>();
+    const w = fakeWriter([INTENT_OK, reply.promise]);
+    const answerer = createCallAnswerer({
+      agentId: 'a1',
+      writer: w.writer,
+      mode,
+      setTimer: clock.setTimer,
+      clearTimer: clock.clearTimer,
+    });
+    const pending = answerer.submit(part, KEY_ANSWERS);
+    await settle();
+    assert.equal(clock.timers[0]?.ms, 30_000, `${mode} の意図`);
+    assert.equal(clock.timers[1]?.ms, mode === 'keys' ? 300_000 : 60_000, `${mode} の確定`);
+    clock.fire();
+    assert.deepEqual(
+      await pending,
+      mode === 'keys'
+        ? { kind: 'partial', operationId: 'op-1', note: QUESTION_REASONS.unconfirmed }
+        : { kind: 'unknown', operationId: 'op-1' },
+    );
+    reply.resolve({ status: 200, body: { outcome: 'input_accepted', detail: {} } });
+    await settle();
+    assert.equal(w.calls.length, 2, `${mode} は確定を1回だけ送る`);
+
+    const intentClock = fakeClock();
+    const intentReply = deferred<Any>();
+    const iw = fakeWriter([intentReply.promise]);
+    const slow = createCallAnswerer({
+      agentId: 'a1',
+      writer: iw.writer,
+      mode,
+      setTimer: intentClock.setTimer,
+      clearTimer: intentClock.clearTimer,
+    });
+    const waiting = slow.submit(part, KEY_ANSWERS);
+    await settle();
+    intentClock.fire();
+    assert.deepEqual(await waiting, { kind: 'refused', reason: QUESTION_REASONS.network });
+    intentReply.resolve(INTENT_OK);
+    await settle();
+    assert.equal(iw.calls.length, 1, `${mode} の意図の後に確定を送らない`);
+  }
+});
+
+test('iss-00055 T-07：timeouts で時間切れの長さを変えられる', async () => {
+  const clock = fakeClock();
+  const w = fakeWriter([deferred<Any>().promise]);
+  const answerer = createCallAnswerer({
+    agentId: 'a1',
+    writer: w.writer,
+    mode: 'keys',
+    timeouts: { intentMs: 5, confirmMs: 7 },
+    setTimer: clock.setTimer,
+    clearTimer: clock.clearTimer,
+  });
+  const pending = answerer.submit(keysPart(), KEY_ANSWERS);
+  await settle();
+  assert.equal(clock.timers[0]?.ms, 5);
+  clock.fire();
+  assert.equal((await pending).kind, 'refused');
+});
+
+test('iss-00055 T-08：buildAnswers は answers の JSON が 512KiB を超えると answers_too_large で、カードがその言葉を出す。64KiB のその他2つは ok', () => {
+  assert.equal(QUESTION_REASONS.answers_too_large, '答えが長すぎます（その他の文の合計を短くしてください）');
+  const questions = ['q1', 'q2', 'q3', 'q4'].map((id) => question({ id, allowOther: true }));
+  const part = chatPart(questions);
+  // `"` は JSON で `\"` の2バイトになるので、64KiB 近い文4つで 512KiB を超える
+  const quoted = '"'.repeat(64 * 1024 - 16);
+  const big = questions.map(() => ({ optionIds: [], other: quoted }));
+  assert.deepEqual(buildAnswers(part, big), { ok: false, reason: 'answers_too_large' });
+  const card = buildQuestionCard(part, { key: 'k', availability: OK, selection: big });
+  assert.equal(card.hint, QUESTION_REASONS.answers_too_large);
+  assert.equal(card.button.disabled, true);
+  // keys の部分でも同じ（answerVia によらない）
+  const keysBig = keysPart({ questions: questions.map((q, i) => ({ ...q, id: String(i) })) });
+  assert.deepEqual(buildAnswers(keysBig, big), { ok: false, reason: 'answers_too_large' });
+  // 64KiB のその他を2つ持つ選択は送れる
+  const two = chatPart([question({ id: 'q1', allowOther: true }), question({ id: 'q2', allowOther: true })]);
+  const fits = buildAnswers(two, [
+    { optionIds: [], other: 'x'.repeat(64 * 1024) },
+    { optionIds: [], other: 'y'.repeat(64 * 1024) },
+  ]);
+  assert.equal(fits.ok, true);
+  // 後の発言の 16KB の言葉は別のまま
+  assert.equal(QUESTION_REASONS.too_large, '答えが長すぎます（引用を含めて 16KB まで）');
+});

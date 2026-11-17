@@ -59,6 +59,7 @@ export const QUESTION_REASONS = {
   keys_sent: '答えを送りました。エージェントの返事を待っています',
   control_character: 'その他の文は1行で、制御文字を含めないでください',
   too_large: '答えが長すぎます（引用を含めて 16KB まで）',
+  answers_too_large: '答えが長すぎます（その他の文の合計を短くしてください）',
   permission: 'エージェントが権限の確認を待っています',
 };
 
@@ -75,6 +76,9 @@ const isText = (v) => typeof v === 'string' && v.length > 0;
 
 /** Orca の AGENT_SESSION_QUESTION_ANSWER_MAX_BYTES と同じ。 */
 const MAX_OTHER_BYTES = 64 * 1024;
+
+/** 送る answers の JSON の上限（iss-00055 D-04）。答えの口の本文の上限 640KiB から封筒の分 128KiB を引いた値。 */
+const MAX_ANSWERS_JSON_BYTES = 512 * 1024;
 
 const questionsOf = (part) => (isRecord(part) && Array.isArray(part.questions) ? part.questions : []);
 
@@ -153,7 +157,8 @@ const byteLength = (text) => new TextEncoder().encode(text).length;
  * その他は allowOther の問いで、選んでいて空を許すか空白でない文のときだけ数える、単一はちょうど1つ、複数は1つ以上）。
  * answerVia keys の部分は、その他の文に Tab・改行などの制御文字があれば reason control_character で送らない（サーバーの planKeys と同じ）。
  * answerVia message の部分は、formatAsyncAnswer の文が 16,384 バイトを超えれば reason too_large で送らない。
- * @returns {{ ok: true, answers: { questionId: string, optionIds: string[], other?: string }[] } | { ok: false, reason?: 'control_character' | 'too_large' }}
+ * answers の JSON が答えの口に入らない（512KiB を超える）ときは、answerVia によらず reason answers_too_large で送らない。
+ * @returns {{ ok: true, answers: { questionId: string, optionIds: string[], other?: string }[] } | { ok: false, reason?: 'control_character' | 'too_large' | 'answers_too_large' }}
  */
 export function buildAnswers(part, selection) {
   const questions = questionsOf(part);
@@ -180,6 +185,7 @@ export function buildAnswers(part, selection) {
   // 後の発言で答える質問は、引用を含めた発言の文が今の送信の本文の上限（サーバーの checkText）を超えれば送れない。
   if (part.answerVia === 'message' && byteLength(formatAsyncAnswer(questions, answers)) > MAX_MESSAGE_BYTES)
     return { ok: false, reason: 'too_large' };
+  if (byteLength(JSON.stringify(answers)) > MAX_ANSWERS_JSON_BYTES) return { ok: false, reason: 'answers_too_large' };
   return { ok: true, answers };
 }
 
@@ -425,6 +431,55 @@ function outcomeResult(body, operationId, table) {
   return { kind: 'unknown', operationId };
 }
 
+/** サーバーの SEND_ERROR_STATUS の 5xx の識別子のうち、サービスが送る前にだけ返すもの（iss-00055 D-03）。 */
+const PRE_SEND_5XX = new Set(['unsupported', 'unknown_shape', 'unreachable', 'record_failed', 'record_unreadable']);
+
+/**
+ * 確定の応答の ok: false を送る前の拒みと読むか。5xx は送る前の識別子のときだけで、ほか（internal_error や知らない識別子）は
+ * 送った後にも起きうるので偽（呼び手は結果不明にする）。
+ */
+function confirmRefused(res) {
+  const body = isRecord(res?.body) ? res.body : {};
+  if (body.ok !== false || !isText(body.error)) return false;
+  return res.status < 500 || PRE_SEND_5XX.has(body.error);
+}
+
+/** 時間切れの既定（送る欄と同じ意図 30 秒・確定 60 秒。端末のキーの組の確定は 5 分）。 */
+const INTENT_TIMEOUT_MS = 30 * 1000;
+const CONFIRM_TIMEOUT_MS = 60 * 1000;
+const KEYS_CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * 注入できる時計と時間切れの長さ。
+ * @param {{ timeouts?: { intentMs?: number, confirmMs?: number }, setTimer?: (fn: () => void, ms: number) => unknown,
+ *   clearTimer?: (id: any) => void }} deps
+ */
+function timing(deps, confirmDefault = CONFIRM_TIMEOUT_MS) {
+  return {
+    intentMs: deps.timeouts?.intentMs ?? INTENT_TIMEOUT_MS,
+    confirmMs: deps.timeouts?.confirmMs ?? confirmDefault,
+    setTimer: deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms)),
+    clearTimer: deps.clearTimer ?? ((id) => clearTimeout(id)),
+  };
+}
+
+/** 時間切れつきで待つ（送る欄と同じ形）。時間切れは投げ、届いた方で時計を止める。後に届いた応答は捨てられる。 */
+function withTimeout(promise, ms, clock) {
+  return new Promise((resolve, reject) => {
+    const timer = clock.setTimer(() => reject(new Error('timeout')), ms);
+    Promise.resolve(promise).then(
+      (value) => {
+        clock.clearTimer(timer);
+        resolve(value);
+      },
+      (error) => {
+        clock.clearTimer(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 /** 同じオリジンで JSON を読む既定の口。 */
 export async function readSameOrigin(url) {
   const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
@@ -433,19 +488,23 @@ export async function readSameOrigin(url) {
 
 /**
  * 意図と確定を続けて1回ずつ送る（質問と承認が共有する手順）。確定の応答を失えば結果不明にし、送り直さない。
+ * 意図は 30 秒、確定は 60 秒で時間切れ（timeouts で変えられる）。意図の時間切れは送っていない、確定の時間切れは結果不明。
  * @param {{
  *   writer: { send: (path: string, method: 'POST', body: unknown) => Promise<{ status: number, body: any }> },
  *   reasons: Record<string, string>,
  *   intentPath: string, intentBody: unknown,
  *   confirmPath: string, confirmBody: (ticket: string) => unknown,
+ *   timeouts?: { intentMs?: number, confirmMs?: number },
+ *   setTimer?: (fn: () => void, ms: number) => unknown, clearTimer?: (id: any) => void,
  * }} step
  * @returns {Promise<FlowResult>}
  */
 export async function sendIntentConfirm(step) {
   const table = step.reasons;
+  const clock = timing(step);
   let intent;
   try {
-    intent = await step.writer.send(step.intentPath, 'POST', step.intentBody);
+    intent = await withTimeout(step.writer.send(step.intentPath, 'POST', step.intentBody), clock.intentMs, clock);
   } catch {
     return { kind: 'refused', reason: table.network };
   }
@@ -455,14 +514,18 @@ export async function sendIntentConfirm(step) {
   const operationId = body.operationId;
   let confirm;
   try {
-    confirm = await step.writer.send(step.confirmPath, 'POST', step.confirmBody(body.ticket));
+    confirm = await withTimeout(
+      step.writer.send(step.confirmPath, 'POST', step.confirmBody(body.ticket)),
+      clock.confirmMs,
+      clock,
+    );
   } catch {
     return { kind: 'unknown', operationId };
   }
   const result = isRecord(confirm?.body) ? confirm.body : {};
   if (confirm?.status === 200 && typeof result.outcome === 'string') return outcomeResult(result, operationId, table);
-  // 送る前の拒み（ok: false と error）は送っていない。ほかの形は届いたか分からない。
-  if (result.ok === false && isText(result.error)) return { kind: 'refused', reason: refusalReason(result, table) };
+  // 送る前の拒み（confirmRefused）は送っていない。ほかの形（5xx の知らない誤りを含む）は届いたか分からない。
+  if (confirmRefused(confirm)) return { kind: 'refused', reason: refusalReason(result, table) };
   return { kind: 'unknown', operationId };
 }
 
@@ -508,6 +571,8 @@ export async function checkOperation(read, operationId, table) {
  *   agentId: string,
  *   writer: { send: (path: string, method: 'POST', body: unknown) => Promise<{ status: number, body: any }> },
  *   read?: (url: string) => Promise<{ status: number, body: any }>,
+ *   timeouts?: { intentMs?: number, confirmMs?: number },
+ *   setTimer?: (fn: () => void, ms: number) => unknown, clearTimer?: (id: any) => void,
  * }} deps
  */
 export function createChatAnswerer(deps) {
@@ -536,6 +601,9 @@ export function createChatAnswerer(deps) {
         intentBody: { agent: deps.agentId, prompt: { itemId: prompt.itemId, revision: prompt.revision }, answers },
         confirmPath: '/api/answer/confirm',
         confirmBody: (ticket) => ({ ticket, answers }),
+        timeouts: deps.timeouts,
+        setTimer: deps.setTimer,
+        clearTimer: deps.clearTimer,
       });
     },
     check: (operationId) => checkOperation(read, operationId, QUESTION_REASONS),
@@ -574,11 +642,15 @@ function keysUnsupported(part, agentType) {
  *   writer: { send: (path: string, method: 'POST', body: unknown) => Promise<{ status: number, body: any }> },
  *   read?: (url: string) => Promise<{ status: number, body: any }>,
  *   mode: 'keys' | 'message',
+ *   timeouts?: { intentMs?: number, confirmMs?: number },
+ *   setTimer?: (fn: () => void, ms: number) => unknown, clearTimer?: (id: any) => void,
  * }} deps
  */
 export function createCallAnswerer(deps) {
   const read = deps.read ?? readSameOrigin;
   const keys = deps.mode === 'keys';
+  // キーの組の確定は組の間を1秒ずつ空けて組ごとに読み直すので、時間切れを 5 分にする（iss-00055 D-03）。
+  const clock = timing(deps, keys ? KEYS_CONFIRM_TIMEOUT_MS : CONFIRM_TIMEOUT_MS);
   const cannot = (reason) => (keys ? { ok: false, reason, open: true } : { ok: false, reason });
   const partial = (operationId, sentGroups) => ({
     kind: 'partial',
@@ -610,11 +682,11 @@ export function createCallAnswerer(deps) {
       if (!isText(part?.callId)) return { kind: 'refused', reason: QUESTION_REASONS.unknown_shape };
       let intent;
       try {
-        intent = await deps.writer.send('/api/answer/intent', 'POST', {
-          agent: deps.agentId,
-          callId: part.callId,
-          answers,
-        });
+        intent = await withTimeout(
+          deps.writer.send('/api/answer/intent', 'POST', { agent: deps.agentId, callId: part.callId, answers }),
+          clock.intentMs,
+          clock,
+        );
       } catch {
         return { kind: 'refused', reason: QUESTION_REASONS.network };
       }
@@ -623,7 +695,11 @@ export function createCallAnswerer(deps) {
       const operationId = body.operationId;
       let confirm;
       try {
-        confirm = await deps.writer.send('/api/answer/confirm', 'POST', { ticket: body.ticket, answers });
+        confirm = await withTimeout(
+          deps.writer.send('/api/answer/confirm', 'POST', { ticket: body.ticket, answers }),
+          clock.confirmMs,
+          clock,
+        );
       } catch {
         return lost(operationId);
       }
@@ -635,8 +711,8 @@ export function createCallAnswerer(deps) {
         if (result.outcome === 'refused') return { kind: 'blocked', reason: CALL_REFUSED_REASON };
         return lost(operationId, result.detail);
       }
-      // 送る前の拒み（ok: false と error）は送っていない。ほかの形は届いたか分からない。
-      if (result.ok === false && isText(result.error)) return callRefusal(result);
+      // 送る前の拒み（confirmRefused）は送っていない。ほかの形（5xx の知らない誤りを含む）は届いたか分からない。
+      if (confirmRefused(confirm)) return callRefusal(result);
       return lost(operationId);
     },
     check: (operationId) => checkOperation(read, operationId, QUESTION_REASONS),
