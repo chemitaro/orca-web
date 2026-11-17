@@ -225,6 +225,7 @@ export function capabilities(options: { connected?: boolean; readTranscript?: bo
       sendChat: feature(false),
       answerChat: feature(false),
       answerKeys: feature(false),
+      answerApproval: feature(false),
     },
   };
 }

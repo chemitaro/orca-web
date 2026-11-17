@@ -308,3 +308,61 @@ test('iss-00049 T-17：帯の規則は var(--ds-…, 既定) の角丸と --chat
   const declined = only('.question-card[data-state="declined"] .question-badge', (m) => m === null);
   assert.match(declined.get('color') ?? '', /^var\(--chat-/);
 });
+
+// 承認のカード（iss-00050 T-15、R-07、D-06）。枠と選択肢は質問のカードの規則を使い、差分の規則は --chat-* と var(--ds-…, 既定) を通す。
+const approvalRules = rules.filter((r) => /\.approval-/.test(r.selector));
+/** 改行で並べた選択子も、空白を1つにして比べる。 */
+const rule = (selector: string) =>
+  only(
+    selector,
+    (m) => m === null,
+    rules.map((r) => ({ ...r, selector: r.selector.replace(/\s+/g, ' ') })),
+  );
+
+test('T-15：承認のカードの規則の色は --chat-* を通し、角丸と等幅の字は var(--ds-…, 既定) を使う', () => {
+  assert.ok(approvalRules.length >= 6, `承認の規則がある（${approvalRules.length}）`);
+  const root = only(':root', (m) => m === null);
+  for (const rule of approvalRules) {
+    for (const [prop, value] of declarations(rule.body)) {
+      if (/color|background|border/.test(prop))
+        assert.doesNotMatch(value, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i, `${rule.selector} の ${prop}`);
+      for (const hit of value.matchAll(/var\((--[a-z0-9-]+)(,?)/g)) {
+        const name = hit[1] ?? '';
+        if (name.startsWith('--chat-')) assert.match(root.get(name) ?? '', /^var\(--(ds|sd)-/, name);
+        else {
+          assert.match(name, /^--ds-/, `直に読む変数は --ds-*：${name}`);
+          assert.equal(hit[2], ',', `${name} は既定の値を持つ`);
+        }
+      }
+    }
+  }
+  const detail = rule('.approval-detail, .approval-plan-text');
+  assert.equal(detail.get('border-radius'), 'var(--ds-radius-s, 4px)');
+  assert.match(
+    rule('.approval-mono, .approval-detail, .approval-plan-text').get('font-family') ?? '',
+    /^var\(--ds-font-mono,/,
+  );
+  assert.equal(rule('.approval-confirm').get('border-radius'), 'var(--ds-radius, 6px)');
+});
+
+test('T-15：detail と計画の塊は折り返し、長ければ枠の中で送られ、横にはみ出さない', () => {
+  const detail = rule('.approval-detail, .approval-plan-text');
+  assert.equal(detail.get('white-space'), 'pre-wrap');
+  assert.equal(detail.get('overflow-wrap'), 'anywhere');
+  assert.equal(detail.get('max-width'), '100%');
+  assert.equal(detail.get('overflow'), 'auto');
+  assert.ok(detail.get('max-height'));
+  assert.equal(rule('.approval-more[open] + .approval-detail-preview').get('display'), 'none');
+  assert.equal(rule('li.row.approval').get('align-items'), 'stretch');
+  for (const selector of ['.approval-context', '.approval-plan', '.approval-confirm', '.approval-title'])
+    assert.equal(rule(selector).get('min-width'), '0', selector);
+});
+
+test('T-15：確かめの段のボタンは min-height が 44px 以上で折り返し、承認の規則は 390px 以下で隠さない', () => {
+  const buttons = rule('.approval-confirm-yes, .approval-confirm-no');
+  assert.ok(Number.parseInt(buttons.get('min-height') ?? '0', 10) >= 44, `min-height: ${buttons.get('min-height')}`);
+  assert.equal(buttons.get('white-space'), 'normal');
+  assert.equal(buttons.get('min-width'), '0');
+  for (const rule of rules.filter((r) => r.media && /max-width:\s*390px/.test(r.media)))
+    assert.doesNotMatch(rule.selector, /approval/, rule.selector);
+});

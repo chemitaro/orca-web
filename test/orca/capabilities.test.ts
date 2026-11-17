@@ -76,6 +76,7 @@ test('揃った録画から、機能ごとの期待する結果を返す', async
     sendChat: false,
     answerChat: false,
     answerKeys: true,
+    answerApproval: false,
   });
   assert.deepEqual(report.features.openExistingTab.deferred, ['rpc:session.tabs.activate', 'rpc:worktree.activate']);
   assert.deepEqual(report.features.openExistingTab.missing, []);
@@ -369,4 +370,34 @@ test('iss-00049 キーの組の答えは runtime の ID の一致と、タブと
   assert.deepEqual(noTranscript.features.answerKeys.missing, ['feature:readTranscript']);
   const { report: inconsistent } = await probe(undefined, undefined, 'other-runtime');
   assert.ok(inconsistent.features.answerKeys.missing.includes('runtime-id:consistent'));
+});
+
+test('承認の答えの機能は structured の capability と読む機能を要し、question-answers は要らず、答える RPC は確かめない', async () => {
+  const cliWith = (capabilities: string[]) =>
+    editCli((argv0, doc) => {
+      if (argv0 === 'status') ((doc.result as Json).runtime as Json).capabilities = capabilities;
+    });
+  const { report, rpc } = await probe(cliWith(['agent-session.structured.v1']));
+  assert.ok(report.features.answerApproval.available);
+  assert.equal(report.features.answerChat.available, false);
+  assert.deepEqual(report.features.answerApproval.deferred, ['rpc:agentSession.respondToApproval']);
+  assert.deepEqual(rpc.calls.map((c) => c.method).sort(), ['nativeChat.readSession', 'session.tabs.listAll']);
+  const { report: none } = await probe(cliWith([]));
+  assert.deepEqual(none.features.answerApproval.missing, ['capability:agent-session.structured.v1']);
+  const { report: noTabs } = await probe(
+    cliWith(['agent-session.structured.v1']),
+    editRpc((method, frame) => {
+      if (method === 'session.tabs.listAll') frame.result = { wrong: [] };
+    }),
+  );
+  assert.ok(noTabs.features.answerApproval.missing.includes('feature:readTabs'));
+  const { report: noTranscript } = await probe(
+    cliWith(['agent-session.structured.v1']),
+    editRpc((method, frame) => {
+      if (method === 'nativeChat.readSession') frame.error = { code: 'method_not_found' };
+    }),
+  );
+  assert.ok(noTranscript.features.answerApproval.missing.includes('feature:readTranscript'));
+  const { report: inconsistent } = await probe(cliWith(['agent-session.structured.v1']), undefined, 'other-runtime');
+  assert.ok(inconsistent.features.answerApproval.missing.includes('runtime-id:consistent'));
 });

@@ -2,6 +2,8 @@
 // document を受けるので、テストは小さな偽の document で確かめる。
 import { appIcon, LINK_ICONS, renderAgentMarks } from './agent-marks.js';
 import { detailMarkWorktree, MISSING_LABELS } from './agent-view.js';
+import { renderApprovalCard } from './approval-dom.js';
+import { buildApprovalCard } from './approval-view.js';
 import { formatElapsed } from './elapsed.js';
 import { renderQuestionCard } from './question-dom.js';
 import { buildQuestionCard } from './question-view.js';
@@ -62,6 +64,8 @@ export function renderDetail(doc, detail) {
  * 会話の1行。open は開いていた折り畳みの key の集合。
  * 質問の行は question-dom.js に任せる。options.question は行からカードの描く物を作る関数（選択・流れ・送れるかを持つ呼び手が渡す。
  * 渡さなければ読むだけの形）、options.onOpenControl はカードが「Orca で開く」の部品を作ったときに呼ぶ。
+ * 承認の行は approval-dom.js に任せる。options.approval は question と同じく、行からカードの描く物を作る関数。
+ * 承認の「詳しく」の開け閉めは open の `<key>:detail` で持つ。
  */
 export function renderChatRow(doc, row, options = {}) {
   const now = options.now ?? Date.now();
@@ -83,6 +87,11 @@ export function renderChatRow(doc, row, options = {}) {
       ? options.question(row)
       : buildQuestionCard(row.part, { key: row.key, answerText: row.answerText });
     const card = renderQuestionCard(doc, view, { open: open.has(row.key) });
+    item.append(card.root);
+    if (card.openControl) options.onOpenControl?.(row, card.openControl);
+  } else if (row.kind === 'approval') {
+    const view = options.approval ? options.approval(row) : buildApprovalCard(row.part, { key: row.key });
+    const card = renderApprovalCard(doc, view, { open: open.has(row.key), detailOpen: open.has(`${row.key}:detail`) });
     item.append(card.root);
     if (card.openControl) options.onOpenControl?.(row, card.openControl);
   } else {

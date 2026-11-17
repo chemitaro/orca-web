@@ -37,6 +37,7 @@ export function report(
       sendChat: feature(false),
       answerChat: feature(false),
       answerKeys: feature(false),
+      answerApproval: feature(false),
     },
   };
 }

@@ -159,7 +159,7 @@ const unsupportedText = (what) => `表示できない（${UNSUPPORTED_LABELS[wha
  * 正規化した件から、描く行を作る。
  * 行：{ kind: 'bubble', key, role, at, text, truncated } | { kind: 'tool', key, at, name, input, output, isError, truncated }
  *    | { kind: 'unsupported', key, role, at, text } | { kind: 'notice', key, at, text }
- *    | { kind: 'question', key, at, part, answerText }
+ *    | { kind: 'question', key, at, part, answerText } | { kind: 'approval', key, at, part }
  * ツールの結果は、同じ callId の呼び出しの行に入れる（なければ単独の行）。
  * キーの組で答える質問（answerVia keys。answerVia のない古い物は source terminal）は、同じ callId のツールの結果を答えとして結びつけ、
  * part の state を answered（結果が isError なら答えずに閉じた declined）に、answerText を結果の文にする
@@ -252,6 +252,9 @@ export function buildChat(messages) {
           }
         }
         rows.push(row);
+      } else if (part.type === 'approval') {
+        // 承認はツールの結果と結びつけない（iss-00050 D-06）。
+        rows.push({ kind: 'approval', key, at: m.at, part });
       } else if (part.type === 'tool-result') {
         const question = part.callId ? questionsByCall.get(part.callId) : undefined;
         if (question && question.answerText === null) {

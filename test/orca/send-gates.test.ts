@@ -325,3 +325,70 @@ test('T-06 キーの組：決めていない ESC の列、制御文字を含む�
   // 今の agentPrompt の形は変わらない
   assert.ok((await rpc.call('terminal.send', terminal(), options)).ok);
 });
+
+// ---- 承認の答え（iss-00050 D-03、T-04） ----
+
+const approval = () => ({
+  envelope: {
+    sessionId: 'session-test',
+    clientOperationId: operationId,
+    expectedRuntimeFence: 2,
+    payloadFingerprint: 'c'.repeat(64),
+  },
+  itemId: 'item-test',
+  expectedRevision: 3,
+  optionId: 'allow',
+});
+
+test('T-04 構造化 Chat の承認へは、決めた形の agentSession.respondToApproval だけを通す', async () => {
+  const { rpc, calls } = setup();
+  const params = approval();
+  assert.ok((await rpc.call('agentSession.respondToApproval', params, { timeoutMs: 15000 })).ok);
+  assert.ok((await rpc.call('agentSession.respondToApproval', { ...approval(), optionId: 'o'.repeat(1024) })).ok);
+  assert.deepEqual(calls[0], { method: 'agentSession.respondToApproval', params, options: { timeoutMs: 15000 } });
+  assert.equal(calls.length, 2);
+});
+
+test('T-04 承認の余分な鍵・answers・空や 1025 字以上の optionId・形の違う封筒・正でない revision を送らずに拒む', async () => {
+  const { rpc, calls } = setup();
+  const invalid: unknown[] = [null, {}, [], { ...approval(), extra: true }, { ...approval(), answers: [] }];
+  for (const key of ['envelope', 'itemId', 'expectedRevision', 'optionId']) {
+    const p: Record<string, unknown> = approval();
+    delete p[key];
+    invalid.push(p);
+  }
+  const { optionId: _optionId, ...withoutOption } = approval();
+  invalid.push({ ...withoutOption, answers: [{ questionId: 'q', optionIds: ['a'] }] });
+  for (const patch of [
+    { itemId: '' },
+    { itemId: 3 },
+    { expectedRevision: 0 },
+    { expectedRevision: -1 },
+    { expectedRevision: 1.5 },
+    { expectedRevision: '3' },
+    { optionId: '' },
+    { optionId: 'o'.repeat(1025) },
+    { optionId: 1 },
+    { optionId: ['allow'] },
+  ])
+    invalid.push({ ...approval(), ...patch });
+  for (const patch of [
+    { sessionId: '' },
+    { clientOperationId: 'bad' },
+    { expectedRuntimeFence: 0 },
+    { payloadFingerprint: 'bad' },
+    { extra: true },
+  ]) {
+    invalid.push({ ...approval(), envelope: { ...approval().envelope, ...patch } });
+  }
+  for (const params of invalid)
+    await assert.rejects(rpc.call('agentSession.respondToApproval', params), JSON.stringify(params)?.slice(0, 80));
+  // 承認の形を質問の口に送らない。取り消しは通さない
+  await assert.rejects(rpc.call('agentSession.respondToQuestion', approval()));
+  await assert.rejects(rpc.call('agentSession.cancel', approval()));
+  assert.equal(calls.length, 0);
+  // 今の terminal.send・agentSession.send・respondToQuestion の門は変わらない
+  assert.ok((await rpc.call('terminal.send', terminal(), options)).ok);
+  assert.ok((await rpc.call('agentSession.send', chat())).ok);
+  assert.ok((await rpc.call('agentSession.respondToQuestion', answer())).ok);
+});

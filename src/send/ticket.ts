@@ -1,6 +1,6 @@
 // 本文の検査と、確認から確定までの短期の票。
 import { createHash, randomBytes } from 'node:crypto';
-import type { QuestionView } from '../transcript/normalize.ts';
+import type { ApprovalIntent, QuestionView } from '../transcript/normalize.ts';
 import type { SendTarget } from './model.ts';
 export type TextCheck =
   | { ok: true }
@@ -37,6 +37,8 @@ export interface TicketInput {
   /** callId で指す答えの票だけが持つ。keys は端末のキーの組、message は後の発言。キーの列や文は持たず、確定で作り直す。 */
   call?: { callId: string; mode: 'keys' | 'message' };
   questions?: QuestionView[];
+  /** 承認の答えの票だけが持つ。答える承認の位置と、意図で確かめた選択肢とその intent。 */
+  approval?: { itemId: string; revision: number; optionId: string; intent: ApprovalIntent | null };
 }
 export interface SendTicket extends TicketInput {
   expiresAt: number;
@@ -65,6 +67,7 @@ export class TicketStore {
       ...(input.prompt ? { prompt: { ...input.prompt } } : {}),
       ...(input.call ? { call: { ...input.call } } : {}),
       ...(input.questions ? { questions: structuredClone(input.questions) } : {}),
+      ...(input.approval ? { approval: { ...input.approval } } : {}),
       expiresAt,
     });
     if (this.#tickets.size > 32) {

@@ -269,3 +269,102 @@ test('続きがある journal のページに有効な oldest cursor がなけ�
     assert.deepEqual(await r.read(await target(r, CHAT_TAB), { limit: 40 }), { ok: false, error: 'unknown_shape' });
   }
 });
+
+// ---- 端末の待っている許可の確認の添え（iss-00050 D-02、T-02） ----
+
+function waitingInventory(status: Record<string, unknown>) {
+  const inv = tabsInventory();
+  const tab = inv.snapshots[0]?.tabs[0] as { agentStatus: Record<string, unknown> };
+  tab.agentStatus = { ...tab.agentStatus, ...status };
+  return inv;
+}
+const APPROVAL_PROMPT = JSON.stringify({ approval: { tool: 'Bash', summary: 'ls' } });
+
+test('T-02 nativeChat の最新のページは、タブの agentStatus の state・interactivePrompt・stateStartedAt の3つだけを添える', async () => {
+  const rpc = fakeOrca();
+  rpc.handlers['session.tabs.listAll'] = () =>
+    ok(
+      waitingInventory({
+        state: 'blocked',
+        interactivePrompt: APPROVAL_PROMPT,
+        stateStartedAt: 123,
+        prompt: '仮の私的な指示',
+        lastAssistantMessage: '仮の最後の一言',
+      }),
+    );
+  let now = 0;
+  const r = createTranscriptReader({
+    rpc: new ReadOnlyRpc(rpc),
+    capabilities: async () => capabilities(),
+    now: () => now,
+  });
+  const t = await target(r, PANE_CLAUDE);
+  now += 5_000;
+  const read = await r.read(t, { limit: 40 });
+  assert.ok(read.ok);
+  assert.deepEqual(read.page.terminalPrompt, {
+    state: 'blocked',
+    interactivePrompt: APPROVAL_PROMPT,
+    stateStartedAt: 123,
+  });
+  assert.equal(rpc.calls.at(-1)?.method, 'nativeChat.readSession', '一覧を先に読み、記録を後に読む');
+});
+
+test('T-02 古いページ・agentSession は一覧を読まず添えない。タブがない・一覧が読めないときは null で会話は読める', async () => {
+  let now = 0;
+  const rpc = fakeOrca();
+  const r = createTranscriptReader({
+    rpc: new ReadOnlyRpc(rpc),
+    capabilities: async () => capabilities(),
+    now: () => now,
+  });
+  const native = await target(r, PANE_CLAUDE);
+  const chat = await target(r, CHAT_TAB);
+  now += 5_000;
+  const listAllCount = () => rpc.calls.filter((c) => c.method === 'session.tabs.listAll').length;
+  const before = listAllCount();
+  const older = await r.read(native, { limit: 40, before: { offset: 1200 } });
+  assert.ok(older.ok);
+  assert.equal(older.page.terminalPrompt, undefined);
+  const journal = await r.read(chat, { limit: 40 });
+  assert.ok(journal.ok);
+  assert.equal(journal.page.terminalPrompt, undefined);
+  assert.equal(listAllCount(), before);
+
+  rpc.handlers['session.tabs.listAll'] = () => ok({ snapshots: [{ tabs: [] }] });
+  const gone = await r.read(native, { limit: 40 });
+  assert.ok(gone.ok);
+  assert.equal(gone.page.terminalPrompt, null);
+  now += 5_000;
+  rpc.handlers['session.tabs.listAll'] = () => ({ ok: false, kind: 'unavailable', message: 'x' });
+  const unreachable = await r.read(native, { limit: 40 });
+  assert.ok(unreachable.ok);
+  assert.equal(unreachable.page.terminalPrompt, null);
+  now += 5_000;
+  rpc.handlers['session.tabs.listAll'] = () => ok({ snapshots: 'x' });
+  const odd = await r.read(native, { limit: 40 });
+  assert.ok(odd.ok);
+  assert.equal(odd.page.terminalPrompt, null);
+});
+
+test('T-02 agentStatus のないタブは3つの値を undefined にせず null を添える', async () => {
+  const rpc = fakeOrca();
+  rpc.handlers['session.tabs.listAll'] = () => {
+    const inv = tabsInventory();
+    const tab = inv.snapshots[0]?.tabs[0] as { agentStatus?: unknown };
+    delete tab.agentStatus;
+    return ok(inv);
+  };
+  const r = reader(rpc).reader;
+  const t: TranscriptTarget = {
+    agentId: PANE_CLAUDE,
+    source: 'nativeChat',
+    agentType: 'claude',
+    sessionId: SESSION_CLAUDE,
+    transcriptPath: null,
+    key: sessionKey(PANE_CLAUDE, 'nativeChat', 'claude', SESSION_CLAUDE),
+  };
+  const read = await r.read(t, { limit: 40 });
+  assert.ok(read.ok);
+  assert.equal(read.page.terminalPrompt, null);
+});

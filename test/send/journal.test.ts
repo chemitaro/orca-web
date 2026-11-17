@@ -410,6 +410,45 @@ test('T-10 keys と message の答えの before は mode・callId・questionCoun
   }
 });
 
+test('T-09 承認の before は text と選択肢を持たずに読め、prompt・intent が欠けたか知らない値の行は捨てる', async (t) => {
+  const dir = await directory(t);
+  const { chatTarget } = await import('./fixture.ts');
+  const journal = new SendJournal(dir);
+  const approval = {
+    operationId: 'approval-op',
+    action: 'approval' as const,
+    route: 'chat' as const,
+    target: { ...chatTarget(), repoName: null, worktreePath: null, branch: null, title: null },
+    prompt: { itemId: 'item', revision: 2 },
+    intent: 'allow_always' as const,
+    digest: 'd'.repeat(64),
+    generation: { runtimeId: 'runtime-test' },
+  };
+  await journal.appendBefore(approval);
+  const record = await new SendJournal(dir).read('approval-op');
+  assert.equal(record?.before?.action, 'approval');
+  assert.deepEqual(record?.before && 'prompt' in record.before ? record.before.prompt : null, approval.prompt);
+  assert.equal(record?.outcome, 'unknown');
+  const row = JSON.parse((await readFile(path.join(dir, 'sends.jsonl'), 'utf8')).trim());
+  assert.equal('text' in row, false);
+  assert.equal('optionId' in row, false);
+  await journal.appendBefore({ ...approval, operationId: 'approval-null', intent: null });
+  assert.equal((await new SendJournal(dir).read('approval-null'))?.before?.action, 'approval');
+  for (const [id, broken] of [
+    ['no-prompt', { prompt: undefined }],
+    ['bad-revision', { prompt: { itemId: 'item', revision: 'x' } }],
+    ['no-intent', { intent: undefined }],
+    ['odd-intent', { intent: 'allow_forever' }],
+    ['terminal', { route: 'terminal' }],
+  ] as const) {
+    await appendFile(
+      path.join(dir, 'sends.jsonl'),
+      `${JSON.stringify({ ...approval, ...broken, operationId: id, schema: 'orca-web.send-record/v1', kind: 'before', at: new Date().toISOString() })}\n`,
+    );
+    assert.equal(await new SendJournal(dir).read(id), null, id);
+  }
+});
+
 test('T-10 hasAnswer は before の行から同じエージェントと callId の答えを見つけ、記録がなければ偽、読めなければ投げる', async (t) => {
   const dir = await directory(t);
   const journal = new SendJournal(dir);

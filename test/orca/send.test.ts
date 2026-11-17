@@ -837,3 +837,188 @@ test('T-07 answerKeys：2組目以降で止まれば unknown（partial_sent）�
   });
   assert.equal(calls.length, 3);
 });
+
+// ---- 承認の答え（iss-00050 D-03、T-05） ----
+
+const approvalOptions = [
+  { id: 'allow', label: 'Allow', intent: 'allow_once' },
+  { id: 'allowForSession', label: 'Allow for this session', intent: 'allow_always' },
+  { id: 'deny', label: 'Deny', intent: 'reject_once' },
+];
+const approvalBody = (resolution: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+  kind: 'approval',
+  title: '仮の承認',
+  detail: null,
+  options: approvalOptions,
+  resolution,
+  ...extra,
+});
+
+test('T-05 answerApproval は D-03 の params と指紋を、期限 15 秒で一度だけ送る', async () => {
+  const { chatTarget } = await import('../send/fixture.ts');
+  const { adapter, calls } = await answerAdapter(() =>
+    ok({ ok: true, value: { itemId: 'item-test', revision: 4, resolution: { state: 'resolved' } } }),
+  );
+  assert.deepEqual(await adapter.answerApproval(chatTarget(), { itemId: 'item-test', revision: 3 }, 'allow', opId, 2), {
+    outcome: 'submitted',
+    detail: { code: 'resolved' },
+  });
+  assert.deepEqual(calls, [
+    {
+      method: 'agentSession.respondToApproval',
+      params: {
+        envelope: {
+          sessionId: 'session-chat-test',
+          clientOperationId: opId,
+          expectedRuntimeFence: 2,
+          // 手で鍵を並べた JSON: {"fields":{"expectedRevision":3,"itemId":"item-test","optionId":"allow"},"method":"agentSession.respondTo:approval","sessionId":"session-chat-test"}
+          payloadFingerprint: 'cb42264547f0b0750929fb866d75bd2185f804951e2b27b97659ba36b39f229a',
+        },
+        itemId: 'item-test',
+        expectedRevision: 3,
+        optionId: 'allow',
+      },
+      options: { timeoutMs: 15000 },
+    },
+  ]);
+  assert.equal(
+    send.approvalFingerprint('session-chat-test', { itemId: 'item-test', expectedRevision: 3, optionId: 'allow' }),
+    'cb42264547f0b0750929fb866d75bd2185f804951e2b27b97659ba36b39f229a',
+  );
+});
+
+test('T-05 answerApproval の結果は resolved・cancelled・refusal・pending・知らない形・RPC の失敗を分け、replayed を写す', async () => {
+  const { chatTarget } = await import('../send/fixture.ts');
+  const value = (state: unknown) => ok({ ok: true, value: { itemId: 'i', revision: 2, resolution: { state } } });
+  const method = 'agentSession.respondToApproval';
+  const cases: [RpcOutcome, send.SendResult][] = [
+    [value('resolved'), { outcome: 'submitted', detail: { code: 'resolved' } }],
+    [value('cancelled'), { outcome: 'refused', detail: { code: 'cancelled' } }],
+    [value('pending'), { outcome: 'unknown', detail: { code: 'prompt_pending' } }],
+    [value('expired'), { outcome: 'unknown', detail: { code: 'unknown_shape' } }],
+    [ok(null), { outcome: 'unknown', detail: { code: 'unknown_shape' } }],
+    [
+      ok({ ok: false, refusal: { code: 'agent_session_revision_mismatch', message: 'private' } }),
+      { outcome: 'refused', detail: { code: 'agent_session_revision_mismatch' } },
+    ],
+    [
+      { ok: false, kind: 'orca-error', code: 'method_not_found', message: 'private' },
+      { outcome: 'refused', detail: { code: 'method_not_found', method } },
+    ],
+    [
+      { ok: false, kind: 'orca-error', code: 'invalid_argument', message: 'private' },
+      { outcome: 'refused', detail: { code: 'invalid_argument', method } },
+    ],
+    [
+      { ok: false, kind: 'unavailable', message: 'private' },
+      { outcome: 'refused', detail: { code: 'not_sent' } },
+    ],
+    [
+      { ok: false, kind: 'timeout', message: 'private' },
+      { outcome: 'unknown', detail: { code: 'timeout' } },
+    ],
+    [
+      ok({ ok: true, replayed: true, value: { resolution: { state: 'resolved' } } }),
+      { outcome: 'submitted', detail: { code: 'resolved', replayed: true } },
+    ],
+  ];
+  for (const [outcome, expected] of cases) {
+    const { adapter, calls } = await answerAdapter(() => outcome);
+    assert.deepEqual(
+      await adapter.answerApproval(chatTarget(), { itemId: 'item-test', revision: 3 }, 'allow', opId, 2),
+      expected,
+      JSON.stringify(outcome),
+    );
+    assert.equal(calls.length, 1, '時間切れでも送り直さない');
+  }
+});
+
+test('T-05 readApproval は history を1回読み、fence と承認の状態を返し、見つからない・知らない形を分ける', async () => {
+  let reply: RpcOutcome = ok(historyPage([item(approvalBody(pendingResolution))]));
+  const { adapter, calls } = await answerAdapter(() => reply);
+  const read = await adapter.readApproval('session-chat-test', 'item-test');
+  assert.ok(read.ok);
+  assert.equal(read.fence, 7);
+  assert.equal(read.revision, 3);
+  assert.equal(read.state, 'pending');
+  assert.equal(read.answerable, true);
+  assert.equal(read.selectedOptionId, null);
+  assert.deepEqual(
+    read.options.map((o) => [o.id, o.intent]),
+    [
+      ['allow', 'allow_once'],
+      ['allowForSession', 'allow_always'],
+      ['deny', 'reject_once'],
+    ],
+  );
+  assert.deepEqual(calls, [
+    {
+      method: 'agentSession.history',
+      params: { sessionId: 'session-chat-test', direction: 'tail', limit: 200 },
+      options: undefined,
+    },
+  ]);
+  reply = ok(historyPage([item(approvalBody(pendingResolution), 3, 'other-item')]));
+  assert.deepEqual(await adapter.readApproval('session-chat-test', 'item-test'), {
+    ok: false,
+    error: 'question_not_found',
+  });
+  for (const bad of [
+    historyPage([item(approvalBody({ ...pendingResolution, state: 'expired' }))]),
+    historyPage([item(questionBody(pendingResolution))]),
+    historyPage([item(approvalBody(pendingResolution))], { sessionId: 'other' }),
+    historyPage([item(approvalBody(pendingResolution))], { fence: 0 }),
+    historyPage([item(approvalBody(pendingResolution))], { items: 'x' }),
+    { ok: false, refusal: { code: 'x' } },
+  ]) {
+    reply = ok(bad);
+    assert.deepEqual(await adapter.readApproval('session-chat-test', 'item-test'), {
+      ok: false,
+      error: 'unknown_shape',
+    });
+  }
+  reply = { ok: false, kind: 'timeout', message: 'private' };
+  assert.deepEqual(await adapter.readApproval('session-chat-test', 'item-test'), { ok: false, error: 'unreachable' });
+  assert.ok(calls.every((c) => c.method === 'agentSession.history'));
+});
+
+test('T-05 checkApproval は今の状態を読むだけで結果を返し、送らない', async () => {
+  const { chatTarget } = await import('../send/fixture.ts');
+  const { digestOption } = await import('../../src/send/approval.ts');
+  const prompt = { itemId: 'item-test', revision: 3 };
+  let reply: RpcOutcome = ok(historyPage([]));
+  const { adapter, calls } = await answerAdapter(() => reply);
+  const check = () => adapter.checkApproval(chatTarget(), prompt, digestOption('allow'), opId);
+  const cases: [unknown, send.SendRead<send.SendResult>][] = [
+    [
+      historyPage([item(approvalBody(resolvedWith({ selectedOptionId: 'allow' })), 4)]),
+      { ok: true, outcome: 'submitted', detail: { code: 'resolved' } },
+    ],
+    [
+      historyPage([item(approvalBody(resolvedWith({ selectedOptionId: 'deny' })), 4)]),
+      { ok: true, outcome: 'refused', detail: { code: 'resolved_by_other' } },
+    ],
+    [
+      historyPage([item(approvalBody(resolvedWith({ selectedOptionId: null })), 4)]),
+      { ok: true, outcome: 'unknown', detail: { code: 'resolved_unverified' } },
+    ],
+    [
+      historyPage([
+        item(approvalBody({ state: 'cancelled', selectedOptionId: null, resolvedBy: null, resolvedAt: 1 }), 4),
+      ]),
+      { ok: true, outcome: 'refused', detail: { code: 'cancelled' } },
+    ],
+    [
+      historyPage([item(approvalBody(pendingResolution), 3)]),
+      { ok: true, outcome: 'unknown', detail: { code: 'prompt_pending' } },
+    ],
+    [historyPage([]), { ok: true, outcome: 'unknown', detail: { code: 'question_not_found' } }],
+  ];
+  for (const [page, expected] of cases) {
+    reply = ok(page);
+    assert.deepEqual(await check(), expected, JSON.stringify(page).slice(0, 120));
+  }
+  reply = { ok: false, kind: 'timeout', message: 'private' };
+  assert.deepEqual(await check(), { ok: false, error: 'unreachable' });
+  assert.ok(calls.every((c) => c.method === 'agentSession.history'));
+});

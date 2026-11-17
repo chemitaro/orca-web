@@ -5,12 +5,15 @@
 // 答える手段は answerer の表で、部分の answerVia（rpc は構造化 Chat の意図と確定、keys は端末の質問へのキーの組、
 // message は後の発言。どれも callId か prompt で指す）で選ぶ。送れるかは送る欄と同じ /api/send/status の読み
 // （enabled、answer、answerKeys、answerMessage、agentType）を使う。
+// 会話の承認もカード（D-06、iss-00050）で描く。状態は approval-view.js の板がカードの key ごとに持ち、手段は approver の表
+// （構造化 Chat は意図と確定、端末と答えられない承認は読むだけで「Orca で開く」）で選ぶ。送れるかは /api/send/status の approval。
 // 文字はすべて textContent で入れる（会話の本文、ツールの出力、題名、送る本文、質問と選択肢は信頼しないデータ）。
 
 import { createWriter } from '../write.js';
 import { refreshTimes, renderChatRow, renderDetail, renderDetailMark } from './agent-dom.js';
 import { watchWorktreeSummary } from './agent-marks.js';
 import { buildChat, buildDetail, errorLabel, initialChat, olderResult, reduceChat } from './agent-view.js';
+import { buildApprovalCard, createApprovalBoard, createChatApprover, readOnlyApprover } from './approval-view.js';
 import { createOpenBoard, createOpenControl, runOpen } from './open-control.js';
 import {
   buildQuestionCard,
@@ -77,12 +80,19 @@ async function read(url) {
 }
 const statusShape = (status) =>
   status && typeof status === 'object'
-    ? JSON.stringify([status.enabled, status.answer, status.answerKeys, status.answerMessage, status.agentType])
+    ? JSON.stringify([
+        status.enabled,
+        status.answer,
+        status.approval,
+        status.answerKeys,
+        status.answerMessage,
+        status.agentType,
+      ])
     : String(status);
 function noteStatus(status) {
   const changed = statusShape(status) !== statusShape(sendStatus);
   sendStatus = status;
-  if (changed) for (const key of questionRows.keys()) renderQuestionRow(key);
+  if (changed) renderCardRows();
 }
 
 /** 今の会話の質問の行（key ごと）。 */
@@ -96,6 +106,16 @@ const questionBoard = createQuestionBoard({
   },
   onChange: (key) => renderQuestionRow(key),
 });
+/** 今の会話の承認の行（key ごと）。 */
+let approvalRows = new Map();
+const approvalBoard = createApprovalBoard({
+  approvers: { chat: createChatApprover({ agentId, writer, read }), readOnly: readOnlyApprover },
+  onChange: (key) => renderQuestionRow(key),
+});
+/** 質問と承認のカードの行を、みな描き直す（送れるかや開く先が変わったとき）。 */
+function renderCardRows() {
+  for (const key of [...questionRows.keys(), ...approvalRows.keys()]) renderQuestionRow(key);
+}
 /** 端末の質問のカードの「Orca で開く」の状態（カードを描き直しても、最後の状態を戻す）。 */
 const openBoard = createOpenBoard();
 
@@ -120,7 +140,21 @@ function mountOpen(row, control) {
   });
 }
 
-const rowOptions = (now) => ({ open: openTools, now, question: questionView, onOpenControl: mountOpen });
+function approvalView(row) {
+  return buildApprovalCard(row.part, {
+    key: row.key,
+    state: approvalBoard.state(row.key),
+    availability: approvalBoard.approver(row.part).availability(row.part, sendStatus),
+  });
+}
+
+const rowOptions = (now) => ({
+  open: openTools,
+  now,
+  question: questionView,
+  approval: approvalView,
+  onOpenControl: mountOpen,
+});
 
 /** 変換中（IME）は描き直さない。終わってから描き直す。 */
 let composing = false;
@@ -165,9 +199,9 @@ function restoreFocus(note) {
   }
 }
 
-/** 質問の行を1つだけ描き直す（選択や流れが変わったとき）。 */
+/** 質問か承認の行を1つだけ描き直す（選択や流れが変わったとき）。 */
 function renderQuestionRow(key) {
-  const row = questionRows.get(key);
+  const row = questionRows.get(key) ?? approvalRows.get(key);
   if (!row) return;
   if (composing) {
     deferred = true;
@@ -203,6 +237,8 @@ function renderChat({ stickToEnd }) {
   const rows = buildChat(chat.messages);
   questionRows = new Map(rows.filter((row) => row.kind === 'question').map((row) => [row.key, row]));
   questionBoard.prune(new Set(questionRows.keys()));
+  approvalRows = new Map(rows.filter((row) => row.kind === 'approval').map((row) => [row.key, row]));
+  approvalBoard.prune(new Set(approvalRows.keys()));
   for (const row of rows) els.log.append(renderChatRow(document, row, rowOptions(now)));
   restoreFocus(note);
   if (stickToEnd || nearEnd) els.scroller.scrollTop = els.scroller.scrollHeight;
@@ -214,10 +250,30 @@ els.log.addEventListener('click', (event) => {
   const card = button?.closest('section.question-card');
   if (!button || !card || /** @type {HTMLButtonElement} */ (button).disabled) return;
   const key = card.dataset.key ?? '';
+  const name = button.dataset.action;
+  if (card.classList.contains('approval-card')) {
+    const approval = approvalRows.get(key);
+    if (!approval) return;
+    // 確かめの段が出たら「答える」へ、やめたら元の選択肢へフォーカスを移す（押したボタンは描き直しで消える）。
+    const focusIn = (selector) =>
+      [...els.log.querySelectorAll(selector)]
+        .find((n) => n.closest('section.question-card')?.dataset.key === key)
+        ?.focus();
+    if (name === 'option') {
+      void approvalBoard.choose(key, approval.part, button.dataset.option, sendStatus);
+      if (approvalBoard.state(key).pending !== null) focusIn('button[data-action="persist-confirm"]');
+    } else if (name === 'persist-confirm') void approvalBoard.confirm(key, approval.part, sendStatus);
+    else if (name === 'persist-cancel') {
+      const pending = approvalBoard.state(key).pending;
+      approvalBoard.cancel(key);
+      if (pending !== null) focusIn(`button[data-action="option"][data-option="${CSS.escape(pending)}"]`);
+    } else if (name === 'query') void approvalBoard.query(key, approval.part);
+    else if (name === 'dismiss') approvalBoard.dismiss(key);
+    return;
+  }
   const row = questionRows.get(key);
   if (!row) return;
   const index = Number(button.dataset.question);
-  const name = button.dataset.action;
   if (name === 'option') questionBoard.toggleOption(key, row.part, index, button.dataset.option);
   else if (name === 'other') {
     if (questionBoard.toggleOther(key, row.part, index)) {
@@ -255,8 +311,10 @@ els.log.addEventListener(
   'toggle',
   (event) => {
     const details = event.target;
-    const key = details?.closest?.('li')?.dataset?.key;
-    if (!key) return;
+    const rowKey = details?.closest?.('li')?.dataset?.key;
+    if (!rowKey) return;
+    // 承認の「詳しく」は、カードの開け閉めと別の key で持つ。
+    const key = details.dataset?.part === 'detail' ? `${rowKey}:detail` : rowKey;
     if (details.open) openTools.add(key);
     else openTools.delete(key);
   },
@@ -320,7 +378,7 @@ function renderDetailArea(state) {
   detail = buildDetail(state, agentId);
   syncOpenTarget();
   // 端末の質問のカードの「Orca で開く」は、開く先が分かるようになったら押せるように描き直す。
-  if (hadOpen !== Boolean(detail?.open)) for (const key of questionRows.keys()) renderQuestionRow(key);
+  if (hadOpen !== Boolean(detail?.open)) renderCardRows();
   els.detail.replaceChildren();
   if (!detail) {
     els.title.textContent = 'エージェントが見つかりません';

@@ -1,10 +1,13 @@
 // Orca の送信結果を、到達を確かめられる範囲だけで分類する。
 import { createHash } from 'node:crypto';
 import { answerForm, digestAnswers, type QuestionAnswer } from '../send/answer.ts';
+import { digestOption } from '../send/approval.ts';
 import { ANSWER_STEP_MS } from '../send/keys.ts';
 import type { ChatSendTarget, TerminalSendTarget } from '../send/model.ts';
 import {
+  type ApprovalOptionView,
   type JournalQuestionAnswer,
+  parseJournalApproval,
   parseJournalQuestion,
   type QuestionState,
   type QuestionView,
@@ -138,8 +141,9 @@ export function chatFingerprint(sessionId: string, body: unknown): string {
     .digest('hex');
 }
 const ANSWER_METHOD = 'agentSession.respondToQuestion';
-/** 質問への答えの結果。Orca の AgentSessionPromptResult の resolution.state で分ける。 */
-function answerReceipt(result: unknown): SendResult {
+const APPROVAL_METHOD = 'agentSession.respondToApproval';
+/** 質問と承認への答えの結果。Orca の AgentSessionPromptResult の resolution.state で分ける。 */
+function promptReceipt(result: unknown): SendResult {
   const reply = object(result);
   if (reply.ok === false) {
     const code = object(reply.refusal).code;
@@ -152,11 +156,17 @@ function answerReceipt(result: unknown): SendResult {
   if (state === 'pending') return { outcome: 'unknown', detail: { code: 'prompt_pending' } };
   return unknown();
 }
-export function classifyAnswer(outcome: RpcOutcome): SendResult {
-  if (!outcome.ok) return failure(outcome, ANSWER_METHOD);
-  const classified = answerReceipt(outcome.result);
+function classifyPrompt(outcome: RpcOutcome, method: string): SendResult {
+  if (!outcome.ok) return failure(outcome, method);
+  const classified = promptReceipt(outcome.result);
   if (object(outcome.result).replayed === true) classified.detail.replayed = true;
   return classified;
+}
+export function classifyAnswer(outcome: RpcOutcome): SendResult {
+  return classifyPrompt(outcome, ANSWER_METHOD);
+}
+export function classifyApproval(outcome: RpcOutcome): SendResult {
+  return classifyPrompt(outcome, APPROVAL_METHOD);
 }
 /** Orca の respondToStructuredAgentSessionPrompt が作る指紋（method は `agentSession.respondTo:question`）。 */
 export function answerFingerprint(
@@ -166,6 +176,24 @@ export function answerFingerprint(
   return createHash('sha256')
     .update(canonicalize({ method: 'agentSession.respondTo:question', sessionId, fields }))
     .digest('hex');
+}
+/** Orca の respondToStructuredAgentSessionPrompt が承認に作る指紋（method は `agentSession.respondTo:approval`）。 */
+export function approvalFingerprint(
+  sessionId: string,
+  fields: { itemId: string; expectedRevision: number; optionId: string },
+): string {
+  return createHash('sha256')
+    .update(canonicalize({ method: 'agentSession.respondTo:approval', sessionId, fields }))
+    .digest('hex');
+}
+/** 送る前と照会で読む承認の今の状態。selectedOptionId は answered で今の選択肢にあるときだけ。 */
+export interface ApprovalRead {
+  fence: number;
+  revision: number;
+  state: QuestionState;
+  options: ApprovalOptionView[];
+  answerable: boolean;
+  selectedOptionId: string | null;
 }
 /** 送る前と照会で読む質問の今の状態。answers は Orca が書いた生の答え（解けなければ null）。 */
 export interface QuestionRead {
@@ -222,8 +250,11 @@ function classifyKeyGroup(outcome: RpcOutcome): { ack: KeyAck; code?: string } {
   return code === 'method_not_found' || code === 'invalid_argument' ? { ack: 'refused', code } : { ack: 'unknown' };
 }
 export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').SendRpc }) {
-  /** 末尾の 200 件から itemId の質問を読む。 */
-  async function readQuestion(sessionId: string, itemId: string): Promise<SendRead<QuestionRead>> {
+  /** 末尾の 200 件から itemId の項目を読む。 */
+  async function readJournalItem(
+    sessionId: string,
+    itemId: string,
+  ): Promise<SendRead<{ fence: number; item: unknown }>> {
     const result = await rpc.call('agentSession.history', { sessionId, direction: 'tail', limit: 200 });
     if (!result.ok) return readFailure(result, 'agentSession.history');
     const reply = object(result.result);
@@ -238,11 +269,17 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
       return { ok: false, error: 'unknown_shape' };
     const found = page.items.findLast((row) => object(row).itemId === itemId);
     if (found === undefined) return { ok: false, error: 'question_not_found' };
-    const parsed = parseJournalQuestion(found);
+    return { ok: true, fence: page.fence as number, item: found };
+  }
+  /** 末尾の 200 件から itemId の質問を読む。 */
+  async function readQuestion(sessionId: string, itemId: string): Promise<SendRead<QuestionRead>> {
+    const found = await readJournalItem(sessionId, itemId);
+    if (!found.ok) return found;
+    const parsed = parseJournalQuestion(found.item);
     if (parsed === null) return { ok: false, error: 'unknown_shape' };
     return {
       ok: true,
-      fence: page.fence as number,
+      fence: found.fence,
       revision: parsed.prompt.revision,
       state: parsed.state,
       questions: parsed.questions,
@@ -263,6 +300,22 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
         { timeoutMs: 10000 },
       ),
     );
+  }
+  /** 末尾の 200 件から itemId の承認を読む。見つからなければ question_not_found（名前は質問と共有する）。 */
+  async function readApproval(sessionId: string, itemId: string): Promise<SendRead<ApprovalRead>> {
+    const found = await readJournalItem(sessionId, itemId);
+    if (!found.ok) return found;
+    const parsed = parseJournalApproval(found.item);
+    if (parsed === null || parsed.prompt === null) return { ok: false, error: 'unknown_shape' };
+    return {
+      ok: true,
+      fence: found.fence,
+      revision: parsed.prompt.revision,
+      state: parsed.state,
+      options: parsed.options,
+      answerable: parsed.answerable,
+      selectedOptionId: parsed.selectedOptionId,
+    };
   }
   return {
     /** キーの組を1つ送り、受けられたか（accepted）、受けられなかったか（refused）、分からないか（unknown）を返す。 */
@@ -433,6 +486,51 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
       if (read.state === 'pending') return { ok: true, outcome: 'unknown', detail: { code: 'prompt_pending' } };
       if (read.answers === null) return { ok: true, outcome: 'unknown', detail: { code: 'resolved_unverified' } };
       return digestAnswers(answerForm(read.questions, read.answers)) === digest
+        ? { ok: true, outcome: 'submitted', detail: { code: 'resolved' } }
+        : { ok: true, outcome: 'refused', detail: { code: 'resolved_by_other' } };
+    },
+    async answerApproval(
+      target: ChatSendTarget,
+      prompt: { itemId: string; revision: number },
+      optionId: string,
+      operationId: string,
+      fence: number,
+    ): Promise<SendResult> {
+      const fields = { itemId: prompt.itemId, expectedRevision: prompt.revision, optionId };
+      return classifyApproval(
+        await rpc.call(
+          APPROVAL_METHOD,
+          {
+            envelope: {
+              sessionId: target.sessionId,
+              clientOperationId: operationId,
+              expectedRuntimeFence: fence,
+              payloadFingerprint: approvalFingerprint(target.sessionId, fields),
+            },
+            ...fields,
+          },
+          { timeoutMs: 15000 },
+        ),
+      );
+    },
+    readApproval,
+    /** 結果不明の承認の答えの照会。今の承認の状態だけを読み、送り直さない。 */
+    async checkApproval(
+      target: ChatSendTarget,
+      prompt: { itemId: string; revision: number },
+      digest: string,
+      _operationId: string,
+    ): Promise<SendRead<SendResult>> {
+      const read = await readApproval(target.sessionId, prompt.itemId);
+      if (!read.ok)
+        return read.error === 'question_not_found'
+          ? { ok: true, outcome: 'unknown', detail: { code: 'question_not_found' } }
+          : read;
+      if (read.state === 'cancelled') return { ok: true, outcome: 'refused', detail: { code: 'cancelled' } };
+      if (read.state === 'pending') return { ok: true, outcome: 'unknown', detail: { code: 'prompt_pending' } };
+      if (read.selectedOptionId === null)
+        return { ok: true, outcome: 'unknown', detail: { code: 'resolved_unverified' } };
+      return digestOption(read.selectedOptionId) === digest
         ? { ok: true, outcome: 'submitted', detail: { code: 'resolved' } }
         : { ok: true, outcome: 'refused', detail: { code: 'resolved_by_other' } };
     },
