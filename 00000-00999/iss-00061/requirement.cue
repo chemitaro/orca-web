@@ -73,7 +73,7 @@ requirements: {
 		text: """
 			Markdown の中の生の HTML（`<script>`、`<img onerror>`、`<a href>`、`<iframe>`、`<style>`、閉じていない `<` など）は、書いたとおりの文字として描く。
 			リンクの URL は、`new URL()` で解け、protocol が `http:` か `https:` で、空白と制御文字を含まないときだけ、リンク（newTabLink：`target=_blank`、`rel=noopener noreferrer`）にする。ほか（`javascript:`、`data:`、`vbscript:`、`file:`、相対の URL、大文字・空白・制御文字・実体参照で隠した scheme など）は、元の Markdown の文字のまま描く。
-			描く部品は、innerHTML・outerHTML・insertAdjacentHTML・document.write・on で始まる属性・style の属性を使わない。要素に入れる値は、textContent と、決めた属性（a の href・target・rel・title、input の type・disabled・checked、表のセルの寄せのクラス、コードの言語の data 属性）だけ。
+			描く部品は、innerHTML・outerHTML・insertAdjacentHTML・document.write・on で始まる属性・style の属性を使わない。要素に入れる値は、textContent と、決めた属性だけ：描く部品の付ける class（`md`・`md-` で始まる決めた名前）、ol の start（数）、input の type（checkbox）・disabled・checked、コードの言語の data-lang、と、リンクを作る newTabLink が今付けるもの（a の href・target・rel・title・class `newtab`、中の span と印の SVG の決めた属性）。外から来た文字が入るのは textContent、data-lang、href（http・https に限る）だけ。
 			"""
 		acceptance: [
 			"XSS の表（`<script>`、`<img src=x onerror>`、`<a href=javascript:>`、`[x](javascript:alert(1))`、`[x](JaVaScRiPt:...)`、`[x]( javascript:...)`、`[x](java\\u0000script:)`、`[x](data:text/html,...)`、`[x](vbscript:...)`、`![x](javascript:...)`、`<javascript:alert(1)>`、`[x](https://a\" onmouseover=\"x)`、`[x](https://a) onerror=`、コードの塊の言語 `js\" onload=\"x` など）で、script・img・iframe などの要素ができず、a の href が http・https のほか（と、属性の差し込み）にならず、元の文字が textContent に残る（単体のテスト。偽の document は innerHTML などと on・style の属性で失敗する）",

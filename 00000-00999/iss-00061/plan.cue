@@ -36,7 +36,7 @@ steps: {
 }
 
 tests: {
-	"T-01": {title: "parseMarkdown の各構文：ATX の見出し（1〜6、閉じの #、7個は段落）、段落と改行（1つの改行が break、行末の2つの空白と \\ も break）、太字・斜体・取り消し線・行内のコード（`` の数、語の中の _ は強調でない）、柵のコード（``` と ~~~、言語、閉じのない塊、字下げを落とす）、箇条書き（- * +、1. 1)、start、入れ子、チェック [ ] [x]、印の種類が変わると別の list）、引用（入れ子、引用の中の箇条書きとコード）、表（寄せ、\\|、セルの数を見出しに合わせる、区切りの数が違えば段落）、横線（--- *** ___ と空白入り）、リンク（[a](url)、題つき、<url>、素の URL の尾の記号と釣り合わない )、画像は image 真のリンク）、逃がし", verifies: ["R-01", "F-03"]}
+	"T-01": {title: "parseMarkdown の各構文：ATX の見出し（1〜6、閉じの #、`## C#` は C# のまま、7個は段落）、段落と改行（1つの改行が break、行末の2つの空白と \\ も break）、太字・斜体・取り消し線・行内のコード（`` の数、`_foo_`・`__bold__` は強調で、snake_case_name は文字）、柵のコード（``` と ~~~、言語、閉じのない塊、字下げを落とす）、箇条書き（- * +、1. 1)、start、入れ子、チェック [ ] [x]、印の種類が変わると別の list）、引用（入れ子、引用の中の箇条書きとコード）、表（寄せ、\\|、セルの数を見出しに合わせる、区切りの数が違えば段落）、横線（--- *** ___ と空白入り）、リンク（[a](url)、題つき、<url>、素の URL の尾の記号と釣り合わない )、画像は image 真のリンク）、逃がし", verifies: ["R-01", "F-03"]}
 	"T-02": {title: "safeHref と危ない入力：http・https だけが href になり、javascript:・JaVaScRiPt:・頭の空白・制御文字入り・data:・vbscript:・file:・相対・空、` onmouseover=` の差し込みはリンクにならず元の文字の text になる。生の HTML（<script>、<img onerror>、<a href>、<iframe>、閉じない <）は text のまま。コードの塊の言語の引用符も文字として lang に入るだけ", verifies: ["R-02", "F-02"]}
 	"T-03": {title: "壊れた・大きい・深い入力：閉じない **・`・```・[・](、列の違う表、空、文字でない入力、\\ で終わる、9段以上の入れ子で例外を出さず、元の文字が欠けない（木の text を集めた文字に元の語が残る）。病的な入力 100,000 字（`*` の並び、`[` の並び、`` ` `` の並び、`>` の並び、`_a` の並び）を、それぞれ 1 秒より短く解く", verifies: ["R-03"]}
 	"T-04": {title: "renderMarkdown：各塊と行内が決めた要素（h1〜h6.md-h、p、div.md-code > pre > code と md-code-lang・data-lang、ul・ol と start、li.md-task と disabled の input、blockquote、div.md-table > table と寄せのクラス、hr、br、strong・em・del・code）になり、リンクが渡した link の口（newTabLink）で target _blank・rel noopener noreferrer になる。知らない type の文字を落とさない", verifies: ["R-01", "F-03"]}
