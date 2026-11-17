@@ -157,7 +157,7 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 - 上に題名と「Orca で開く」（埋め込みのボタンと同じ Orca のロゴと `Open` の部品。md）、その下に詳細（worktree、種類、状態、モデルと推論とその意味、親と子、PR と CI）。詳細は幅によらず畳んで始め、押すと開く。詳細の見出しには、稼働の印の部品（`agent-marks.js`）でこのエージェントの状態と種類の印を出す（経過は出さない）。下に会話。幅 390px 以下では Orca で開くを出さない。
 - 詳細の中のリンク（親、子、PR）は、どれも新しいタブで開く（`target="_blank"`、`rel="noopener noreferrer"`、新しいタブの小さな印と title「新しいタブで開く」）。iframe の中で別のエージェントの詳細に移らないので、置いた画面が選んだ相手と iframe の中の相手が食い違わない。新しいタブでは iframe でない単独の詳細として開く。
 - 見た目は SpecDock のダッシュボードのデザインシステムに合わせる（`--ds-*`・`--sd-*` を先に使い、なければ SpecDock の app.css と同じ値。明暗の両方と `?theme=`）。会話の時刻は `elapsed.js` の短い形（now・5m・3h・2d）で、元の時刻は `title` にある。
-- 会話は、指示と返答の吹き出し、折り畳んだツール、Orca の知らせの行、質問のカード（次の節）。思考は出さない。画像、許可の確認（承認）、未知の部分は「表示できない」と示す。読めないときは、空の会話ではなく理由を示す。
+- 会話は、指示と返答の吹き出し、折り畳んだツール、Orca の知らせの行、質問のカード（次の節）。思考は出さない。画像と未知の部分は「表示できない」と示す。許可の確認（承認）はカードで出す（下の節）。読めないときは、空の会話ではなく理由を示す。
 - 会話の下に入力欄と送るボタンがある（次の節）。送信が止まっている、送る経路が確かめられない、宛先が送れない状態のときは、欄を止めて理由を1行で示す。
 - 置ける画面は `ORCA_WEB_READ_ORIGINS` のオリジンだけ（`frame-ancestors`）。
 
@@ -190,7 +190,7 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 
 - カード：見出し、問い、選択肢（ラベルと説明）、複数選べるかの印、その他の自由入力の欄、「答える」。複数問は1枚に並ぶ。答え済みは選んだ答えを示して閉じ、取り消された質問は「取り消されました」と示して閉じる。選択肢は縦に並ぶ全幅のボタンで、狭い枠や 390px でも押せる。
 - 構造化 Chat（Orca のチャットのタブ）の質問は、カードから答えられる。Orca のチャットの画面と同じ RPC `agentSession.respondToQuestion`（項目の itemId と revision の比較つき）で1回だけ送る。単一選択は1つ（その他の文を選ぶと選択を外す）、複数選択は1つ以上、全部の問いに答えがあるときだけ「答える」が押せる。
-- 端末のエージェントの質問は、読めるが答えるボタンは出さない。「端末のエージェントの質問は、いまは Orca で答えてください」と「Orca で開く」を出す（390px 以下でも）。端末への答えは後の Issue（iss-00049）。Codex の `request_user_input_async`（答えを後の発言で返す質問）はツールの行のまま。承認（approval）もまだ扱わない（iss-00050）。
+- 端末のエージェントの質問は、読めるが答えるボタンは出さない。「端末のエージェントの質問は、いまは Orca で答えてください」と「Orca で開く」を出す（390px 以下でも）。端末への答えは後の Issue（iss-00049）。Codex の `request_user_input_async`（答えを後の発言で返す質問）はツールの行のまま。承認は次の節。
 - 答えられないとき（`sendEnabled` が偽、Orca が答えの能力 `agent-session.question-answers.v1` を持たない、宛先が送れない状態）は、カードは読めるが押せず、理由を1行で示す。
 - 答える手段は差し替えられる（`web/embed/question-view.js` の answerer。構造化 Chat の手段と、答えない端末の手段）。
 
@@ -201,6 +201,24 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 - 照会は送信と同じ `GET /api/send/<操作の ID>?check=1`。質問の今の状態を読み、記録の答えと同じ答えが付いていれば submitted、別の答えなら refused（`resolved_by_other`）、まだ未回答なら unknown（`prompt_pending`）。自動で送り直さない。
 - 送れるかの口 `GET /api/send/status` は `answer: {available, reason}` も返す。
 - 記録：答えの送る前の行は `action: "answer"`、itemId、revision、問いの数、答えの digest だけを持ち、答えの中身（選んだ id、ラベル、その他の文）を書かない。
+
+### 許可の確認（承認）に答える
+
+エージェントが本人に求める許可の確認を、会話の中のカードで出す。
+
+- カード：題、道具、説明、理由、要るパス、計画の本文と計画のファイル、操作の中身（長ければ下見と「詳しく」）、選択肢のボタン（ラベルと説明、最初の選択肢が主）。答え済みは選んだ選択肢を示して閉じ、取り消されたものは「取り消されました」と示して閉じる。
+- 構造化 Chat の承認は、カードから答えられる。Orca のチャットの画面と同じ RPC `agentSession.respondToApproval`（itemId と revision の比較つき、optionId）で1回だけ送る。
+- 「常に許可」「常に拒否」のように後の確認を省く選択（intent が `allow_always`・`reject_always`）は、押すと確かめの段（何が以後省かれるかの1行と「<ラベル> で答える」「やめる」）を出し、確かめて初めて送る。サーバーも `confirmPersistent: true` のない意図ではその選択肢を受けない。
+- 端末のエージェントの許可の確認（Claude Code の permission prompt など）は、タブの agentStatus の `interactivePrompt` から道具と要約を読み、会話の最後にカードで出す（待っている間だけ）。答えるボタンは出さず、「端末のエージェントの許可は、Orca で答えてください」と「Orca で開く」を出す。端末への答え（キーの列）は後の Issue。
+- URL を開く承認と、この版の知らない種類の承認は読むだけ（「Orca で答えてください」と「Orca で開く」）。
+- 答えられないとき（`sendEnabled` が偽、Orca が承認の能力を持たない、宛先が送れない状態）は、カードは読めるが押せず、理由を1行で示す。
+
+承認の API（送信と同じ守り）：
+
+- `POST /api/approval/intent`：`{agent, prompt: {itemId, revision}, optionId, confirmPersistent?, target?}`。宛先を解き、Orca の会話を読み直して、承認が同じ revision で未回答なこと、選択肢があること、常に許可・常に拒否なら `confirmPersistent` が真なことを確かめ、使い捨ての票を返す。誤りは質問の答えと同じ状態と理由（選択肢の誤りと未確認は 400 `invalid_answer`）。
+- `POST /api/approval/confirm`：`{ticket, optionId}`。確かめ直し、送る前の記録を書いてから1回だけ送る。照会は `GET /api/send/<操作の ID>?check=1`（同じ選択肢が付いていれば submitted、別の選択肢なら refused `resolved_by_other`）。
+- 送れるかの口 `GET /api/send/status` は `approval: {available, reason}` も返す。
+- 記録：承認の送る前の行は `action: "approval"`、itemId、revision、intent、選択肢の digest だけを持ち、選択肢の id・ラベルと承認の中身を書かない。
 
 ### スマホ（tailnet）
 
