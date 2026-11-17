@@ -25,6 +25,17 @@ ID: "iss-00049"
 
 ## Verification
 
+### 実機の確かめ（S-04、2026-11-18、タスク担当）
+
+- 試しの orca-web：`npm run trial -- --state-dir .workbench/trial-49 --orca-port 8796 --page-port 47940 --forbidden-port 47941`（ほかの試しが 8792・8797・47900・47930 を使っていたので避けた）。専用の settings（`.workbench/trial-49/settings.json`）だけで `sendEnabled` を真にした。常駐の orca-web（8791）の設定は変えていない。
+- 構造化 Chat の Codex の `request_user_input_async`（Codex GPT-6.1 Sol / low の試しのエージェント、dispatch ctx_f926832264fe。無害な問い『試し：好きな果物はどれですか？』、選択肢『りんご』『みかん』）：
+  - 会話の API が `question`（source chat、answerVia message、callId、問い1つ、選択肢2つ、allowOther 真、preview 偽、state pending）を返し、`GET /api/send/status` が `answerMessage: {available: true}`、`answerKeys: {available: false, reason: chat_route}` を返した。
+  - 小窓（390px、明）で『みかん』を選んで「答える」を押すと、Orca と同じ形の発言（『> 試し：好きな果物はどれですか？』、空行、『みかん』）が送られ、カードは後の発言の引用で答え済みの閉じた形になった。エージェントは worker_done で『受け取った答え：みかん』と返した。
+  - 送信の記録（試しの `sends/sends.jsonl`）：before の行は `action: answer`、`mode: message`、callId、questionCount、digest だけで、『みかん』『りんご』の出現は 0。after は accepted（queuedState waiting）。
+  - 幅 1280px と 390px、明暗の4通りで、カードのはみ出し 0、文書の横スクロールなし、選択肢と送るボタンの高さ 44px 以上。
+- 写し（Scope の `artifacts/`。試しのエージェントへの依頼の文と無害な質問だけで、業務の会話は写していない）：`live-async-{1280,390}-{light,dark}-before.png`、`live-async-answer-390-light-{before,selected,sent,done}.png`。画面の実装担当の偽の会話による端末の質問のカード（未回答、途中まで送った帯、届いたか分からない帯、答えずに閉じた形）の写しは `.workbench/implement/iss-00049/render/`。
+- 端末のエージェント（キーの列）の実機の確かめ：試しのエージェントを端末で立てる道（`worker-start` は本人の設定で構造化 Chat、`orca terminal create` はフックが止める）について、統括が本人に案を問い中（2026-11-18）。
+
 ## 逸脱と判断
 
 - 逸脱（実装担当の切り替え）：Codex GPT-6.1 Sol / medium の実装担当（dispatch ctx_6a5fea160dad）が、最初の読みのコマンドで、書き込みの許された根の Orca の Application Support の symlink を拒まれ（symlinked writable roots are not supported）、何もせずに止まった（変更なし）。統括の依頼書の補足に従い worker-stop し、Claude Opus 5.5 / medium（dispatch ctx_0b314dede454）で S-01〜S-02 を始め直した。
