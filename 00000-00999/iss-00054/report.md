@@ -54,6 +54,8 @@ ID: "iss-00054"
 
 - 仕様レビュー round-2 の P2（タスク担当の判断、2026-11-18）：R-04・T-06 の「agentStatus が物でない（prompt_unverified）」は、意図と確定では preflight の resolveTarget が not_sendable（no_session）で先に止める。テストは意図・確定では no_session を、prompt_unverified は「待っているのに interactivePrompt がない」場合と、純な関数（T-01）・アダプターの送る直前の読み（T-05）で確かめる。
 
+- PR #58（https://github.com/chemitaro/orca-web/pull/58、head c454a99 = 合格のコミット）：CI 合格（observer OBSERVED_CI_PASS、merge_readiness READY）。試しの画面 http://127.0.0.1:47950/ は動かしたまま（試しの orca-web 8798、sendEnabled 偽）。
+
 ## Residual Risks / Follow-ups
 
 - 最終品質ゲートの P2（主と ChatGPT の同じ根、直していない）：端末の承認の手段 createTerminalApprover が、取り込んだ iss-00055 の sendIntentConfirm を使わず、確定の 500 internal_error を押し直せる refused と示し（送ったかもしれないのに）、応答のない接続で「送っています」のまま止まる。二重の送信にはならない（記録の already_sent で止まり、「Orca で開く」はいつも出る）。次の提案：createTerminalApprover を sendIntentConfirm（時間切れ、確定の 5xx の結果不明）に載せ替える小さな直し。
