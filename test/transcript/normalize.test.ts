@@ -345,6 +345,7 @@ test('T-01 構造化 Chat：1問の question（freeTextQuestionId なし）は i
   assert.deepEqual(part, {
     type: 'question',
     source: 'chat',
+    answerVia: 'rpc',
     prompt: { itemId: 'q-item', revision: 3 },
     callId: null,
     questions: [
@@ -359,6 +360,7 @@ test('T-01 構造化 Chat：1問の question（freeTextQuestionId なし）は i
         ],
         allowOther: false,
         otherAllowsEmpty: false,
+        preview: false,
       },
     ],
     state: 'pending',
@@ -390,6 +392,7 @@ test('T-01 構造化 Chat：1問で freeTextQuestionId があれば、その id 
     options: [{ id: 'a', label: 'A', description: null }],
     allowOther: true,
     otherAllowsEmpty: true,
+    preview: false,
   });
 });
 
@@ -555,6 +558,7 @@ test('T-02 端末：AskUserQuestion の入力（物）が question の部分に�
   assert.deepEqual(part, {
     type: 'question',
     source: 'terminal',
+    answerVia: 'keys',
     prompt: null,
     callId: 'call-q',
     questions: [
@@ -567,8 +571,9 @@ test('T-02 端末：AskUserQuestion の入力（物）が question の部分に�
           { id: '0', label: '甲', description: '仮の説明' },
           { id: '1', label: '乙', description: null },
         ],
-        allowOther: false,
+        allowOther: true,
         otherAllowsEmpty: false,
+        preview: false,
       },
       {
         id: '1',
@@ -579,8 +584,9 @@ test('T-02 端末：AskUserQuestion の入力（物）が question の部分に�
           { id: '0', label: '丙', description: null },
           { id: '1', label: '丁', description: null },
         ],
-        allowOther: false,
+        allowOther: true,
         otherAllowsEmpty: false,
+        preview: false,
       },
     ],
     state: 'pending',
@@ -602,7 +608,7 @@ test('T-02 端末：JSON の文字の入力、request_user_input、title と mul
   }
 });
 
-test('T-02 端末：読めない入力・failed の呼び出し・request_user_input_async・ほかの名前はツールの呼び出しのまま', () => {
+test('T-02 端末：読めない入力・failed の呼び出し・ほかの名前はツールの呼び出しのまま', () => {
   const ok = { questions: [{ question: 'x', options: ['a'] }] };
   for (const [name, input, extra] of [
     ['AskUserQuestion', { questions: [] }, {}],
@@ -610,7 +616,6 @@ test('T-02 端末：読めない入力・failed の呼び出し・request_user_i
     ['AskUserQuestion', '{not json', {}],
     ['AskUserQuestion', { other: 1 }, {}],
     ['AskUserQuestion', ok, { state: 'failed' }],
-    ['request_user_input_async', { questions: [{ title: 'x', options: ['a'] }] }, {}],
     ['Bash', ok, {}],
   ] as const) {
     assert.equal(nativePart(name, input, extra)?.type, 'tool-call', `${name} ${JSON.stringify(extra)}`);
@@ -678,4 +683,155 @@ test('T-03 知らない形の question は unsupported（question）、approval 
       what: 'approval',
     },
   );
+});
+
+// ---- 答え方と後の発言の質問（iss-00049 D-01、T-01） ----
+
+test('iss-00049 T-01 構造化 Chat の question は answerVia rpc で、各問いの preview は偽', () => {
+  const part = firstPart([
+    questionItem({
+      question: '外',
+      options: [],
+      questions: [{ id: 'q-a', question: '一', multiSelect: false, options: [option('o1', '甲')] }],
+      resolution: pending,
+    }),
+  ]);
+  assert.equal(part?.type, 'question');
+  if (part?.type !== 'question') return;
+  assert.equal(part.answerVia, 'rpc');
+  assert.deepEqual(
+    part.questions.map((q) => q.preview),
+    [false],
+  );
+});
+
+test('iss-00049 T-01 端末：preview のある単一選択の問いは preview 真・allowOther 偽、ない問いと複数選択は preview 偽・allowOther 真', () => {
+  const part = nativePart('AskUserQuestion', {
+    questions: [
+      { question: 'p', options: [{ label: 'A', preview: 'code' }, { label: 'B' }] },
+      { question: 'blank', options: [{ label: 'A', preview: '  \n ' }, { label: 'B' }] },
+      { question: 'multi', multiSelect: true, options: [{ label: 'A', preview: 'code' }] },
+      { question: 'plain', options: ['A', 'B'] },
+    ],
+  });
+  assert.equal(part?.type, 'question');
+  if (part?.type !== 'question') return;
+  assert.equal(part.answerVia, 'keys');
+  assert.deepEqual(
+    part.questions.map((q) => [q.question, q.preview, q.allowOther, q.otherAllowsEmpty]),
+    [
+      ['p', true, false, false],
+      ['blank', false, true, false],
+      ['multi', false, true, false],
+      ['plain', false, true, false],
+    ],
+  );
+  const codex = nativePart('request_user_input', { questions: [{ question: 'x', options: ['a'] }] });
+  assert.equal(codex?.type === 'question' && codex.answerVia, 'keys');
+});
+
+const asyncInput = {
+  questions: [{ title: '仮の一つ目', options: ['甲', 3, '乙'] }, { title: '仮の二つ目' }, { notTitle: 'x' }],
+};
+const asyncQuestions = [
+  {
+    id: '0',
+    header: null,
+    question: '仮の一つ目',
+    multiSelect: false,
+    options: [
+      { id: '0', label: '甲', description: null },
+      { id: '1', label: '乙', description: null },
+    ],
+    allowOther: true,
+    otherAllowsEmpty: false,
+    preview: false,
+  },
+  {
+    id: '1',
+    header: null,
+    question: '仮の二つ目',
+    multiSelect: false,
+    options: [],
+    allowOther: true,
+    otherAllowsEmpty: false,
+    preview: false,
+  },
+];
+
+test('iss-00049 T-01 端末：request_user_input_async（物と JSON の文字）は answerVia message の質問の部分になる', () => {
+  for (const input of [asyncInput, JSON.stringify(asyncInput)]) {
+    assert.deepEqual(nativePart('request_user_input_async', input), {
+      type: 'question',
+      source: 'terminal',
+      answerVia: 'message',
+      prompt: null,
+      callId: 'call-q',
+      questions: asyncQuestions,
+      state: 'pending',
+      answers: null,
+    });
+  }
+  assert.equal(nativePart('requestUserInputAsync', asyncInput)?.type, 'question');
+});
+
+test('iss-00049 T-01 構造化 Chat：request_user_input_async の tool-call は message の質問の部分で、output の tool-result が続く', () => {
+  const messages = normalizeJournalItems([
+    {
+      itemId: 't',
+      sequence: 1,
+      body: {
+        kind: 'tool-call',
+        name: 'request_user_input_async',
+        input: asyncInput,
+        callId: 'c-async',
+        state: 'completed',
+        output: { head: '受け付けました', truncated: false },
+      },
+    },
+  ]);
+  assert.deepEqual(messages?.[0]?.parts, [
+    {
+      type: 'question',
+      source: 'chat',
+      answerVia: 'message',
+      prompt: null,
+      callId: 'c-async',
+      questions: asyncQuestions,
+      state: 'pending',
+      answers: null,
+    },
+    { type: 'tool-result', output: '受け付けました', isError: false, callId: 'c-async' },
+  ]);
+});
+
+test('iss-00049 T-01 読めない request_user_input_async の入力と failed の呼び出しはツールの呼び出しのまま', () => {
+  for (const [input, extra] of [
+    [{ questions: [] }, {}],
+    [{ questions: [{ question: 'title でない' }] }, {}],
+    ['{not json', {}],
+    ['"文字"', {}],
+    [{ other: 1 }, {}],
+    [asyncInput, { state: 'failed' }],
+  ] as const) {
+    assert.equal(nativePart('request_user_input_async', input, extra)?.type, 'tool-call', JSON.stringify(input));
+  }
+  const journal = normalizeJournalItems([
+    {
+      itemId: 't',
+      sequence: 1,
+      body: { kind: 'tool-call', name: 'request_user_input_async', input: asyncInput, callId: 'c', state: 'failed' },
+    },
+  ]);
+  assert.equal(journal?.[0]?.parts[0]?.type, 'tool-call');
+});
+
+test('iss-00049 T-01 上限を超える async の問いの文とラベルは切られ truncated が付く', () => {
+  const part = nativePart('request_user_input_async', {
+    questions: [{ title: 'q'.repeat(MAX_QUESTION_CHARS + 1), options: ['l'.repeat(MAX_QUESTION_LABEL_CHARS + 1)] }],
+  });
+  assert.equal(part?.type, 'question');
+  if (part?.type !== 'question') return;
+  assert.equal(part.truncated, true);
+  assert.equal(part.questions[0]?.question.length, MAX_QUESTION_CHARS);
 });

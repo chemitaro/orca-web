@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TerminalSendTarget } from '../../src/send/model.ts';
-import { buildPreview, compareTargets, resolveTarget, targetFingerprint } from '../../src/send/target.ts';
+import {
+  buildPreview,
+  compareTargets,
+  resolveTarget,
+  targetFingerprint,
+  terminalPromptOf,
+} from '../../src/send/target.ts';
 import { agent, fact, repo, state, worktree } from '../runs/fixture.ts';
 import {
   CHAT_AGENT,
@@ -216,4 +222,31 @@ test('指紋は経路ごとの固定値で、各識別項目を区別し識別�
     assert.equal(targetFingerprint({ ...target, agentId: 'derived-id' }), expected);
   }
   assert.notEqual(targetFingerprint({ ...terminalTarget(), leafId: null }), targetFingerprint(terminalTarget()));
+});
+
+test('iss-00049 T-05 terminalPromptOf：タブの agentStatus から state・toolName・interactivePrompt を読み、文字でなければ null', () => {
+  const tab = {
+    ...terminalTab(),
+    agentStatus: {
+      agentType: 'claude',
+      providerSession: { id: 'session-terminal-test' },
+      state: 'waiting',
+      toolName: 'AskUserQuestion',
+      interactivePrompt: '{"questions":[]}',
+    },
+  };
+  assert.deepEqual(terminalPromptOf(inventory([tab, chatTab()]), 'terminal-test'), {
+    state: 'waiting',
+    toolName: 'AskUserQuestion',
+    interactivePrompt: '{"questions":[]}',
+  });
+  const odd = { ...tab, agentStatus: { state: 3, toolName: null } };
+  assert.deepEqual(terminalPromptOf(inventory([odd]), 'terminal-test'), {
+    state: null,
+    toolName: null,
+    interactivePrompt: null,
+  });
+  assert.equal(terminalPromptOf(inventory([{ ...tab, agentStatus: undefined }]), 'terminal-test'), null);
+  assert.equal(terminalPromptOf(inventory([tab]), 'other-tab'), null);
+  assert.equal(terminalPromptOf({ nope: 1 }, 'terminal-test'), null);
 });

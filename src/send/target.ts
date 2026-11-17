@@ -137,3 +137,29 @@ export function targetFingerprint(target: SendTarget): string {
       : ['chat', target.runtimeId, target.worktreeId, target.tabId, target.agentType, target.sessionId];
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex').slice(0, 32);
 }
+
+/** タブの agentStatus のうち、端末が質問を出しているかの確かめに使う3つの値。状態の文書には出さない。 */
+export interface TerminalPrompt {
+  state: string | null;
+  toolName: string | null;
+  interactivePrompt: string | null;
+}
+
+/** session.tabs.listAll の結果から、端末のタブの agentStatus の state・toolName・interactivePrompt を読む。タブか agentStatus がなければ null。 */
+export function terminalPromptOf(listAll: unknown, tabId: string): TerminalPrompt | null {
+  if (!isRecord(listAll) || !Array.isArray(listAll.snapshots)) return null;
+  for (const snap of listAll.snapshots) {
+    if (!isRecord(snap) || !Array.isArray(snap.tabs)) continue;
+    for (const tab of snap.tabs) {
+      if (!isRecord(tab) || tab.type !== 'terminal' || tab.id !== tabId) continue;
+      const status = tab.agentStatus;
+      if (!isRecord(status)) return null;
+      return {
+        state: text(status.state),
+        toolName: text(status.toolName),
+        interactivePrompt: text(status.interactivePrompt),
+      };
+    }
+  }
+  return null;
+}
