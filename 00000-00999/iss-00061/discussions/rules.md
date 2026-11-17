@@ -1,0 +1,1 @@
+../../../../docs/rules/issue/discussions.md
