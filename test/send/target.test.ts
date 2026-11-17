@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TerminalSendTarget } from '../../src/send/model.ts';
+import { promptMatches } from '../../src/send/question-state.ts';
 import {
   buildPreview,
   compareTargets,
@@ -235,18 +236,65 @@ test('iss-00049 T-05 terminalPromptOf：タブの agentStatus から state・too
       interactivePrompt: '{"questions":[]}',
     },
   };
-  assert.deepEqual(terminalPromptOf(inventory([tab, chatTab()]), 'terminal-test'), {
+  assert.deepEqual(terminalPromptOf(inventory([tab, chatTab()]), terminalTarget()), {
     state: 'waiting',
     toolName: 'AskUserQuestion',
     interactivePrompt: '{"questions":[]}',
   });
   const odd = { ...tab, agentStatus: { state: 3, toolName: null } };
-  assert.deepEqual(terminalPromptOf(inventory([odd]), 'terminal-test'), {
+  assert.deepEqual(terminalPromptOf(inventory([odd]), terminalTarget()), {
     state: null,
     toolName: null,
     interactivePrompt: null,
   });
-  assert.equal(terminalPromptOf(inventory([{ ...tab, agentStatus: undefined }]), 'terminal-test'), null);
-  assert.equal(terminalPromptOf(inventory([tab]), 'other-tab'), null);
-  assert.equal(terminalPromptOf({ nope: 1 }, 'terminal-test'), null);
+  assert.equal(terminalPromptOf(inventory([{ ...tab, agentStatus: undefined }]), terminalTarget()), null);
+  assert.equal(terminalPromptOf(inventory([tab]), { tabId: 'other-tab', leafId: 'leaf-test' }), null);
+  assert.equal(terminalPromptOf({ nope: 1 }, terminalTarget()), null);
+});
+
+test('CP-1 terminalPromptOf：分割した端末では、id と leafId の両方が宛先と同じペインの agentStatus だけを読む', () => {
+  const ask = JSON.stringify({ questions: [{ question: '仮の問い', options: ['甲', '乙'] }] });
+  const pane = (leafId: string | undefined, state: string, interactivePrompt?: string) => ({
+    ...terminalTab(),
+    leafId,
+    terminal: `term_${leafId ?? 'none'}`,
+    agentStatus: {
+      agentType: 'claude',
+      providerSession: { id: `session-${leafId}` },
+      state,
+      toolName: 'AskUserQuestion',
+      ...(interactivePrompt === undefined ? {} : { interactivePrompt }),
+    },
+  });
+  const questions = [
+    {
+      id: '0',
+      header: null,
+      question: '仮の問い',
+      multiSelect: false,
+      options: [
+        { id: '0', label: '甲', description: null },
+        { id: '1', label: '乙', description: null },
+      ],
+      allowOther: true,
+      otherAllowsEmpty: false,
+      preview: false,
+    },
+  ];
+  // 別のペインが同じ問いを出していても、宛先のペインが working なら確かめられない
+  const otherAsks = inventory([pane('leaf-other', 'waiting', ask), pane('leaf-test', 'working')]);
+  assert.equal(terminalPromptOf(otherAsks, terminalTarget())?.state, 'working');
+  assert.equal(promptMatches(terminalPromptOf(otherAsks, terminalTarget()), questions), 'unverified');
+  // 宛先のペインが出していれば match（並びの順によらない）
+  const targetAsks = inventory([pane('leaf-test', 'waiting', ask), pane('leaf-other', 'working')]);
+  assert.equal(promptMatches(terminalPromptOf(targetAsks, terminalTarget()), questions), 'match');
+  const reversed = inventory([pane('leaf-other', 'working'), pane('leaf-test', 'waiting', ask)]);
+  assert.equal(promptMatches(terminalPromptOf(reversed, terminalTarget()), questions), 'match');
+  // 宛先の leafId が null なら、leafId のない項目だけを読む（resolveTarget と同じ照合）
+  const noLeaf = inventory([pane('leaf-other', 'waiting', ask), pane(undefined, 'working')]);
+  assert.equal(terminalPromptOf(noLeaf, { tabId: 'terminal-test', leafId: null })?.state, 'working');
+  assert.equal(
+    terminalPromptOf(inventory([pane('leaf-other', 'waiting', ask)]), { tabId: 'terminal-test', leafId: null }),
+    null,
+  );
 });

@@ -1,7 +1,7 @@
 // 送信先の解決。Orca を読まず、session.tabs.listAll の写しだけを扱う。
 import { createHash } from 'node:crypto';
 import type { StateDocument } from '../state/model.ts';
-import type { SendPreview, SendTarget, TargetChange, TargetResolution } from './model.ts';
+import type { SendPreview, SendTarget, TargetChange, TargetResolution, TerminalSendTarget } from './model.ts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -145,13 +145,21 @@ export interface TerminalPrompt {
   interactivePrompt: string | null;
 }
 
-/** session.tabs.listAll の結果から、端末のタブの agentStatus の state・toolName・interactivePrompt を読む。タブか agentStatus がなければ null。 */
-export function terminalPromptOf(listAll: unknown, tabId: string): TerminalPrompt | null {
+/**
+ * session.tabs.listAll の結果から、宛先のペインの agentStatus の state・toolName・interactivePrompt を読む。
+ * 分割した端末は同じ id の項目をペインごとに持つので、resolveTarget と同じく id と leafId の両方で照合する（leafId が null なら leafId のない項目）。
+ * ペインか agentStatus がなければ null。
+ */
+export function terminalPromptOf(
+  listAll: unknown,
+  target: Pick<TerminalSendTarget, 'tabId' | 'leafId'>,
+): TerminalPrompt | null {
   if (!isRecord(listAll) || !Array.isArray(listAll.snapshots)) return null;
   for (const snap of listAll.snapshots) {
     if (!isRecord(snap) || !Array.isArray(snap.tabs)) continue;
     for (const tab of snap.tabs) {
-      if (!isRecord(tab) || tab.type !== 'terminal' || tab.id !== tabId) continue;
+      if (!isRecord(tab) || tab.type !== 'terminal' || tab.id !== target.tabId || text(tab.leafId) !== target.leafId)
+        continue;
       const status = tab.agentStatus;
       if (!isRecord(status)) return null;
       return {

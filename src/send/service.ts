@@ -684,7 +684,10 @@ export class SendService {
     const checked = await this.#preflight(agentId, mode === 'keys' ? 'keys' : 'send');
     if (!checked.ok) return checked;
     if (mode === 'keys') {
-      const shown = promptMatches(terminalPromptOf(checked.listAll, checked.target.tabId), part.questions);
+      const shown = promptMatches(
+        terminalPromptOf(checked.listAll, checked.target as TerminalSendTarget),
+        part.questions,
+      );
       if (shown === 'unverified') return { ok: false, error: 'not_sendable', reason: 'prompt_unverified' };
       if (shown === 'mismatch') return { ok: false, error: 'target_changed', reason: 'prompt_mismatch' };
       const valid = checkAnswers(part.questions, answers);
