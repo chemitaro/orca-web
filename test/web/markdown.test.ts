@@ -172,6 +172,38 @@ test('T-01 表：寄せ、\\|、セルの数を見出しに合わせる、区切
   });
 });
 
+test('T-01 表のセルの \\|：行内のコードと強調の中でも | にし、逆斜線2つでも列を分けない（GitHub の GFM と同じ）', () => {
+  const code = (text: string) => ({ type: 'code', text });
+  const strong = (...children: unknown[]) => ({ type: 'strong', children });
+  assert.deepEqual(parseMarkdown('| a | b |\n|---|---|\n| x \\| y | `c\\|d` |'), [
+    { type: 'table', align: [null, null], head: [[t('a')], [t('b')]], rows: [[[t('x | y')], [code('c|d')]]] },
+  ]);
+  assert.deepEqual(parseMarkdown('| a | b |\n|---|---|\n| f\\|oo | **p\\|q** |'), [
+    { type: 'table', align: [null, null], head: [[t('a')], [t('b')]], rows: [[[t('f|oo')], [strong(t('p|q'))]]] },
+  ]);
+  assert.deepEqual(parseMarkdown('| a | b |\n|---|---|\n| x \\\\| y | z |'), [
+    { type: 'table', align: [null, null], head: [[t('a')], [t('b')]], rows: [[[t('x | y')], [t('z')]]] },
+  ]);
+  assert.deepEqual(parseMarkdown('| h\\|i | `j\\|k` |\n|---|---|\n| 1 | 2 |'), [
+    { type: 'table', align: [null, null], head: [[t('h|i')], [code('j|k')]], rows: [[[t('1')], [t('2')]]] },
+  ]);
+  // 表でない段落の \| は今のまま（逃がしとして |、行内のコードの中は \| のまま）。
+  assert.deepEqual(parseMarkdown('x \\| y `c\\|d`'), [p(t('x | y '), code('c\\|d'))]);
+});
+
+test('T-02 表のセルの \\| を含む行内のコードの中の <script> と javascript: のリンクは文字のまま', () => {
+  const blocks = parseMarkdown(
+    '| a | b |\n|---|---|\n| `<script>\\|alert(1)</script>` | [x](javascript:alert(1)\\|) |\n| <img src=x onerror=alert(1)\\|> | `[y](javascript:z\\|)` |',
+  );
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].type, 'table');
+  assert.deepEqual(hrefs(blocks), []);
+  assert.deepEqual(blocks[0].rows[0][0], [{ type: 'code', text: '<script>|alert(1)</script>' }]);
+  assert.equal(collect(blocks[0].rows[0][1]), '[x](javascript:alert(1)|)');
+  assert.equal(collect(blocks[0].rows[1][0]), '<img src=x onerror=alert(1)|>');
+  assert.deepEqual(blocks[0].rows[1][1], [{ type: 'code', text: '[y](javascript:z|)' }]);
+});
+
 test('T-01 横線：--- *** ___ と空白入り、段落の直後の --- も横線', () => {
   for (const line of ['---', '***', '___', ' - - -', '*  *  *', '_____']) {
     assert.deepEqual(parseMarkdown(line), [{ type: 'hr' }], line);
