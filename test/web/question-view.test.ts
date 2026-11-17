@@ -591,6 +591,9 @@ test('iss-00049 T-13：codex の複数選択・preview の問いと truncated �
   const preview = keysPart({ questions: [question({ id: '0', preview: true })] });
   assert.deepEqual(keys.availability(preview, codex), unsupported);
   assert.deepEqual(message.availability(messagePart({ truncated: true }), keysStatus()), unsupported);
+  // FQG：切った keys の質問も Orca と同じ列か確かめられないので押せない
+  assert.deepEqual(keys.availability(keysPart({ truncated: true }), keysStatus()), unsupported);
+  assert.deepEqual(keys.availability(keysPart({ truncated: true }), codex), unsupported);
 });
 
 test('iss-00049 T-13：keys の未回答のカードに途中まで答えた質問の注が出て、ほかのカードには出ない', () => {

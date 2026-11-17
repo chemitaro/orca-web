@@ -1,7 +1,7 @@
 // 会話の中の質問の今の状態（iss-00049 D-03、T-05）。
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { findCallQuestion, promptMatches } from '../../src/send/question-state.ts';
+import { findCallQuestion, promptMatches, sameQuestions } from '../../src/send/question-state.ts';
 import type { QuestionPart, TranscriptMessage, TranscriptPart } from '../../src/transcript/normalize.ts';
 import { normalizeNativeMessages } from '../../src/transcript/normalize.ts';
 
@@ -135,4 +135,49 @@ test('T-05 promptMatches：interactivePrompt がないか読めない、state �
   }
   assert.equal(promptMatches(status({ toolName: null }), questions), 'unverified');
   assert.equal(promptMatches(null, questions), 'unverified');
+});
+
+test('FQG promptMatches：preview の違いも mismatch にする', () => {
+  const withPreview = status({
+    interactivePrompt: JSON.stringify({
+      questions: [{ question: '仮の問い', options: [{ label: '甲', preview: 'code' }, { label: '乙' }] }],
+    }),
+  });
+  assert.equal(promptMatches(withPreview, questions), 'mismatch');
+  assert.equal(
+    promptMatches(
+      withPreview,
+      questions.map((q) => ({ ...q, preview: true, allowOther: false })),
+    ),
+    'match',
+  );
+});
+
+test('FQG sameQuestions：問いの文・header・複数選択・選択肢の id とラベル・allowOther・preview が同じときだけ真', () => {
+  const base = question('c', 'keys').questions;
+  assert.equal(sameQuestions(base, structuredClone(base)), true);
+  const changed = (over: Record<string, unknown>) => [{ ...(base[0] as (typeof base)[0]), ...over }];
+  for (const over of [
+    { question: '別の問い' },
+    { header: '見出し' },
+    { multiSelect: true },
+    { allowOther: false },
+    { preview: true },
+    { options: [{ id: '0', label: '甲', description: null }] },
+    {
+      options: [
+        { id: '0', label: '甲', description: null },
+        { id: '1', label: '丙', description: null },
+      ],
+    },
+    {
+      options: [
+        { id: '0', label: '甲', description: null },
+        { id: '9', label: '乙', description: null },
+      ],
+    },
+  ]) {
+    assert.equal(sameQuestions(base, changed(over)), false, JSON.stringify(over));
+  }
+  assert.equal(sameQuestions(base, [...base, ...base]), false);
 });

@@ -571,8 +571,8 @@ export function createCallAnswerer(deps) {
       if (!item.available) return cannot(reasonText(item.reason ?? 'unsupported'));
       if (keys && keysUnsupported(part, status.agentType))
         return { ok: false, reason: QUESTION_REASONS.prompt_unsupported, open: true };
-      if (!keys && part?.truncated === true)
-        return { ok: false, reason: QUESTION_REASONS.prompt_unsupported, open: true };
+      // 切った問いは、Orca と同じ発言を作れず、端末が出している問いと同じかも確かめられない（keys・message とも）。
+      if (part?.truncated === true) return { ok: false, reason: QUESTION_REASONS.prompt_unsupported, open: true };
       return { ok: true };
     },
     async submit(part, answers) {

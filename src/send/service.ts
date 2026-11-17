@@ -1,6 +1,6 @@
 // 確認票の消費と記録の順序を所有する送信サービス（本文の送信と、質問への答え：構造化 Chat の rpc、端末のキーの組 keys、後の発言 message。構造化 Chat の承認への答え）。
 import type { CapabilityReport, FeatureName } from '../orca/capabilities.ts';
-import type { TranscriptErrorCode, TranscriptReader } from '../orca/read-transcript.ts';
+import type { TranscriptErrorCode, TranscriptReader, TranscriptSource } from '../orca/read-transcript.ts';
 import type { SendAdapter, SendRead, SendReadFailure, SendResult } from '../orca/send.ts';
 import type { SendRpc } from '../orca/send-gates.ts';
 import type { StateDocument } from '../state/model.ts';
@@ -15,7 +15,7 @@ import { checkOption, digestOption } from './approval.ts';
 import type { BeforeRecord, SendJournal, SendRecord } from './journal.ts';
 import { formatAsyncAnswer, planKeys } from './keys.ts';
 import type { ChatSendTarget, SendPreview, SendTarget, TerminalSendTarget } from './model.ts';
-import { findCallQuestion, promptMatches } from './question-state.ts';
+import { findCallQuestion, promptMatches, sameQuestions } from './question-state.ts';
 import { buildPreview, compareTargets, resolveTarget, targetFingerprint, terminalPromptOf } from './target.ts';
 import { checkText, digestText, newOperationId, TicketStore } from './ticket.ts';
 
@@ -68,10 +68,26 @@ const ANSWER_METHOD = 'agentSession.respondToQuestion';
 const APPROVAL_METHOD = 'agentSession.respondToApproval';
 /** キーの組の列を Orca が知っているエージェント（buildAskAnswerKeys・buildCodexAskAnswerKeys）。 */
 const KEY_AGENTS: ReadonlySet<string> = new Set(['claude', 'codex']);
-/** 会話の記録の末尾のページ（正規化した件）。 */
+/** 読んだ会話のセッション（端末は nativeChat とエージェントのセッション、構造化 Chat は agentSession とそのセッション）。 */
+export interface TranscriptSession {
+  source: TranscriptSource;
+  sessionId: string;
+}
+/** 会話の記録の末尾のページ（正規化した件）と、読んだセッション。 */
 export type TranscriptTail = (
   agentId: string,
-) => Promise<{ ok: true; messages: TranscriptMessage[] } | { ok: false; error: TranscriptErrorCode }>;
+) => Promise<
+  { ok: true; messages: TranscriptMessage[]; session: TranscriptSession } | { ok: false; error: TranscriptErrorCode }
+>;
+/**
+ * 会話を読んだセッションが送り先のセッションか。端末は providerSessionId、構造化 Chat は sessionId と比べる
+ * （read-transcript.ts の resolveFromTabs が同じタブの値から解く）。同じペインでセッションが入れ替わったら偽。
+ */
+function sameSession(session: TranscriptSession, target: SendTarget): boolean {
+  return target.route === 'terminal'
+    ? session.source === 'nativeChat' && session.sessionId === target.providerSessionId
+    : session.source === 'agentSession' && session.sessionId === target.sessionId;
+}
 /** 会話の読み（TranscriptReader）と正規化をつなぎ、末尾の 200 件を読む。 */
 export function transcriptTail(reader: TranscriptReader): TranscriptTail {
   return async (agentId) => {
@@ -80,7 +96,8 @@ export function transcriptTail(reader: TranscriptReader): TranscriptTail {
     const read = await reader.read(resolved.target, { limit: 200 });
     if (!read.ok) return read;
     const messages = normalizePage(read.page);
-    return messages ? { ok: true, messages } : { ok: false, error: 'unknown_shape' };
+    const session = { source: resolved.target.source, sessionId: resolved.target.sessionId };
+    return messages ? { ok: true, messages, session } : { ok: false, error: 'unknown_shape' };
   };
 }
 const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -696,7 +713,10 @@ export class SendService {
     return { ok: false, error: 'unreachable' };
   }
   /** 会話の記録の末尾から callId の質問を読み、まだ答えられていないものだけを返す。 */
-  async #readCallQuestion(agentId: string, callId: string): Promise<{ ok: true; part: QuestionPart } | SendRefusal> {
+  async #readCallQuestion(
+    agentId: string,
+    callId: string,
+  ): Promise<{ ok: true; part: QuestionPart; session: TranscriptSession } | SendRefusal> {
     const read = this.#deps.readTranscript
       ? await this.#deps.readTranscript(agentId)
       : ({ ok: false, error: 'unreachable' } as const);
@@ -704,10 +724,9 @@ export class SendService {
     const found = findCallQuestion(read.messages, callId);
     if (found === null) return { ok: false, error: 'target_changed', reason: 'question_gone' };
     if (found.state !== 'pending') return { ok: false, error: 'target_changed', reason: 'question_answered' };
-    // 切った問いの文やラベルでは Orca と同じ発言を作れない。
-    if (found.part.answerVia === 'message' && found.part.truncated)
-      return { ok: false, error: 'not_sendable', reason: 'prompt_unsupported' };
-    return { ok: true, part: found.part };
+    // 切った問いの文やラベルでは、Orca と同じ発言を作れず、端末が出している問いと同じかも確かめられない。
+    if (found.part.truncated) return { ok: false, error: 'not_sendable', reason: 'prompt_unsupported' };
+    return { ok: true, part: found.part, session: read.session };
   }
   /** 同じエージェントの同じ callId に送り始めた答えがあれば already_sent。記録が読めなければ record_unreadable。 */
   async #alreadyStarted(agentId: string, callId: string): Promise<SendFailure | null> {
@@ -765,6 +784,8 @@ export class SendService {
     if (started) return started;
     const plan = await this.#planCall(agent, question.part, answers);
     if (!plan.ok) return plan as SendFailure;
+    if (!sameSession(question.session, plan.checked.target))
+      return { ok: false, error: 'target_changed', reason: 'session_changed' };
     if (target !== undefined && target !== targetFingerprint(plan.checked.target))
       return { ok: false, error: 'target_changed', reason: 'changed_since_shown' };
     const operationId = this.#operationId();
@@ -791,7 +812,8 @@ export class SendService {
       return await refuse({ ok: false, error: 'target_changed', reason: 'answer_changed' });
     const question = await this.#readCallQuestion(target.agentId, call.callId);
     if (!question.ok) return await refuse(SendService.#confirmRefusal(question));
-    if (question.part.answerVia !== call.mode)
+    // digest は選択肢の id だけなので、問いの文やラベルが変わっていないかも比べる。
+    if (question.part.answerVia !== call.mode || !sameQuestions(questions, question.part.questions))
       return await refuse({ ok: false, error: 'target_changed', reason: 'question_changed' });
     const started = await this.#alreadyStarted(target.agentId, call.callId);
     if (started) return started.error === 'record_unreadable' ? started : await refuse(started as SendRefusal);
@@ -799,6 +821,8 @@ export class SendService {
     if (!plan.ok) return await refuse(SendService.#confirmRefusal(plan as SendRefusal));
     const change = compareTargets(target, plan.checked.target);
     if (change) return await refuse({ ok: false, error: 'target_changed', reason: change });
+    if (!sameSession(question.session, target))
+      return await refuse({ ok: false, error: 'target_changed', reason: 'session_changed' });
     if (digestAnswers(plan.answers) !== digest)
       return await refuse({ ok: false, error: 'target_changed', reason: 'answer_changed' });
     const preview = plan.checked.preview;
@@ -853,7 +877,8 @@ export class SendService {
       return read.error === 'unreachable' || read.error === 'read_failed'
         ? { ok: false, error: 'unreachable' }
         : { ok: true, outcome: 'unknown', detail: { code: read.error } };
-    const found = findCallQuestion(read.messages, callId);
+    // 別のセッションの会話の同じ callId は、送った質問ではない。
+    const found = sameSession(read.session, before.target) ? findCallQuestion(read.messages, callId) : null;
     if (found === null) return { ok: true, outcome: 'unknown', detail: { code: 'question_not_found' } };
     if (found.state === 'failed') return { ok: true, outcome: 'refused', detail: { code: 'cancelled' } };
     return {

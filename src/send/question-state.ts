@@ -62,7 +62,7 @@ const NEEDS_YOU: ReadonlySet<string> = new Set(['waiting', 'blocked']);
 
 /**
  * 端末がその質問を出しているか。state が waiting・blocked で、toolName が質問のツールで、interactivePrompt を端末の規則で読んだ問いが、
- * 問いの数、各問いの文、複数選択か、選択肢のラベルの列で同じなら match。確かめられなければ unverified、読めて違えば mismatch。
+ * 問いの数、各問いの文、複数選択か、preview か（キーの列が変わる）、選択肢のラベルの列で同じなら match。確かめられなければ unverified、読めて違えば mismatch。
  */
 export function promptMatches(
   status: TerminalPrompt | null,
@@ -81,9 +81,30 @@ export function promptMatches(
       return (
         s.question === q.question &&
         s.multiSelect === q.multiSelect &&
+        s.preview === q.preview &&
         s.options.length === q.options.length &&
         s.options.every((o, oi) => o.label === q.options[oi]?.label)
       );
     });
   return same ? 'match' : 'mismatch';
+}
+
+/** 意図で確かめた問いと読み直した問いが、文・header・複数選択・選択肢の id とラベル・その他の文を許すか・preview で同じか。 */
+export function sameQuestions(a: readonly QuestionView[], b: readonly QuestionView[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((x, i) => {
+      const y = b[i] as QuestionView;
+      return (
+        x.id === y.id &&
+        x.question === y.question &&
+        x.header === y.header &&
+        x.multiSelect === y.multiSelect &&
+        x.allowOther === y.allowOther &&
+        x.preview === y.preview &&
+        x.options.length === y.options.length &&
+        x.options.every((o, oi) => o.id === y.options[oi]?.id && o.label === y.options[oi]?.label)
+      );
+    })
+  );
 }

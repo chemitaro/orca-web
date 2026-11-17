@@ -1432,12 +1432,18 @@ async function callFixture(
   let native: unknown[] = [callMessage('AskUserQuestion', input)];
   let transcript: { ok: true; messages: TranscriptMessage[] } | { ok: false; error: string } | null = null;
   const reads: string[] = [];
+  let session: { source: 'nativeChat' | 'agentSession'; sessionId: string } | null = null;
+  const sessionOf = (agentId: string) =>
+    session ??
+    (agentId === CHAT_AGENT
+      ? { source: 'agentSession' as const, sessionId: 'session-chat-test' }
+      : { source: 'nativeChat' as const, sessionId: 'session-terminal-test' });
   const readTranscript = async (agentId: string) => {
     reads.push(agentId);
-    if (transcript) return transcript as { ok: false; error: 'unreachable' };
-    const messages = normalizeNativeMessages(native);
+    if (transcript && !transcript.ok) return transcript as { ok: false; error: 'unreachable' };
+    const messages = transcript ? transcript.messages : normalizeNativeMessages(native);
     assert.ok(messages);
-    return { ok: true as const, messages };
+    return { ok: true as const, messages, session: sessionOf(agentId) };
   };
   const keyQueue: RpcOutcome[] = [];
   const baseGet = f.responses.get.bind(f.responses);
@@ -1472,6 +1478,9 @@ async function callFixture(
     },
     setTranscript: (value: typeof transcript) => {
       transcript = value;
+    },
+    setSession: (value: typeof session) => {
+      session = value;
     },
     writes: () =>
       f.calls.filter((c) =>
@@ -2041,6 +2050,7 @@ test('iss-00049 transcriptTail：会話の読みを解いて末尾の 200 件を
   const read = await tail(TERMINAL_AGENT);
   assert.ok(read.ok);
   assert.equal(read.messages[0]?.parts[0]?.type, 'question');
+  assert.deepEqual(read.session, { source: 'nativeChat', sessionId: 's' });
   assert.deepEqual(reads, [{ limit: 200 }]);
   assert.deepEqual(await tail('other'), { ok: false, error: 'agent_not_found' });
   const broken = transcriptTail({
@@ -2473,4 +2483,87 @@ test('status の approval は能力 answerApproval と止めた承認の RPC を
   // 端末は terminal_route
   status = await f.service.status(TERMINAL_AGENT);
   assert.deepEqual(status.approval, { available: false, reason: 'terminal_route' });
+});
+
+// ---- 最終品質ゲート attempt 1 の直し ----
+
+test('FQG 会話の読みのセッションが宛先のセッションと違えば、意図も確定も session_changed で1組も送らない', async (t) => {
+  const f = await callFixture(t);
+  f.setSession({ source: 'nativeChat', sessionId: 'session-old' });
+  const expected = { ok: false, error: 'target_changed', reason: 'session_changed' };
+  assert.deepEqual(
+    await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS }),
+    expected,
+  );
+  f.setSession({ source: 'agentSession', sessionId: 'session-terminal-test' });
+  assert.deepEqual(
+    await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS }),
+    expected,
+  );
+  f.setSession(null);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.ok(intent.ok);
+  f.setSession({ source: 'nativeChat', sessionId: 'session-new' });
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: KEY_ANSWERS }), expected);
+  assert.equal(f.writes().length, 0);
+  assert.equal(await f.journal.hasAnswer(TERMINAL_AGENT, CALL), false);
+  // 構造化 Chat は宛先の sessionId と比べる
+  const c = await callFixture(t);
+  const journalAsync = normalizeJournalItems([
+    {
+      itemId: 't',
+      sequence: 1,
+      body: { kind: 'tool-call', name: 'request_user_input_async', input: ASYNC_INPUT, callId: CALL },
+    },
+  ]);
+  assert.ok(journalAsync);
+  c.setTranscript({ ok: true, messages: journalAsync });
+  c.setSession({ source: 'agentSession', sessionId: 'session-other' });
+  assert.deepEqual(await c.service.answerIntent({ agent: CHAT_AGENT, callId: CALL, answers: PICK_ANSWERS }), expected);
+  assert.equal(c.writes().length, 0);
+});
+
+test('FQG keys の照会は、会話のセッションが記録の宛先と違えば question_not_found で送らない', async (t) => {
+  const f = await callFixture(t);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.ok(intent.ok);
+  f.queueKeys({ ok: false, kind: 'timeout', message: 'private' });
+  assert.ok((await f.service.answerConfirm({ ticket: intent.ticket, answers: KEY_ANSWERS })).ok);
+  f.setNative([callMessage('AskUserQuestion', ASK_INPUT), toolResult(CALL, true)]);
+  f.setSession({ source: 'nativeChat', sessionId: 'session-new' });
+  const checked = await f.service.check(intent.operationId, { query: true });
+  assert.ok(checked.ok && checked.state === 'recorded');
+  assert.equal(checked.record.outcome, 'unknown');
+  assert.equal(checked.record.checks.at(-1)?.detail.code, 'question_not_found');
+  assert.equal(f.writes().length, 1);
+});
+
+test('FQG 意図と確定の間に同じ callId の問いの文や選択肢が変われば question_changed で送らない', async (t) => {
+  for (const input of [
+    { questions: [{ question: '変わった問い', options: [{ label: 'ラベル秘密A' }, { label: 'ラベル秘密B' }] }] },
+    { questions: [{ question: '仮の端末の問い', options: [{ label: 'ラベル秘密A' }, { label: '別のラベル' }] }] },
+  ]) {
+    const f = await callFixture(t);
+    const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS });
+    assert.ok(intent.ok);
+    f.setNative([callMessage('AskUserQuestion', input)]);
+    f.setPrompt({ interactivePrompt: JSON.stringify(input) });
+    assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: PICK_ANSWERS }), {
+      ok: false,
+      error: 'target_changed',
+      reason: 'question_changed',
+    });
+    assert.equal(f.writes().length, 0);
+  }
+});
+
+test('FQG 切った keys の質問は prompt_unsupported で送らない', async (t) => {
+  const long = { questions: [{ question: 'q'.repeat(5000), options: [{ label: 'a' }, { label: 'b' }] }] };
+  const f = await callFixture(t, { input: long });
+  assert.deepEqual(await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS }), {
+    ok: false,
+    error: 'not_sendable',
+    reason: 'prompt_unsupported',
+  });
+  assert.equal(f.writes().length, 0);
 });
