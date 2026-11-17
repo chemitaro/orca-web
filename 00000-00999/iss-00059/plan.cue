@@ -13,7 +13,7 @@ steps: {
 		title:    "端末の承認の手段の時間切れと確定の 5xx（D-01・D-02）とテスト"
 		text:     "対象：`web/embed/question-view.js`（export を足すだけ）、`web/embed/approval-view.js`、`test/web/approval-view.test.ts`。確かめ：T-01〜T-04。完了：`node --test test/web/approval-view.test.ts test/web/question-view.test.ts`、`npm run lint`、`npm test`、`npm run build` が通り、T-01〜T-04 のテストがあり、iss-00054 の今のテストは変えずに通る。コミットする"
 		realizes: ["R-01", "R-02", "R-03", "F-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "ui"
 	}
 	"S-02": {
@@ -21,7 +21,7 @@ steps: {
 		text:     "対象：`AGENTS.md`（承認のカードの説明の1か所）、README.md（端末の承認の結果不明の説明があるときだけ）。描画の確かめは、実装担当が自分で起動した orca-web（一時の port、一時の settings、偽の Orca の会話と、確定に `500 {ok: false, error: 'internal_error'}` を返す偽の口。実物の Orca には書き込まない）とヘッドレスの Chrome（`--disable-features=MacAppCodeSignClone`、CDP の Browser.close で閉じる）で、端末の承認のカードの結果不明の帯を幅 1280px と 390px で写し、はみ出し 0 と「Orca で開く」を DOM で数え、写しを `.workbench/implement/iss-00059/render/` に置く。確かめ：T-05。完了：`npm run lint`、`npm test`、`npm run build` が通り、コミットして止まり、HEAD を報告する"
 		realizes: ["R-01", "R-03"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "ui"
 	}
 }
