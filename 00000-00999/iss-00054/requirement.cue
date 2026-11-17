@@ -89,13 +89,13 @@ requirements: {
 		text: """
 			意図と確定のどちらでも、送る前に次をすべて確かめ、どれかが外れたら1つも送らず理由を返す：
 			- 宛先が端末で、エージェントの種類が claude か codex（違えば not_sendable の chat_route か agent_keys_unknown）。能力 answerKeys がある。前面のプロセスがそのエージェント（今のキーの組と同じ確かめ。status の permission は拒まない）。
-			- 宛先のペインのタブの agentStatus（state、interactivePrompt、stateStartedAt）を読み、state が blocked か waiting で、interactivePrompt が承認の封筒で、その promptId が要求の promptId と同じ。agentStatus がない、または待っているのに interactivePrompt がない（空の文字を含む）なら not_sendable（prompt_unverified）、待っていなければ target_changed（question_gone）、interactivePrompt が承認の封筒として読めない（JSON でない、質問などの別の封筒）か promptId が違うなら target_changed（prompt_mismatch）、封筒の道具の名前か要約が上限を超える（切られる）なら not_sendable（prompt_unsupported）。
+			- 宛先のペインのタブの agentStatus（state、interactivePrompt、stateStartedAt）を読み、state が blocked か waiting で、interactivePrompt が承認の封筒で、その promptId が要求の promptId と同じ。タブに agentStatus がなければ、宛先の解決（preflight）が今のとおり not_sendable（no_session）で止める。agentStatus はあるが物の形でない、または待っているのに interactivePrompt がない（空の文字を含む）なら not_sendable（prompt_unverified）、待っていなければ target_changed（question_gone）、interactivePrompt が承認の封筒として読めない（JSON でない、質問などの別の封筒）か promptId が違うなら target_changed（prompt_mismatch）、封筒の道具の名前か要約が上限を超える（切られる）なら not_sendable（prompt_unsupported）。
 			- 同じエージェントの同じ promptId に、前に送り始めた答えの記録がない（あれば already_sent）。
 			確定は、送る前の記録を書いた後、キーを送る直前に、タブの agentStatus をもう一度読み、同じ promptId の許可の確認がまだ待っていなければ送らない（refused、not_sent）。
 			カードは、意図の拒みが prompt_mismatch・question_gone・question_answered・already_sent・prompt_unsupported・agent_keys_unknown のとき、選択肢を押し直せない形にし、理由と「Orca で開く」を出す。prompt_unverified とほかの一時の拒み（busy、unreachable など）は、理由を示して押し直せる。端末の承認の未回答のカードは、いつも「Orca で開く」を出す。
 			"""
 		acceptance: [
-			"agentStatus がない、interactivePrompt がない・JSON でない、state が working、promptId が違う、承認でなく質問の封筒、前面がシェル、前に送った記録がある、のそれぞれで、terminal.send を1回も呼ばずに決めた理由を返す",
+			"agentStatus がない（no_session）、interactivePrompt がない（prompt_unverified）・JSON でない、state が working、promptId が違う、承認でなく質問の封筒、前面がシェル、前に送った記録がある、のそれぞれで、terminal.send を1回も呼ばずに決めた理由を返す",
 			"確定の送る直前の読みで許可の確認が消えたか変わったら、terminal.send を呼ばずに refused（not_sent）を返す",
 			"カードが、prompt_unverified の拒みで理由と「Orca で開く」を出して押し直せ、prompt_mismatch・already_sent などの拒みで押し直せない形になり、どちらも送ったと示さない",
 		]
@@ -110,8 +110,8 @@ requirements: {
 			"""
 		acceptance: [
 			"送り始めた後は、同じ promptId への意図と確定を already_sent で拒む（新しい SendService でも記録から拒む）",
-			"terminal.send が refused・unknown・RPC の誤りのとき、送り直さず、refused（not_sent）か unknown（unconfirmed）を返す",
-			"記録の行に、allow_once・reject_once の id、`1`・ESC のバイト、道具の名前、要約が入らない（intent の値は入る）",
+			"terminal.send が refused・unknown・RPC の誤りのとき、送り直さず、refused（not_sent。method_not_found なら code method_not_found）か unknown（unconfirmed）を返す",
+			"記録の行が、optionId・ラベル・キー（text・bytes など）・道具の名前・要約の項目を持たず、ESC のバイトと、道具の名前と要約の文字が入らない（intent の値は入る。intent は選択肢の id と同じ文字になるが、決めた4つの値の記録として許す）",
 			"照会が、待っている同じ promptId で prompt_pending、ないときに resolved_unverified を返し、terminal.send を呼ばない",
 			"カードが unknown で、届いたか分からない帯と「Orca で開く」を出し、選択肢を押せない",
 		]

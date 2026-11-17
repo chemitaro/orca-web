@@ -63,7 +63,7 @@ design: {
 			`approvalIntent` は `{agent, promptId, optionId, confirmPersistent?, target?}` も受ける（prompt と promptId はちょうど片方）。promptId の流れ：
 			1. sendEnabled（偽なら send_disabled）。
 			2. preflight の mode 'keys'（端末でなければ not_sendable chat_route、claude・codex でなければ agent_keys_unknown、能力 answerKeys、端末の status の permission を拒まない、前面がエージェント）。target の指紋の比べ（今と同じ）。
-			3. `matchTerminalApproval(terminalStatusOf(checked.listAll, target), promptId)`：unverified は `not_sendable`（prompt_unverified）、gone は `target_changed`（question_gone）、mismatch は `target_changed`（prompt_mismatch）、truncated は `not_sendable`（prompt_unsupported）。
+			3. `matchTerminalApproval(terminalStatusOf(checked.listAll, target), promptId)`：unverified は `not_sendable`（prompt_unverified）、gone は `target_changed`（question_gone）、mismatch は `target_changed`（prompt_mismatch）、truncated は `not_sendable`（prompt_unsupported）。タブに agentStatus がなければ、手順 2 の宛先の解決（resolveTarget）が not_sendable（no_session）で先に止める。
 			4. 送り始めた記録（サービスの中の集まりと、記録の `hasApproval(agentId, promptId)`）があれば `not_sendable`（already_sent）。記録が読めなければ record_unreadable。
 			5. `checkOption({options: TERMINAL_APPROVAL_OPTIONS, answerable: true}, optionId, confirmPersistent)`（誤りは invalid_answer とその reason）。`approvalKey(agentType, option.id)` が null なら not_sendable（agent_keys_unknown）。
 			6. 票を出す。`TicketInput` に任意の `terminalApproval: {promptId, optionId, intent}` を足す（キーは持たない）。digest は `digestOption(optionId)`。応答は今の ApprovalIntentResult（`{ticket, expiresAt, operationId, preview, digest, intent}`）。
@@ -114,7 +114,7 @@ compatibility: """
 
 risks: [
 	"タブの agentStatus に interactivePrompt が出ない Orca では、端末の承認のカードはそもそも出ない（今と同じ。安全側。実機の確かめは本人の確かめに残す）",
-	"送る直前の読み（listAll）と terminal.send の書き込みの間に、許可の確認が別の確認に変わると、`1` が別の確認を許しうる。Orca 自身は同じ処理の中で同期して読み直す（fence）が、orca-web は RPC の往復の分だけ隙間が広い。前面の確かめと promptId（stateStartedAt を含む）で狭める",
+	"送る直前の読み（listAll）と terminal.send の書き込みの間に、許可の確認が別の確認に変わると、`1` が別の確認を許しうる。Orca 自身は同じ処理の中で同期して読み直す（fence）が、orca-web は RPC の往復の分だけ隙間が広い。前面の確かめと promptId（stateStartedAt を含む）で狭める。隙間の間に許可の確認が Orca 側で答えられてエージェントが動き出すと、reject_once の ESC はそのターンを止め（claude と codex の停止は ESC 1つ）、allow_once の `1` は入力欄に残りうる",
 	"Claude Code の permission prompt の番号の意味が後の版で変わると、`1` の意味が変わりうる（Orca 自身も同じ前提）",
 	"orca-web が desktop のクライアントとして送るので、Orca は答えたことを入力から推さない。カードは許可の確認が消えたときに消える",
 ]
