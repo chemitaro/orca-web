@@ -18,7 +18,9 @@ ID: "iss-00049"
   - 合格した文書の sha256：requirement.cue `4fc503ef5afe96f1ffb30c2f4c0d6894f9ae42ad62f1a8ddaea77080e86ea386`、design.cue `214047d0c04f0b43579dfc176fe4442a538e236eb6b826c7ed7b5200ac243ebb`、plan.cue `d107b1893a134e13881b77efd0c3e2dfca83a895a835223c030421eb5a136917`（コードの HEAD は 3b7aece）。
   - round-1：合格（P2 7件、P3 1件）。直す価値があるので全部直して確かめ直した（status の agentType、async の受付の結果で閉じる誤り、preview の判定、キーの文の制御文字、Orca の画面で途中まで進めた質問の残る危険、確かめの拒みの押し直せない形、S-02 の完了条件、切った async の問い）。応答は `review-response.md`。
   - 仕様の変更（統括の判断 2026-11-18、案 C：端末のキーの組の実機は本人の確かめに残す。最終品質ゲート attempt 1 の P1 による）の後の再レビュー：round-3（照合の失敗の後の round-3b、HEAD 2e4a9d4）合格（P2 1、P3 2）、round-4 合格（P2 1、P3 1）、round-5 合格（P3 1：R-08 の受け入れが S-03 に求める帯と 44px の確かめが S-03 の手順にない。情報）。どの round の P2・P3 も直して確かめ直した（round-5 の P3 を除く）。
-  - 今の合格（round-5、`.workbench/spec-review/iss-00049/round-5.json`）の sha256：requirement.cue `4826732e7782a86b09830c8a1582494ea217e9d2a30c59cbd67ee6af008b7097`、design.cue `994554e0b2ec015a68a716e8e082579713b11de4e5a66633da04dad8ffbe504f`、plan.cue `052c0611e3decf77ebfbc80a6d28f02d5aedfba90d440025fa816bb5b4aa00b0`（コードの HEAD は 2e4a9d4）。
+  - 最終品質ゲート fqg2 attempt 1 の2人目の指摘による設計の改め（キーの組の受け取りを厳しく、届いていない発言を除く、記録の後の refused を blocked）の後：round-6 合格（P2 1：送る前の確かめが届いていない引用の発言を数えず、Orca 側の待ちの答えと二重になりうる。P3 2）。round-6 の P2 は、R-05 の文（後の利用者の発言にその引用があれば question_answered）に従い、サーバーの送る前の確かめは届いたかによらず引用の発言があれば拒み、カードの答え済みの判定だけを届いた発言に限る読みで直す（逸脱と判断に記録）。
+  - 今の合格（round-6、`.workbench/spec-review/iss-00049/round-6.json`）の sha256：requirement.cue `4826732e7782a86b09830c8a1582494ea217e9d2a30c59cbd67ee6af008b7097`、design.cue `f892809441906b65008d9c90790daa959bb35d63c2ee57b092fd29deb8104ae9`、plan.cue `d8464d03b2ff320b3357ad788c86d441f8b1ad9f5902f1e783695e13a10feb7c`（コードの HEAD は a4b7382）。
+  - 前の合格（round-5、`.workbench/spec-review/iss-00049/round-5.json`）の sha256：requirement.cue `4826732e7782a86b09830c8a1582494ea217e9d2a30c59cbd67ee6af008b7097`、design.cue `994554e0b2ec015a68a716e8e082579713b11de4e5a66633da04dad8ffbe504f`、plan.cue `052c0611e3decf77ebfbc80a6d28f02d5aedfba90d440025fa816bb5b4aa00b0`（コードの HEAD は 2e4a9d4）。
   - round-2：合格（P3 1件：画面の buildAnswers が keys のその他の文の Tab・改行を許し、サーバーだけが拒む）。文書は変えず、F-04 の読みとして S-03 の実装担当に画面でも同じ条件と理由の言葉を入れるよう伝える（逸脱と判断に記録）。
 
 - 区切りのレビュー CP-1（code-reviewer、Opus 5.5 / medium、standards と spec の両方）：範囲 `3b7aece..b86a91f`、合格。
@@ -42,6 +44,8 @@ ID: "iss-00049"
   - 本人の確かめの手順：(1) 端末で Claude Code（haiku など）を1つ立てる。(2) 試しの orca-web を `npm run trial -- --state-dir .workbench/trial-49 --orca-port 8796 --page-port 47940 --forbidden-port 47941` で起動し、`.workbench/trial-49/settings.json` の `sendEnabled` を真にする（常駐の 8791 は変えない）。(3) その Claude に無害な AskUserQuestion（選択肢2つ）を出させる。(4) `http://127.0.0.1:8796/embed/agent?id=<エージェントの id>` のカードで選び「答える」を押す。(5) 「答えを送りました」の後、Claude が答えを受け取って続け、カードが答え済みの閉じた形になることを見る。`prompt_unverified` と出たら、上の前提が成り立たない（設計を直す後の Issue が要る）。(6) 終えたら試しのエージェントと試しの orca-web を止める。
 
 ## 逸脱と判断
+
+- 仕様レビュー round-6 の P2（タスク担当の判断、2026-11-18）：後の発言の質問の送る前の確かめ（サーバーの findCallQuestion を送る前と照会で使うとき）は、R-05 のとおり、届いたかによらず引用の利用者の発言があれば question_answered で拒む（二重の答えを避ける安全側）。カードを答え済みに閉じるのは届いた発言だけ（D-03・D-07）。
 
 - 逸脱（実装担当の切り替え）：Codex GPT-6.1 Sol / medium の実装担当（dispatch ctx_6a5fea160dad）が、最初の読みのコマンドで、書き込みの許された根の Orca の Application Support の symlink を拒まれ（symlinked writable roots are not supported）、何もせずに止まった（変更なし）。統括の依頼書の補足に従い worker-stop し、Claude Opus 5.5 / medium（dispatch ctx_0b314dede454）で S-01〜S-02 を始め直した。
 
