@@ -50,7 +50,17 @@ test('T-02：詳細が読む全スクリプトは、iframe 内や親を移す操
   }
   const forbidden =
     /_self|_parent|_top|\blocation\s*(?:\.\s*href\s*)?=(?!=)|\blocation\s*\.\s*(?:assign|replace)\s*\(|\bwindow\s*\.\s*open\s*\(/;
-  for (const [file, source] of scripts) assert.doesNotMatch(source, forbidden, file);
+  // 例外は1か所だけ：押した端末の Orca を前面に出す open-control.js の orca:// への移動（iss-00047 D-04）。ページは移さない。
+  const raiseLine = /globalThis\.location\.href = 'orca:\/\/';/g;
+  const control = new URL('../../web/embed/open-control.js', import.meta.url).href;
+  assert.equal(
+    [...(scripts.get(control) ?? '').matchAll(raiseLine)].length,
+    1,
+    'orca:// への移動は open-control.js の1か所',
+  );
+  for (const [file, source] of scripts) {
+    assert.doesNotMatch(file === control ? source.replace(raiseLine, '') : source, forbidden, file);
+  }
   const dom = scripts.get(new URL('../../web/embed/agent-dom.js', import.meta.url).href);
   assert.ok(dom);
   assert.equal([...dom.matchAll(/['"]a['"]/g)].length, 1, 'a を作るのは共通の関数の1か所');

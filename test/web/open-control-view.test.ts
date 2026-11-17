@@ -1,20 +1,69 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-test('openResult は成功を決めた言葉にする', async () => {
+test('T-07：openResult は host と device のない成功を『Orca に切り替えを送りました』にする', async () => {
   const { openResult } = await import('../../web/embed/open-control-view.js');
-  assert.deepEqual(openResult({ kind: 'response', status: 200, body: { ok: true } }), {
-    state: 'done',
-    message: '開きました',
-  });
+  for (const body of [
+    { ok: true },
+    { ok: true, device: 'host', screen: 'unverified', raised: true },
+    { ok: true, device: 'x' },
+  ]) {
+    assert.deepEqual(openResult({ kind: 'response', status: 200, body }), {
+      state: 'done',
+      message: 'Orca に切り替えを送りました',
+    });
+  }
 });
 
-test('openResult は端末が作られる可能性を成功の言葉に含める', async () => {
+test('T-07：openResult は client の成功を『この端末の Orca に切り替えを送りました』にする', async () => {
+  const { openResult } = await import('../../web/embed/open-control-view.js');
+  assert.deepEqual(
+    openResult({ kind: 'response', status: 200, body: { ok: true, device: 'client', screen: 'unverified' } }),
+    { state: 'done', message: 'この端末の Orca に切り替えを送りました' },
+  );
+});
+
+test('T-07：openResult は端末が作られる可能性を成功の言葉の後ろに足す', async () => {
   const { openResult } = await import('../../web/embed/open-control-view.js');
   assert.deepEqual(openResult({ kind: 'response', status: 200, body: { ok: true, mayCreateInitialTerminal: true } }), {
     state: 'done',
-    message: '開きました（Orca が端末を作ることがあります）',
+    message: 'Orca に切り替えを送りました（Orca が端末を作ることがあります）',
   });
+  assert.deepEqual(
+    openResult({
+      kind: 'response',
+      status: 200,
+      body: { ok: true, device: 'client', mayCreateInitialTerminal: true },
+    }),
+    { state: 'done', message: 'この端末の Orca に切り替えを送りました（Orca が端末を作ることがあります）' },
+  );
+});
+
+test('T-07：openResult は worktreeShown の失敗で worktree を表示したことを先に出す', async () => {
+  const { openResult, WORKTREE_SHOWN_MESSAGE } = await import('../../web/embed/open-control-view.js');
+  assert.equal(WORKTREE_SHOWN_MESSAGE, 'worktree は表示しましたが、タブを選べませんでした');
+  assert.deepEqual(
+    openResult({
+      kind: 'response',
+      status: 502,
+      body: { ok: false, error: 'orca_error', worktreeShown: true, message: '秘密' },
+    }),
+    { state: 'error', message: 'worktree は表示しましたが、タブを選べませんでした（Orca が誤りを返しました）' },
+  );
+  assert.deepEqual(
+    openResult({ kind: 'response', status: 504, body: { ok: false, error: 'future', worktreeShown: true } }),
+    {
+      state: 'error',
+      message: 'worktree は表示しましたが、タブを選べませんでした（開けません（504））',
+    },
+  );
+  assert.deepEqual(
+    openResult({ kind: 'response', status: 502, body: { ok: false, error: 'orca_error', worktreeShown: 'true' } }),
+    {
+      state: 'error',
+      message: 'Orca が誤りを返しました',
+    },
+  );
 });
 
 const errors = {
@@ -27,9 +76,11 @@ const errors = {
   unknown_shape: 'Orca の応答を読めません',
   orca_error: 'Orca が誤りを返しました',
   unconfirmed: '開いたか確かめられません',
+  device_not_connected: 'この端末から Orca のホストへの接続が見つかりません',
+  device_unknown: '押した端末を確かめられません',
 };
 
-test('openResult は9種類の誤りを表の言葉だけで示す', async () => {
+test('T-07：openResult は11種類の誤りを表の言葉だけで示す', async () => {
   const { openResult, OPEN_MESSAGES } = await import('../../web/embed/open-control-view.js');
   assert.deepEqual(OPEN_MESSAGES, errors);
   for (const [error, message] of Object.entries(errors)) {
