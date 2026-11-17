@@ -2665,3 +2665,47 @@ test('FQG3-3 interactivePrompt の説明だけが違えば prompt_mismatch で�
   });
   assert.equal(f.writes().length, 0);
 });
+
+// ---- キーの組の門は、キーの組が使う RPC の method_not_found だけで止まる（iss-00055 D-06、T-04） ----
+
+const notFound: RpcOutcome = { ok: false, kind: 'orca-error', code: 'method_not_found', message: 'private' };
+
+test('T-04 orchestration.requestShow の method_not_found の後も answerKeys は available で keys の意図が通り、今の送信の門は unsupported', async (t) => {
+  const f = await callFixture(t);
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  // 今の送信を結果不明にし、照会の requestShow で method_not_found を受ける
+  f.responses.set('terminal.send', { ok: false, kind: 'timeout', message: 'private' });
+  const sent = await f.service.intent({ agent: TERMINAL_AGENT, text: 'hello' });
+  assert.ok(sent.ok);
+  await f.service.confirm({ ticket: sent.ticket, text: 'hello' });
+  f.responses.set('orchestration.requestShow', notFound);
+  await f.service.check(sent.operationId, { query: true });
+
+  const status = await f.service.status(TERMINAL_AGENT);
+  assert.equal(status.available, false);
+  assert.equal(status.reason, 'unsupported');
+  assert.deepEqual(status.answerKeys, { available: true, reason: null });
+  assert.deepEqual(await f.service.intent({ agent: TERMINAL_AGENT, text: 'hello' }), {
+    ok: false,
+    error: 'unsupported',
+    missing: ['rpc:orchestration.requestShow'],
+  });
+  const keys = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS });
+  assert.ok(keys.ok, JSON.stringify(keys));
+});
+
+test('T-04 terminal.send の method_not_found の後は、今のとおり answerKeys も unsupported', async (t) => {
+  const f = await callFixture(t);
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  const sent = await f.service.intent({ agent: TERMINAL_AGENT, text: 'hello' });
+  assert.ok(sent.ok);
+  f.responses.set('terminal.send', notFound);
+  await f.service.confirm({ ticket: sent.ticket, text: 'hello' });
+  const status = await f.service.status(TERMINAL_AGENT);
+  assert.deepEqual(status.answerKeys, { available: false, reason: 'unsupported' });
+  assert.deepEqual(await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS }), {
+    ok: false,
+    error: 'unsupported',
+    missing: ['rpc:terminal.send'],
+  });
+});

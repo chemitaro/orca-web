@@ -357,7 +357,7 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
     },
     /**
      * 答えの組を1組ずつ送る。1組目はすぐ、次の組は前の組が受けられてから sleep(ANSWER_STEP_MS) の後に送る。
-     * 受けられない組で止め、残りを送らない。自動で送り直さない。
+     * 各組の直前に前面のプロセスと画面の質問を読み直す。受けられない組で止め、残りを送らない。自動で送り直さない。
      */
     async answerKeys(
       target: TerminalSendTarget,
@@ -372,12 +372,11 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
           ? { outcome: 'unknown', detail: { code: 'partial_sent', sentGroups, totalGroups } }
           : { outcome: 'refused', detail: { code: 'not_sent', sentGroups, totalGroups } };
       for (const [index, bytes] of groups.entries()) {
-        if (index > 0) {
-          await sleep(ANSWER_STEP_MS);
-          // 組の間にエージェントが終わると、残りの文と Enter がシェルに届く。送る直前に前面を読み直し、違えば止める。
-          const foreground = await readForeground(target.handle, target.incarnationId, target.agentType);
-          if (!foreground.ok || foreground.isShell || !foreground.matchesAgent) return stopped();
-        }
+        if (index > 0) await sleep(ANSWER_STEP_MS);
+        // 送る前の確かめの後や組の間にエージェントが終わると、文と Enter がシェルに届く。
+        // 1組目を含む各組の直前に前面を読み直し、違えば止める。
+        const foreground = await readForeground(target.handle, target.incarnationId, target.agentType);
+        if (!foreground.ok || foreground.isShell || !foreground.matchesAgent) return stopped();
         // 各組の直前に、宛先のペインがまだ同じ質問を出しているかを読み直す（答えられた・取り消された・変わったら止める）。
         const tabs = await rpc.call('session.tabs.listAll', {});
         if (!tabs.ok || promptMatches(terminalPromptOf(tabs.result, target), questions) !== 'match') return stopped();
