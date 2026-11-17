@@ -286,6 +286,37 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
       answers: parsed.answers,
     };
   }
+  /** 端末の前面のプロセス（terminal.inspectProcess、宛先の incarnation）。送る前の確かめと、キーの組の間の読み直しが使う。 */
+  async function readForeground(
+    handle: string,
+    incarnationId: string,
+    agentType: string,
+  ): Promise<SendRead<{ isShell: boolean; matchesAgent: boolean }>> {
+    const result = await rpc.call('terminal.inspectProcess', {
+      terminal: handle,
+      expectedIncarnationId: incarnationId,
+    });
+    if (!result.ok) return readFailure(result, 'terminal.inspectProcess');
+    const foreground = object(object(result.result).process).foregroundProcess;
+    if (typeof foreground !== 'string' || !foreground.trim()) return { ok: false, error: 'foreground_unknown' };
+    const normalized = foreground
+      .trim()
+      .replace(/^["']|["']$/g, '')
+      .toLowerCase();
+    const basename = normalized.split(/[\\/]/).pop() ?? normalized;
+    const processName = basename.replace(/\.(?:exe|cmd|bat|ps1)$/i, '');
+    const shellNames =
+      '|bash|zsh|sh|fish|cmd|cmd.exe|powershell|powershell.exe|pwsh|pwsh.exe|nu|ksh|mksh|dash|ash|tcsh|csh|elvish|xonsh'.split(
+        '|',
+      );
+    return {
+      ok: true,
+      isShell: [normalized, basename, processName].some((name) => shellNames.includes(name)),
+      matchesAgent:
+        (agentType === 'claude' && processName === 'claude') ||
+        (agentType === 'codex' && (processName === 'codex' || processName.startsWith('codex-'))),
+    };
+  }
   async function sendGroup(target: TerminalSendTarget, bytes: string): Promise<{ ack: KeyAck; code?: string }> {
     return classifyKeyGroup(
       await rpc.call(
@@ -334,7 +365,15 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
       const totalGroups = groups.length;
       let sentGroups = 0;
       for (const [index, bytes] of groups.entries()) {
-        if (index > 0) await sleep(ANSWER_STEP_MS);
+        if (index > 0) {
+          await sleep(ANSWER_STEP_MS);
+          // 組の間にエージェントが終わると、残りの文と Enter がシェルに届く。送る直前に前面を読み直し、違えば止める。
+          const foreground = await readForeground(target.handle, target.incarnationId, target.agentType);
+          if (!foreground.ok || foreground.isShell || !foreground.matchesAgent)
+            return sentGroups > 0
+              ? { outcome: 'unknown', detail: { code: 'partial_sent', sentGroups, totalGroups } }
+              : { outcome: 'unknown', detail: { code: 'unconfirmed', sentGroups, totalGroups } };
+        }
         const { ack, code } = await sendGroup(target, bytes);
         if (ack === 'accepted') {
           sentGroups += 1;
@@ -548,36 +587,7 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
         return { ok: false, error: 'unknown_shape' };
       return { ok: true, fence: page.fence as number };
     },
-    async readForeground(
-      handle: string,
-      incarnationId: string,
-      agentType: string,
-    ): Promise<SendRead<{ isShell: boolean; matchesAgent: boolean }>> {
-      const result = await rpc.call('terminal.inspectProcess', {
-        terminal: handle,
-        expectedIncarnationId: incarnationId,
-      });
-      if (!result.ok) return readFailure(result, 'terminal.inspectProcess');
-      const foreground = object(object(result.result).process).foregroundProcess;
-      if (typeof foreground !== 'string' || !foreground.trim()) return { ok: false, error: 'foreground_unknown' };
-      const normalized = foreground
-        .trim()
-        .replace(/^["']|["']$/g, '')
-        .toLowerCase();
-      const basename = normalized.split(/[\\/]/).pop() ?? normalized;
-      const processName = basename.replace(/\.(?:exe|cmd|bat|ps1)$/i, '');
-      const shellNames =
-        '|bash|zsh|sh|fish|cmd|cmd.exe|powershell|powershell.exe|pwsh|pwsh.exe|nu|ksh|mksh|dash|ash|tcsh|csh|elvish|xonsh'.split(
-          '|',
-        );
-      return {
-        ok: true,
-        isShell: [normalized, basename, processName].some((name) => shellNames.includes(name)),
-        matchesAgent:
-          (agentType === 'claude' && processName === 'claude') ||
-          (agentType === 'codex' && (processName === 'codex' || processName.startsWith('codex-'))),
-      };
-    },
+    readForeground,
     async readTerminalStatus(handle: string): Promise<SendRead<{ isRunningAgent: boolean; status: string | null }>> {
       const result = await rpc.call('terminal.agentStatus', { terminal: handle });
       if (!result.ok) return readFailure(result, 'terminal.agentStatus');

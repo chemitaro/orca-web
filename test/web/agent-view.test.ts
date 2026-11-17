@@ -415,3 +415,11 @@ test('FQG2 T-15：届いていない（undelivered の）引用の発言では�
   ]);
   assert.equal(later[0].part.state, 'answered', '後で届いた引用で答え済み');
 });
+
+test('FQG3 T-15：ほかのエージェントからの（fromAgent の）引用の発言では、message の質問は pending のまま', () => {
+  const rows = buildChat([
+    msg('m1', 'assistant', [messageQuestion()]),
+    { ...msg('m2', 'user', [{ type: 'text', text: '> どちらに しますか\n\nはい' }]), fromAgent: true },
+  ]);
+  assert.equal(rows[0].part.state, 'pending');
+});

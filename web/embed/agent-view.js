@@ -216,8 +216,14 @@ export function buildChat(messages) {
     };
     m.parts.forEach((part, index) => {
       if (part.type === 'text') {
-        // 届いていない（undelivered の）発言の引用では答え済みにしない。
-        if (m.role === 'user' && m.undelivered !== true && awaitingMessage.length && typeof part.text === 'string')
+        // 届いていない（undelivered の）発言と、ほかのエージェントからの（fromAgent の）発言の引用では答え済みにしない。
+        if (
+          m.role === 'user' &&
+          m.undelivered !== true &&
+          m.fromAgent !== true &&
+          awaitingMessage.length &&
+          typeof part.text === 'string'
+        )
           answerByMessage(part.text);
         if (!texts.length) first = index;
         texts.push(part.text);

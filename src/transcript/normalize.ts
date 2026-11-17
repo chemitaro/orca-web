@@ -136,6 +136,8 @@ export interface TranscriptMessage {
   parts: TranscriptPart[];
   /** 端末の利用者の発言で、まだ届いていないもの（Orca の isDeliveredNativeChatUserMessage に当たらない）。後の発言の質問の答えに数えない。 */
   undelivered?: true;
+  /** 端末の role user の件のうち、Orca の from.kind が agent のもの（ほかのエージェントからの発言）。利用者の答えに数えない。 */
+  fromAgent?: true;
 }
 
 /** Orca の isDeliveredNativeChatUserMessage が届いていないとする印（送っていない、止めた、送り直し待ち、待ち行列、送信中、届け先の状態）。 */
@@ -255,7 +257,15 @@ export function normalizeNativeMessages(messages: readonly unknown[]): Transcrip
     const { role, parts } = messageOf(m.role, m.blocks, m.shortened === true, true);
     if (parts.length === 0) continue;
     const undelivered = role === 'user' && UNDELIVERED_FLAGS.some((flag) => Boolean(m[flag]));
-    out.push({ id: m.id, role, at: toIso(m.timestamp), parts, ...(undelivered ? { undelivered: true as const } : {}) });
+    const fromAgent = role === 'user' && isRecord(m.from) && m.from.kind === 'agent';
+    out.push({
+      id: m.id,
+      role,
+      at: toIso(m.timestamp),
+      parts,
+      ...(undelivered ? { undelivered: true as const } : {}),
+      ...(fromAgent ? { fromAgent: true as const } : {}),
+    });
   }
   return out;
 }

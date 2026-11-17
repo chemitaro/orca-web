@@ -2582,3 +2582,17 @@ test('FQG2 送る前の確かめは、届いていない引用の発言があっ
   });
   assert.equal(f.writes().length, 0);
 });
+
+test('FQG3 ほかのエージェントからの引用の発言は利用者の答えに数えず、送る（question_answered にしない）', async (t) => {
+  const f = await callFixture(t);
+  f.setNative([
+    callMessage('request_user_input_async', ASYNC_INPUT),
+    { ...userSays('> 仮の後の問い\n\nラベル秘密A'), from: { kind: 'agent', id: 'other-agent' } },
+  ]);
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS });
+  assert.ok(intent.ok, JSON.stringify(intent));
+  const confirmed = await f.service.answerConfirm({ ticket: intent.ticket, answers: PICK_ANSWERS });
+  assert.ok(confirmed.ok);
+  assert.equal(f.writes().length, 1);
+});

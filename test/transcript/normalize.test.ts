@@ -1193,3 +1193,19 @@ test('FQG2 端末の role user の件のうち、Orca の届いた発言に当�
   const assistant = normalizeNativeMessages([{ ...user({ queued: true }), role: 'assistant' }])?.[0];
   assert.equal(assistant && 'undelivered' in assistant, false);
 });
+
+test('FQG3 端末の role user の件のうち、Orca の from.kind が agent のものに fromAgent: true を付ける', () => {
+  const user = (extra: Record<string, unknown>) => ({
+    id: 'u',
+    role: 'user',
+    timestamp: 0,
+    blocks: [{ type: 'text', text: 'x' }],
+    ...extra,
+  });
+  assert.equal(normalizeNativeMessages([user({ from: { kind: 'agent', id: 'a' } })])?.[0]?.fromAgent, true);
+  for (const extra of [{}, { from: { kind: 'user' } }, { from: 'agent' }]) {
+    assert.equal('fromAgent' in (normalizeNativeMessages([user(extra)])?.[0] ?? {}), false, JSON.stringify(extra));
+  }
+  const assistant = normalizeNativeMessages([{ ...user({ from: { kind: 'agent' } }), role: 'assistant' }])?.[0];
+  assert.equal(assistant && 'fromAgent' in assistant, false);
+});

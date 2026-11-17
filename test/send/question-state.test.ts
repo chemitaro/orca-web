@@ -190,3 +190,11 @@ test('FQG2 T-05 findCallQuestion：届いていない引用の発言は、既定
   assert.equal(findCallQuestion(rows, 'a2', { countUndelivered: true })?.state, 'answered', '送る前は二重を避ける');
   assert.equal(findCallQuestion([...rows, msg('user', say('> 一つ目\n\n甲'))], 'a2')?.state, 'answered');
 });
+
+test('FQG3 T-05 findCallQuestion：ほかのエージェントからの発言（fromAgent）の引用は、countUndelivered によらず答えに数えない', () => {
+  const q = question('a3', 'message', '一つ目');
+  const fromAgent: TranscriptMessage = { ...msg('user', say('> 一つ目\n\n甲')), fromAgent: true };
+  for (const countUndelivered of [false, true]) {
+    assert.equal(findCallQuestion([msg('assistant', q), fromAgent], 'a3', { countUndelivered })?.state, 'pending');
+  }
+});
