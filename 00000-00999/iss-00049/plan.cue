@@ -16,7 +16,7 @@ steps: {
 		title:    "会話の正規化の答え方と後の発言の質問、キーの列と答えの発言、会話の中の質問の状態（D-01、D-02、D-03）"
 		text:     "対象：`src/transcript/normalize.ts`、`src/send/keys.ts`（新）、`src/send/question-state.ts`（新）、`src/send/target.ts`（terminalPromptOf）と、`test/transcript/normalize.test.ts`、`test/send/keys.test.ts`（新）、`test/send/question-state.test.ts`（新）、`test/send/target.test.ts`。確かめ：T-01〜T-05。完了：`node --test test/transcript/*.test.ts test/send/*.test.ts` と `npm run lint` が通り、T-01〜T-05 のテストがある。区切りのレビュー：なし"
 		realizes: ["R-01", "R-02", "R-05", "F-04", "F-05"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -24,7 +24,7 @@ steps: {
 		text:     "対象：`src/orca/send-gates.ts`、`src/orca/send.ts`、`src/orca/capabilities.ts`、`src/send/service.ts`、`src/send/ticket.ts`、`src/send/journal.ts`、`src/send/model.ts`、`src/server/app.ts`、`src/server/main.ts`（または `src/orca/wiring.ts`）と、`test/orca/send-gates.test.ts`、`test/orca/send.test.ts`、`test/orca/capabilities.test.ts`、`test/send/service.test.ts`、`test/send/journal.test.ts`、`test/server/answer-api.test.ts`（または今の送信の HTTP のテスト）。確かめ：T-06〜T-12。完了：`npm run lint`、`npm test`、`npm run build` が通り、T-06〜T-12 のテストがあり、今の送信と構造化 Chat の答えのテストが、status の応答に増える項目（answerKeys・answerMessage）の期待値を足すほかは変えずに通る。実装担当 impl の最後の手順で、区切りのレビュー CP-1 の最後の手順。止まって HEAD を報告する"
 		realizes: ["R-02", "R-03", "R-04", "R-05", "R-06", "F-01", "F-02", "F-03", "F-04", "F-05"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-03": {
@@ -32,7 +32,7 @@ steps: {
 		text:     "対象：`web/embed/question-view.js`、`web/embed/question-dom.js`、`web/embed/agent-view.js`、`web/embed/agent-dom.js`、`web/embed/agent-frame.js`、`web/embed/agent.css` と、`test/web/question-view.test.ts`、`test/web/question-dom.test.ts`、`test/web/agent-view.test.ts`、`test/web/agent-css.test.ts`。`web/embed/agent-marks*.js`、`open-control*.js` は使うだけで変えない。確かめ：T-13〜T-17。完了：`node --test test/web/*.test.ts`、`npm run lint`、`npm test`、`npm run build` が通り、T-13〜T-17 のテストがある。描画の確かめは、実装担当が自分で起動した orca-web（一時の port、一時の settings で sendEnabled は偽のまま）とヘッドレスの Chrome（`--disable-features=MacAppCodeSignClone`、CDP の Browser.close で閉じる）で、幅 1280px と 390px、明暗で、偽の会話の端末の質問のカード（未回答、途中まで送った帯、答えずに閉じた形、後の発言の質問の答え済み）が横にはみ出さないことを見る（答えを送らない）。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-02", "R-04", "R-05", "R-06", "R-07", "R-08"]
 		after:    ["S-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "ui"
 	}
 	"S-04": {
@@ -40,7 +40,7 @@ steps: {
 		text:     "タスク担当が行う。D-08 のとおり（端末のキーの組の実機は本人の確かめに残す。統括の判断 2026-11-18）。確かめ：T-18、T-19。完了：report.md の Verification に実機の結論と写しと、本人の確かめの手順と残る危険があり、README に残る危険があり、`npm run lint`、`npm test`、`npm run build` が通る。試しのエージェントは止め、試しの画面は本人が見られるように動かしたまま報告する"
 		realizes: ["R-02", "R-06", "R-08"]
 		after:    ["S-03"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }

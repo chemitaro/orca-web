@@ -12,6 +12,12 @@ ID: "iss-00049"
 
 ## Outcome
 
+- 小窓（`/embed/agent`）の質問のカードから、端末のエージェント（Claude Code の AskUserQuestion、Codex の request_user_input）の質問に、Orca v1.4.261 と同じキーの列（`buildAskAnswerKeys`・`buildCodexAskAnswerKeys` を写した `src/send/keys.ts`）を、組ごとに 1000ms 空けて `terminal.send`（enter 偽、requireWriteSettlement 真）で1組ずつ送って答えられる。
+- 送る前に、会話の記録で同じ callId のツールの結果がないこと、会話のセッションが宛先のセッションと同じこと、宛先のペインのタブの agentStatus（waiting・blocked、toolName、interactivePrompt。問いの文・header・multiSelect・preview・選択肢のラベルと説明）が同じ質問を出していること、前面がそのエージェントであること、同じ callId に前に送り始めた記録がないことを確かめる。各組の直前に画面の質問を読み直し、2組目からは前面も読み直す。書き込みの完了（writeSettlement）を確かめられない組で止め、それ以上送らず partial_sent・unconfirmed とし、カードは「途中まで送りました（届いたか分かりません）。Orca で確かめてください」と「Orca で開く」を出す。送り始めた callId には二度と送らない（記録から分かる）。記録に答えの中身を残さない。
+- Codex の `request_user_input_async`（端末と構造化 Chat）には、Orca の `formatAskAnswer` と同じ形の発言を今の送信の経路で1回送って答える。届いた利用者の発言の引用で答え済みに閉じる（別のエージェントの発言は数えない）。
+- 端末の質問の失敗したツールの結果は「答えずに閉じられた質問」として閉じる（iss-00048 の P2-d）。`GET /api/send/status` は `answerKeys`・`answerMessage` を返す。
+- コミット（マージを除く）：4f9bff1・f40c8ee（S-01・S-02）、b86a91f（CP-1 の直し）、f3c50aa（S-03）、8e5dbf5・2e4a9d4（文書）、6ca96c5（origin/main の取り込み、iss-00050）、a4b7382・58d8dbd・977189f・31b4b15・9607c93（最終品質ゲートの直し）。
+
 ## レビュー記録
 
 - 仕様レビュー（spec-reviewer、Opus 5.5 / high、standard なので1人）：合格。round-2 で P0・P1・P2 が0、P3 1件（`.workbench/spec-review/iss-00049/round-2.json`、検査 `round-2.check.json`）。
@@ -28,6 +34,9 @@ ID: "iss-00049"
 - 区切りのレビュー CP-1（code-reviewer、Opus 5.5 / medium、standards と spec の両方）：範囲 `3b7aece..b86a91f`、合格。
   - round-1（`3b7aece..f40c8ee`）：合格（P2 1件：terminalPromptOf が tabId だけで探し、分割した端末で別のペインの agentStatus を確かめる）。安全に関わるので直した（b86a91f）。
   - round-2（`3b7aece..b86a91f`）：合格、指摘なし（`.workbench/code-review/iss-00049-cp1/round-2.json`）。実装担当の報告の lint 0・test 897/897・build 0 を、タスク担当が同じコミットで確かめた。
+
+- 最終品質ゲート：キャンペーン `.workbench/final-quality-gate/iss-00049-fqg4/`（範囲 `3b7aece..9607c93`）の attempt 1 で合格。合格のコミット `9607c93fdfa81decf0f2f11de21395294f870c06`。主（quality-gate-reviewer、Opus 5.5 / medium、観点 functional-correctness・requirements-closure・test-adequacy・security-baseline・reliability-recovery・e2e-user-flow）pass、P0/P1 0、P3 1。2人目 ChatGPT GPT-6 / Extra High（chatgpt-code-review-strict、GitHub の SHA の一致を確かめた）pass、P0/P1 0、P2 2。テスト lint 0・test 1007/1007・build 0。closure：`.workbench/final-quality-gate/iss-00049-fqg4/closure.md`（写し `artifacts/closure.md`）。記録だけのコミットはない。
+  - 前のキャンペーン：iss-00049-fqg（6ca96c5。主の P1：端末の実機の確かめが未済 → 統括の判断で仕様を変えた（案 C）。2人目の P1：セッションの入れ替わり、P2 2 → a4b7382 で直した）、iss-00049-fqg2（a4b7382。2人目の P1：writeSettlement のない応答、P2 2 → 仕様 round-6、58d8dbd）、iss-00049-fqg3（58d8dbd・977189f・31b4b15 の3回。2人目の P1：前面の変化、質問の変化、問いの同一性の比べ方 → 977189f・31b4b15 で直し、3回目で上限。原因が仕様の比べ方の定義なので仕様に戻り round-7、9607c93）。応答は各キャンペーンの `review-response.md`。
 
 ## Verification
 
@@ -58,6 +67,12 @@ ID: "iss-00049"
 - 仕様レビュー round-2 の P3（keys のその他の文の制御文字を画面でも拒む）：F-04 の意味を変えない読みとして、S-03 で画面の条件と理由の言葉（control_character）を足す（タスク担当の判断、2026-11-18）。
 
 ## Residual Risks / Follow-ups
+
+- 端末のキーの組の実機の確かめは本人の確かめに残した（Verification の手順）。`session.tabs.listAll` のタブの agentStatus に interactivePrompt・toolName が出なければ、端末の質問にはいつも答えられない（prompt_unverified で送らず止まる）。出ないと分かれば後の Issue で設計を直す。
+- Orca の画面で同じ質問を途中まで答えたことは見分けられない（カードの注で知らせる）。
+- 最終品質ゲートの情報（直していない）：P3「Orca で開く」が 28px で 44px に満たない。P2 1組目の直前に前面のプロセスを読み直さない（画面の質問の読み直しはする）。P2 端末の照会の orchestration.requestShow の method_not_found が answerKeys も止める。
+- iss-00048 の残りの P2-a・P2-b・P2-c と P3 は、この Issue でも直していない。
+- 承認（端末の承認へのキーの列）は iss-00050 の範囲外のまま。
 
 ## 実装の記録
 
