@@ -707,3 +707,133 @@ test('T-05 checkAnswer は今の状態を読むだけで結果を返し、送ら
   assert.deepEqual(await check(), { ok: false, error: 'unreachable' });
   assert.ok(calls.every((c) => c.method === 'agentSession.history'));
 });
+
+// ---- キーの組の送信（iss-00049 D-04、T-07） ----
+
+function keyRpc(outcomes: RpcOutcome[]) {
+  const calls: { method: string; params: unknown; options: unknown }[] = [];
+  const rpc = {
+    async call(method: string, params: unknown, options?: unknown) {
+      calls.push({ method, params, options });
+      const next = outcomes.shift();
+      assert.ok(next, 'no more outcomes');
+      return next;
+    },
+  } as unknown as import('../../src/orca/send-gates.ts').SendRpc;
+  return { adapter: send.createSendAdapter({ rpc }), calls };
+}
+const settled = (outcome: 'accepted' | 'refused', accepted = outcome === 'accepted') =>
+  ok({ send: { accepted, writeSettlement: { outcome } } });
+
+test('T-07 sendKeyGroup：writeSettlement と accepted と RPC の誤りを accepted・refused・unknown に分ける', async () => {
+  const cases: [RpcOutcome, string][] = [
+    [settled('accepted'), 'accepted'],
+    [settled('refused', false), 'refused'],
+    [settled('refused', true), 'refused'],
+    [ok({ send: { accepted: false, writeSettlement: { outcome: 'accepted' } } }), 'unknown'],
+    [ok({ send: { accepted: true, writeSettlement: { outcome: 'pending' } } }), 'unknown'],
+    [ok({ send: { accepted: true, writeSettlement: null } }), 'unknown'],
+    [ok({ send: { accepted: true } }), 'accepted'],
+    [ok({ send: { accepted: false } }), 'refused'],
+    [ok({ send: {} }), 'unknown'],
+    [ok({}), 'unknown'],
+    [ok(null), 'unknown'],
+    [{ ok: false, kind: 'unavailable', message: 'private' }, 'refused'],
+    [{ ok: false, kind: 'orca-error', code: 'method_not_found', message: 'private' }, 'refused'],
+    [{ ok: false, kind: 'orca-error', code: 'invalid_argument', message: 'private' }, 'refused'],
+    [{ ok: false, kind: 'orca-error', code: 'terminal_handle_stale', message: 'private' }, 'unknown'],
+    [{ ok: false, kind: 'timeout', message: 'private' }, 'unknown'],
+    [{ ok: false, kind: 'disconnected', message: 'private' }, 'unknown'],
+  ];
+  for (const [outcome, expected] of cases) {
+    const { adapter, calls } = keyRpc([outcome]);
+    assert.equal(await adapter.sendKeyGroup(terminalTarget(), '1'), expected, JSON.stringify(outcome));
+    assert.deepEqual(calls, [
+      {
+        method: 'terminal.send',
+        params: {
+          terminal: 'term_test',
+          text: '1',
+          enter: false,
+          requireWriteSettlement: true,
+          client: { id: 'orca-web', type: 'desktop' },
+        },
+        options: { timeoutMs: 10000 },
+      },
+    ]);
+  }
+});
+
+function sleeper(log: string[]) {
+  return async (ms: number) => {
+    log.push(`sleep:${ms}`);
+  };
+}
+
+test('T-07 answerKeys：組の間に 1000ms を待ち、前の結果の後に次を送り、全部で input_accepted（keys_sent）', async () => {
+  const log: string[] = [];
+  const outcomes = [settled('accepted'), settled('accepted'), settled('accepted')];
+  const { adapter, calls } = keyRpc(outcomes);
+  const rpc = (adapter as unknown as { sendKeyGroup: unknown }).sendKeyGroup;
+  assert.ok(rpc);
+  const result = await adapter.answerKeys(terminalTarget(), ['1', '仮', '\r'], async (ms) => {
+    log.push(`sleep:${ms}:${calls.length}`);
+  });
+  assert.deepEqual(result, { outcome: 'input_accepted', detail: { code: 'keys_sent', sentGroups: 3, totalGroups: 3 } });
+  assert.deepEqual(
+    calls.map((c) => (c.params as { text: string }).text),
+    ['1', '仮', '\r'],
+  );
+  // 1組目はすぐ、2組目と3組目の前に 1000ms（前の組の結果の後）
+  assert.deepEqual(log, ['sleep:1000:1', 'sleep:1000:2']);
+});
+
+test('T-07 answerKeys：1組目 refused は refused（not_sent）、1組目 unknown は unknown（unconfirmed）で、次を送らない', async () => {
+  for (const [first, expected] of [
+    [settled('refused', false), { outcome: 'refused', detail: { code: 'not_sent', sentGroups: 0, totalGroups: 3 } }],
+    [
+      { ok: false, kind: 'unavailable', message: 'private' },
+      { outcome: 'refused', detail: { code: 'not_sent', sentGroups: 0, totalGroups: 3 } },
+    ],
+    [
+      { ok: false, kind: 'orca-error', code: 'method_not_found', message: 'private' },
+      {
+        outcome: 'refused',
+        detail: { code: 'method_not_found', method: 'terminal.send', sentGroups: 0, totalGroups: 3 },
+      },
+    ],
+    [ok({ send: {} }), { outcome: 'unknown', detail: { code: 'unconfirmed', sentGroups: 0, totalGroups: 3 } }],
+    [
+      { ok: false, kind: 'timeout', message: 'private' },
+      { outcome: 'unknown', detail: { code: 'unconfirmed', sentGroups: 0, totalGroups: 3 } },
+    ],
+  ] as [RpcOutcome, send.SendResult][]) {
+    const log: string[] = [];
+    const { adapter, calls } = keyRpc([first]);
+    assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '2', '\r'], sleeper(log)), expected);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(log, []);
+  }
+});
+
+test('T-07 answerKeys：2組目以降で止まれば unknown（partial_sent）と送った組の数を返し、残りを送らない', async () => {
+  for (const second of [
+    settled('refused', false),
+    ok({ send: { accepted: true, writeSettlement: { outcome: 'pending' } } }),
+    { ok: false, kind: 'timeout', message: 'private' } as RpcOutcome,
+    { ok: false, kind: 'unavailable', message: 'private' } as RpcOutcome,
+  ]) {
+    const { adapter, calls } = keyRpc([settled('accepted'), second]);
+    assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '2', '3', '\r'], sleeper([])), {
+      outcome: 'unknown',
+      detail: { code: 'partial_sent', sentGroups: 1, totalGroups: 4 },
+    });
+    assert.equal(calls.length, 2);
+  }
+  const { adapter, calls } = keyRpc([settled('accepted'), settled('accepted'), settled('refused', false)]);
+  assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '2', '3', '\r'], sleeper([])), {
+    outcome: 'unknown',
+    detail: { code: 'partial_sent', sentGroups: 2, totalGroups: 4 },
+  });
+  assert.equal(calls.length, 3);
+});

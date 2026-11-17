@@ -1,6 +1,7 @@
 // Orca の送信結果を、到達を確かめられる範囲だけで分類する。
 import { createHash } from 'node:crypto';
 import { answerForm, digestAnswers, type QuestionAnswer } from '../send/answer.ts';
+import { ANSWER_STEP_MS } from '../send/keys.ts';
 import type { ChatSendTarget, TerminalSendTarget } from '../send/model.ts';
 import {
   type JournalQuestionAnswer,
@@ -22,6 +23,9 @@ export interface SendDetail {
   queuedState?: string;
   replayed?: true;
   warning?: string;
+  /** キーの組の答え：受けられた組の数と全部の組の数。 */
+  sentGroups?: number;
+  totalGroups?: number;
 }
 export interface SendResult {
   outcome: SendOutcome;
@@ -190,6 +194,33 @@ function readFailure(outcome: Extract<RpcOutcome, { ok: false }>, method: string
     return { ok: false, error: 'terminal_gone' };
   return { ok: false, error: 'unknown_shape' };
 }
+export type KeyAck = 'accepted' | 'refused' | 'unknown';
+/** Orca の readTerminalSendAcknowledgment と同じ読み。unverifiable は unknown。 */
+function keyAcknowledgment(result: unknown): KeyAck {
+  const reply = object(result);
+  if (!('send' in reply)) return 'unknown';
+  const sent = reply.send;
+  if (typeof sent !== 'object' || sent === null) return 'unknown';
+  const receipt = sent as Record<string, unknown>;
+  if ('writeSettlement' in receipt) {
+    const settlement = receipt.writeSettlement;
+    if (typeof settlement === 'object' && settlement !== null && 'outcome' in settlement) {
+      if (settlement.outcome === 'refused') return 'refused';
+      if (settlement.outcome === 'accepted' && receipt.accepted === true) return 'accepted';
+    }
+    return 'unknown';
+  }
+  if (receipt.accepted === true) return 'accepted';
+  if (receipt.accepted === false) return 'refused';
+  return 'unknown';
+}
+/** キーの組の RPC の結果。unavailable・method_not_found・invalid_argument は書く前の拒み、ほかの誤りは結果不明。 */
+function classifyKeyGroup(outcome: RpcOutcome): { ack: KeyAck; code?: string } {
+  if (outcome.ok) return { ack: keyAcknowledgment(outcome.result) };
+  if (outcome.kind === 'unavailable') return { ack: 'refused' };
+  const code = outcome.kind === 'orca-error' ? (outcome.code ?? 'orca-error') : outcome.kind;
+  return code === 'method_not_found' || code === 'invalid_argument' ? { ack: 'refused', code } : { ack: 'unknown' };
+}
 export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').SendRpc }) {
   /** 末尾の 200 件から itemId の質問を読む。 */
   async function readQuestion(sessionId: string, itemId: string): Promise<SendRead<QuestionRead>> {
@@ -218,7 +249,56 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
       answers: parsed.answers,
     };
   }
+  async function sendGroup(target: TerminalSendTarget, bytes: string): Promise<{ ack: KeyAck; code?: string }> {
+    return classifyKeyGroup(
+      await rpc.call(
+        'terminal.send',
+        {
+          terminal: target.handle,
+          text: bytes,
+          enter: false,
+          requireWriteSettlement: true,
+          client: { id: 'orca-web', type: 'desktop' },
+        },
+        { timeoutMs: 10000 },
+      ),
+    );
+  }
   return {
+    /** キーの組を1つ送り、受けられたか（accepted）、受けられなかったか（refused）、分からないか（unknown）を返す。 */
+    async sendKeyGroup(target: TerminalSendTarget, bytes: string): Promise<KeyAck> {
+      return (await sendGroup(target, bytes)).ack;
+    },
+    /**
+     * 答えの組を1組ずつ送る。1組目はすぐ、次の組は前の組が受けられてから sleep(ANSWER_STEP_MS) の後に送る。
+     * 受けられない組で止め、残りを送らない。自動で送り直さない。
+     */
+    async answerKeys(
+      target: TerminalSendTarget,
+      groups: readonly string[],
+      sleep: (ms: number) => Promise<void>,
+    ): Promise<SendResult> {
+      const totalGroups = groups.length;
+      let sentGroups = 0;
+      for (const [index, bytes] of groups.entries()) {
+        if (index > 0) await sleep(ANSWER_STEP_MS);
+        const { ack, code } = await sendGroup(target, bytes);
+        if (ack === 'accepted') {
+          sentGroups += 1;
+          continue;
+        }
+        const method = code === 'method_not_found' ? { method: 'terminal.send' } : {};
+        if (sentGroups > 0)
+          return { outcome: 'unknown', detail: { code: 'partial_sent', ...method, sentGroups, totalGroups } };
+        if (ack === 'refused')
+          return {
+            outcome: 'refused',
+            detail: { code: code === 'method_not_found' ? code : 'not_sent', ...method, sentGroups, totalGroups },
+          };
+        return { outcome: 'unknown', detail: { code: 'unconfirmed', sentGroups, totalGroups } };
+      }
+      return { outcome: 'input_accepted', detail: { code: 'keys_sent', sentGroups, totalGroups } };
+    },
     async checkChat(target: ChatSendTarget, operationId: string): Promise<SendRead<SendResult>> {
       const result = await rpc.call('agentSession.sendRecorded', {
         sessionId: target.sessionId,

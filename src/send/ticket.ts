@@ -34,6 +34,8 @@ export interface TicketInput {
   operationId: string;
   /** 答えの票だけが持つ。答える質問の位置と、意図で確かめた問い（確定で digest を比べるため）。 */
   prompt?: { itemId: string; revision: number };
+  /** callId で指す答えの票だけが持つ。keys は端末のキーの組、message は後の発言。キーの列や文は持たず、確定で作り直す。 */
+  call?: { callId: string; mode: 'keys' | 'message' };
   questions?: QuestionView[];
 }
 export interface SendTicket extends TicketInput {
@@ -61,6 +63,7 @@ export class TicketStore {
       ...input,
       target: { ...input.target },
       ...(input.prompt ? { prompt: { ...input.prompt } } : {}),
+      ...(input.call ? { call: { ...input.call } } : {}),
       ...(input.questions ? { questions: structuredClone(input.questions) } : {}),
       expiresAt,
     });

@@ -228,29 +228,45 @@ const MAX_TICKET_CHARS = 128 * 1024;
 const ANSWER_INTENT = '/api/answer/intent';
 const ANSWER_CONFIRM = '/api/answer/confirm';
 
-/** 答えの意図 `{agent, prompt: {itemId, revision}, answers, target?}`。答えの中身はサービスが確かめる。 */
-function parseAnswerIntent(
-  body: unknown,
-): { agent: string; prompt: { itemId: string; revision: number }; answers: unknown[]; target?: string } | null {
-  if (!isRecord(body) || Object.keys(body).some((k) => !['agent', 'prompt', 'answers', 'target'].includes(k)))
+const MAX_CALL_ID_CHARS = 1024;
+
+type AnswerIntentBody =
+  | { agent: string; prompt: { itemId: string; revision: number }; answers: unknown[]; target?: string }
+  | { agent: string; callId: string; answers: unknown[]; target?: string };
+
+/**
+ * 答えの意図。`{agent, prompt: {itemId, revision}, answers, target?}`（構造化 Chat の質問）か、
+ * `{agent, callId, answers, target?}`（端末の質問と後の発言の質問）。prompt と callId はちょうど片方。答えの中身はサービスが確かめる。
+ */
+function parseAnswerIntent(body: unknown): AnswerIntentBody | null {
+  if (
+    !isRecord(body) ||
+    Object.keys(body).some((k) => !['agent', 'prompt', 'callId', 'answers', 'target'].includes(k)) ||
+    'prompt' in body === 'callId' in body ||
+    !isBoundedText(body.agent, MAX_AGENT_CHARS) ||
+    !Array.isArray(body.answers) ||
+    ('target' in body && (typeof body.target !== 'string' || !/^[a-f0-9]{32}$/.test(body.target)))
+  )
     return null;
+  const target = 'target' in body ? { target: body.target as string } : {};
+  if ('callId' in body) {
+    if (!isBoundedText(body.callId, MAX_CALL_ID_CHARS)) return null;
+    return { agent: body.agent, callId: body.callId, answers: body.answers, ...target };
+  }
   const prompt = body.prompt;
   if (
-    !isBoundedText(body.agent, MAX_AGENT_CHARS) ||
     !isRecord(prompt) ||
     Object.keys(prompt).length !== 2 ||
     !isBoundedText(prompt.itemId, MAX_ITEM_ID_CHARS) ||
     !Number.isSafeInteger(prompt.revision) ||
-    (prompt.revision as number) <= 0 ||
-    !Array.isArray(body.answers) ||
-    ('target' in body && (typeof body.target !== 'string' || !/^[a-f0-9]{32}$/.test(body.target)))
+    (prompt.revision as number) <= 0
   )
     return null;
   return {
     agent: body.agent,
     prompt: { itemId: prompt.itemId, revision: prompt.revision as number },
     answers: body.answers,
-    ...('target' in body ? { target: body.target as string } : {}),
+    ...target,
   };
 }
 

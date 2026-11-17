@@ -11,7 +11,8 @@ export type FeatureName =
   | 'readTranscript'
   | 'sendTerminal'
   | 'sendChat'
-  | 'answerChat';
+  | 'answerChat'
+  | 'answerKeys';
 
 export interface FeatureReport {
   available: boolean;
@@ -233,6 +234,12 @@ export async function probeCapabilities(deps: ProbeDeps): Promise<CapabilityRepo
     .need('feature:readTabs', readTabsReport.available)
     .need('feature:readTranscript', readTranscript.report().available)
     .defer('rpc:agentSession.respondToQuestion');
+  // 端末のエージェントの質問への答え（キーの組を terminal.send で1組ずつ送る）。会話の記録で質問を確かめる。
+  const answerKeys = base()
+    .need('runtime-id:consistent', runtimeIdConsistent)
+    .need('feature:readTabs', readTabsReport.available)
+    .need('feature:readTranscript', readTranscript.report().available)
+    .defer('rpc:terminal.send', 'rpc:terminal.agentStatus', 'rpc:terminal.inspectProcess');
 
   return {
     checkedAt: now().toISOString(),
@@ -249,6 +256,7 @@ export async function probeCapabilities(deps: ProbeDeps): Promise<CapabilityRepo
       sendTerminal: sendTerminal.report(),
       sendChat: sendChat.report(),
       answerChat: answerChat.report(),
+      answerKeys: answerKeys.report(),
     },
   };
 }

@@ -7,7 +7,7 @@ import { createTranscriptReader } from '../orca/read-transcript.ts';
 import { createSendAdapter } from '../orca/send.ts';
 import { wireOrca } from '../orca/wiring.ts';
 import { SendJournal } from '../send/journal.ts';
-import { SendService } from '../send/service.ts';
+import { SendService, transcriptTail } from '../send/service.ts';
 import { StatePoller } from '../state/poller.ts';
 import { SettingsStore } from '../state/settings.ts';
 import { TranscriptHub } from '../transcript/hub.ts';
@@ -49,6 +49,7 @@ const send = new SendService({
   adapter: createSendAdapter({ rpc: orca.sendRpc }),
   journal: new SendJournal(config.sendsDir),
   readSendEnabled: () => settings.readSendEnabled(),
+  readTranscript: transcriptTail(transcriptReader),
 });
 
 let listeners: ListenerSet | null = null;

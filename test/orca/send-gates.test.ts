@@ -234,3 +234,94 @@ test('T-04 余分な鍵・optionId・空や5件以上の answers・65件以上�
   assert.ok((await rpc.call('terminal.send', terminal(), options)).ok);
   assert.ok((await rpc.call('agentSession.send', chat())).ok);
 });
+
+// ---- キーの組（iss-00049 D-04、T-06） ----
+
+const ESC = '\x1b';
+const keyGroup = (text: string) => ({
+  terminal: 'term_test',
+  text,
+  enter: false,
+  requireWriteSettlement: true,
+  client: { id: 'orca-web', type: 'desktop' },
+});
+const keyOptions = { timeoutMs: 10000 };
+
+test('T-06 キーの組：決めたキー、制御文字のない 512 バイト以下の文、括弧付きの貼り付けだけを通す', async () => {
+  const { rpc, calls } = setup();
+  const allowed = [
+    ...'123456789'.split(''),
+    '\r',
+    `${ESC}[C`,
+    `${ESC}[A`,
+    `${ESC}[B`,
+    '\t',
+    'n',
+    '\x7f',
+    '仮の文',
+    'x'.repeat(512),
+    'あ'.repeat(170),
+    'a␛[201~b',
+    `${ESC}[200~${'y'.repeat(600)}${ESC}[201~`,
+    `${ESC}[200~${'z'.repeat(70_000 - 12)}${ESC}[201~`,
+  ];
+  for (const text of allowed) {
+    assert.ok((await rpc.call('terminal.send', keyGroup(text), keyOptions)).ok, JSON.stringify(text.slice(0, 20)));
+  }
+  assert.equal(calls.length, allowed.length);
+  assert.deepEqual(calls[0], { method: 'terminal.send', params: keyGroup('1'), options: keyOptions });
+});
+
+test('T-06 キーの組：決めていない ESC の列、制御文字を含む文、空の文、長すぎる文、余分な鍵と封筒を送らずに拒む', async () => {
+  const { rpc, calls } = setup();
+  const badTexts = [
+    '',
+    `${ESC}[D`,
+    `${ESC}`,
+    `a${ESC}[201~b`,
+    `${ESC}[200~a${ESC}[201~b${ESC}[201~`,
+    `${ESC}[200~${ESC}[201~`,
+    `${ESC}[200~a\tb${ESC}[201~`,
+    `${ESC}[200~a\rb${ESC}[201~`,
+    `${ESC}[200~${'z'.repeat(70_000 - 11)}${ESC}[201~`,
+    'a\tb',
+    'a\nb',
+    'a\rb',
+    'a\x03b',
+    'a\x7fb',
+    'a\x85b',
+    'x'.repeat(513),
+    'あ'.repeat(171),
+  ];
+  for (const text of badTexts) {
+    await assert.rejects(
+      rpc.call('terminal.send', keyGroup(text), keyOptions),
+      /not allowed/,
+      JSON.stringify(text.slice(0, 20)),
+    );
+  }
+  const badParams: unknown[] = [
+    { ...keyGroup('1'), enter: true },
+    { ...keyGroup('1'), requireWriteSettlement: false },
+    { ...keyGroup('1'), requireAgentStatus: 'sendable' },
+    { ...keyGroup('1'), agentPrompt: true },
+    { ...keyGroup('1'), client: { id: 'orca-web', type: 'mobile' } },
+    { ...keyGroup('1'), terminal: 'pty-test' },
+    { ...keyGroup('1'), text: 1 },
+  ];
+  for (const key of Object.keys(keyGroup('1'))) {
+    const p: Record<string, unknown> = keyGroup('1');
+    delete p[key];
+    badParams.push(p);
+  }
+  for (const params of badParams) {
+    await assert.rejects(rpc.call('terminal.send', params, keyOptions), /not allowed/, JSON.stringify(params));
+  }
+  await assert.rejects(
+    rpc.call('terminal.send', keyGroup('1'), { envelope: { orchestrationRequestId: operationId } }),
+    /not allowed/,
+  );
+  assert.equal(calls.length, 0);
+  // 今の agentPrompt の形は変わらない
+  assert.ok((await rpc.call('terminal.send', terminal(), options)).ok);
+});

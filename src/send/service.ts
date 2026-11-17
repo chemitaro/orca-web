@@ -1,12 +1,16 @@
-// 確認票の消費と記録の順序を所有する送信サービス（本文の送信と、構造化 Chat の質問への答え）。
-import type { CapabilityReport } from '../orca/capabilities.ts';
-import type { SendAdapter, SendReadFailure, SendResult } from '../orca/send.ts';
+// 確認票の消費と記録の順序を所有する送信サービス（本文の送信と、質問への答え：構造化 Chat の rpc、端末のキーの組 keys、後の発言 message）。
+import type { CapabilityReport, FeatureName } from '../orca/capabilities.ts';
+import type { TranscriptErrorCode, TranscriptReader } from '../orca/read-transcript.ts';
+import type { SendAdapter, SendRead, SendReadFailure, SendResult } from '../orca/send.ts';
 import type { SendRpc } from '../orca/send-gates.ts';
 import type { StateDocument } from '../state/model.ts';
-import { checkAnswers, digestAnswers } from './answer.ts';
-import type { SendJournal, SendRecord } from './journal.ts';
-import type { ChatSendTarget, SendPreview, SendTarget } from './model.ts';
-import { buildPreview, compareTargets, resolveTarget, targetFingerprint } from './target.ts';
+import { normalizePage, type QuestionPart, type TranscriptMessage } from '../transcript/normalize.ts';
+import { checkAnswers, digestAnswers, type QuestionAnswer } from './answer.ts';
+import type { BeforeRecord, SendJournal, SendRecord } from './journal.ts';
+import { formatAsyncAnswer, planKeys } from './keys.ts';
+import type { ChatSendTarget, SendPreview, SendTarget, TerminalSendTarget } from './model.ts';
+import { findCallQuestion, promptMatches } from './question-state.ts';
+import { buildPreview, compareTargets, resolveTarget, targetFingerprint, terminalPromptOf } from './target.ts';
 import { checkText, digestText, newOperationId, TicketStore } from './ticket.ts';
 
 export interface SendFailure {
@@ -51,6 +55,24 @@ export interface AnswerStatus {
 }
 type ConfirmAnswer = SendAnswer<SendResult & { operationId: string; recordWarning?: 'after_record_failed' }>;
 const ANSWER_METHOD = 'agentSession.respondToQuestion';
+/** キーの組の列を Orca が知っているエージェント（buildAskAnswerKeys・buildCodexAskAnswerKeys）。 */
+const KEY_AGENTS: ReadonlySet<string> = new Set(['claude', 'codex']);
+/** 会話の記録の末尾のページ（正規化した件）。 */
+export type TranscriptTail = (
+  agentId: string,
+) => Promise<{ ok: true; messages: TranscriptMessage[] } | { ok: false; error: TranscriptErrorCode }>;
+/** 会話の読み（TranscriptReader）と正規化をつなぎ、末尾の 200 件を読む。 */
+export function transcriptTail(reader: TranscriptReader): TranscriptTail {
+  return async (agentId) => {
+    const resolved = await reader.resolve(agentId);
+    if (!resolved.ok) return resolved;
+    const read = await reader.read(resolved.target, { limit: 200 });
+    if (!read.ok) return read;
+    const messages = normalizePage(read.page);
+    return messages ? { ok: true, messages } : { ok: false, error: 'unknown_shape' };
+  };
+}
+const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 /** 確定の前の読みで宛先が変わったと分かる理由。 */
 const CHANGED_REASONS = ['asleep', 'untabbed', 'no_session', 'identity_unavailable', 'state_out_of_date'];
 export interface SendDeps {
@@ -58,8 +80,12 @@ export interface SendDeps {
   capabilities(): Promise<CapabilityReport>;
   rpc: SendRpc;
   adapter: SendAdapter;
-  journal: Pick<SendJournal, 'appendBefore' | 'appendAfter' | 'appendCheck' | 'appendRefused' | 'read'>;
+  journal: Pick<SendJournal, 'appendBefore' | 'appendAfter' | 'appendCheck' | 'appendRefused' | 'read' | 'hasAnswer'>;
   readSendEnabled(): Promise<boolean>;
+  /** 会話の記録の末尾（端末の質問と後の発言の質問への答えが使う）。なければ、その答えは unreachable。 */
+  readTranscript?: TranscriptTail;
+  /** キーの組の間を待つ（テストは偽の sleep を渡す）。 */
+  sleep?: (ms: number) => Promise<void>;
   tickets?: TicketStore;
   now?: () => number;
   operationId?: () => string;
@@ -74,12 +100,40 @@ export type CheckResult =
       checkWarning?: 'check_record_failed';
     };
 type SendRefusal = Omit<SendFailure, 'error'> & { error: Exclude<SendFailure['error'], 'record_unreadable'> };
-/** answerChat は、この runtime の能力の確かめで答えの機能が使えるか（status が読み直さずに使う）。 */
+/**
+ * answerChat・readTranscript は、この runtime の能力の確かめで機能が使えるか（status が読み直さずに使う）。
+ * listAll は読んだタブの一覧（keys が interactivePrompt を読む）。permission は端末の status が permission だったか（status と keys だけが通す）。
+ */
 type Preflight =
-  | { ok: true; target: SendTarget; preview: SendPreview; fence?: number; answerChat: boolean }
+  | {
+      ok: true;
+      target: SendTarget;
+      preview: SendPreview;
+      fence?: number;
+      answerChat: boolean;
+      readTranscript: boolean;
+      listAll: unknown;
+      permission: boolean;
+    }
   | SendRefusal;
-/** send は今の送信、answer は質問への答え（構造化 Chat だけ、能力 answerChat）。 */
-type PreflightMode = 'send' | 'answer';
+/**
+ * send は今の送信、answer は質問への答え（構造化 Chat だけ、能力 answerChat）、keys は端末の質問へのキーの組（端末だけ、能力 answerKeys、
+ * status の permission を拒まない）、status は送れるかの口（端末では送信とキーの組のどちらかが使えれば読み、permission を拒まない）。
+ */
+type PreflightMode = 'send' | 'answer' | 'keys' | 'status';
+type Resolved = { ok: true; cap: CapabilityReport; listAll: unknown; target: SendTarget };
+/** 答えの票の種類。call は callId で指す端末の質問（keys）か後の発言の質問（message）。 */
+type CallMode = 'keys' | 'message';
+type CallPlan =
+  | {
+      ok: true;
+      checked: Extract<Preflight, { ok: true }>;
+      answers: QuestionAnswer[];
+      groups?: string[];
+      text?: string;
+    }
+  | SendRefusal
+  | { ok: false; error: 'invalid_answer'; reason: string };
 export class SendService {
   readonly #deps: SendDeps;
   #busy = false;
@@ -87,6 +141,8 @@ export class SendService {
   /** method_not_found で止めた RPC。鍵は経路（terminal・chat）か、答えの 'answer'。 */
   readonly #blocked = new Map<string, Set<string>>();
   readonly #inFlight = new Set<string>();
+  /** 送り始めた答え（記録を書いた直後に足す）。鍵はエージェントの id と callId。 */
+  readonly #startedCalls = new Set<string>();
   readonly #tickets: TicketStore;
   readonly #operationId: () => string;
   constructor(deps: SendDeps) {
@@ -102,7 +158,7 @@ export class SendService {
     }
     return true;
   }
-  async #preflight(agentId: string, mode: PreflightMode = 'send'): Promise<Preflight> {
+  async #resolve(agentId: string): Promise<Resolved | SendRefusal> {
     const cap = await this.#deps.capabilities();
     if (!this.#rememberRuntime(cap)) return { ok: false, error: 'unreachable' };
     const tabs = await this.#deps.rpc.call('session.tabs.listAll', {});
@@ -117,27 +173,63 @@ export class SendService {
         return { ok: false, error: 'not_sendable', reason: 'untabbed' };
       return resolved;
     }
-    const target = resolved.target;
+    return { ok: true, cap, listAll: tabs.result, target: resolved.target };
+  }
+  /** 機能が使えないか、method_not_found で止めた RPC があれば unsupported。 */
+  #gate(cap: CapabilityReport, name: FeatureName, blocked: readonly string[]): SendRefusal | null {
+    const feature = cap.features[name];
+    if (!feature.available) return { ok: false, error: 'unsupported', missing: feature.missing };
+    if (blocked.length) return { ok: false, error: 'unsupported', missing: blocked.map((method) => `rpc:${method}`) };
+    return null;
+  }
+  #blockedFor(key: 'terminal' | 'chat' | 'answer'): string[] {
+    // 答えは自分の RPC と、Chat の経路で止めた読み（agentSession.history）で止める。
+    if (key === 'answer')
+      return [
+        ...(this.#blocked.get('answer') ?? []),
+        ...[...(this.#blocked.get('chat') ?? [])].filter((method) => method === 'agentSession.history'),
+      ];
+    return [...(this.#blocked.get(key) ?? [])];
+  }
+  async #preflight(agentId: string, mode: PreflightMode = 'send'): Promise<Preflight> {
+    const resolved = await this.#resolve(agentId);
+    return resolved.ok ? this.#check(resolved, mode) : resolved;
+  }
+  async #check({ cap, listAll, target }: Resolved, mode: PreflightMode): Promise<Preflight> {
     if (mode === 'answer' && target.route !== 'chat')
       return { ok: false, error: 'not_sendable', reason: 'terminal_route' };
-    const feature =
-      cap.features[mode === 'answer' ? 'answerChat' : target.route === 'terminal' ? 'sendTerminal' : 'sendChat'];
-    if (!feature.available) return { ok: false, error: 'unsupported', missing: feature.missing };
-    // 答えは自分の RPC と、Chat の経路で止めた読み（agentSession.history）で止める。
-    const blocked =
-      mode === 'answer'
-        ? [
-            ...(this.#blocked.get('answer') ?? []),
-            ...[...(this.#blocked.get('chat') ?? [])].filter((method) => method === 'agentSession.history'),
-          ]
-        : [...(this.#blocked.get(target.route) ?? [])];
-    if (blocked.length) return { ok: false, error: 'unsupported', missing: blocked.map((method) => `rpc:${method}`) };
+    if (mode === 'keys' && target.route !== 'terminal')
+      return { ok: false, error: 'not_sendable', reason: 'chat_route' };
+    if (mode === 'keys' && !KEY_AGENTS.has(target.agentType))
+      return { ok: false, error: 'not_sendable', reason: 'agent_keys_unknown' };
+    if (mode === 'status' && target.route === 'terminal') {
+      const send = this.#gate(cap, 'sendTerminal', this.#blockedFor('terminal'));
+      const keys = KEY_AGENTS.has(target.agentType)
+        ? this.#gate(cap, 'answerKeys', this.#blockedFor('terminal'))
+        : send;
+      if (send && keys) return send;
+    } else {
+      const gate =
+        mode === 'answer'
+          ? this.#gate(cap, 'answerChat', this.#blockedFor('answer'))
+          : mode === 'keys'
+            ? this.#gate(cap, 'answerKeys', this.#blockedFor('terminal'))
+            : this.#gate(
+                cap,
+                target.route === 'terminal' ? 'sendTerminal' : 'sendChat',
+                this.#blockedFor(target.route),
+              );
+      if (gate) return gate;
+    }
     let fence: number | undefined;
+    let permission = false;
     if (target.route === 'terminal') {
       const status = await this.#deps.adapter.readTerminalStatus(target.handle);
       if (!status.ok) return this.#readError(status, target);
       if (!status.isRunningAgent) return { ok: false, error: 'not_sendable', reason: 'no_agent' };
-      if (status.status === 'permission') return { ok: false, error: 'not_sendable', reason: 'permission' };
+      // 質問を待つ間の status は permission。キーの組と status は拒まない。
+      permission = status.status === 'permission';
+      if (permission && mode === 'send') return { ok: false, error: 'not_sendable', reason: 'permission' };
       const foreground = await this.#deps.adapter.readForeground(target.handle, target.incarnationId, target.agentType);
       if (!foreground.ok)
         return foreground.error === 'foreground_unknown' || foreground.error === 'unknown_shape'
@@ -151,14 +243,17 @@ export class SendService {
       if (!history.ok) return this.#readError(history, target);
       fence = history.fence;
     }
-    const preview = buildPreview(this.#deps.snapshotSync(), resolved.target);
+    const preview = buildPreview(this.#deps.snapshotSync(), target);
     if (!preview) return { ok: false, error: 'not_sendable', reason: 'state_out_of_date' };
     return {
       ok: true,
-      target: resolved.target,
+      target,
       preview,
       ...(fence === undefined ? {} : { fence }),
       answerChat: cap.features.answerChat.available,
+      readTranscript: cap.features.readTranscript.available,
+      listAll,
+      permission,
     };
   }
   #readError(failure: SendReadFailure, target: SendTarget): SendRefusal {
@@ -211,29 +306,70 @@ export class SendService {
     target: string | null;
     agentType: string | null;
     answer: AnswerStatus;
+    answerKeys: AnswerStatus;
+    answerMessage: AnswerStatus;
   }> {
     const enabled = await this.#deps.readSendEnabled();
-    const checked = await this.#preflight(agentId);
-    const answer = checked.ok ? this.#answerStatus(checked) : await this.#answerStatusFor(agentId);
-    return checked.ok
-      ? {
-          enabled,
-          available: true,
-          route: checked.target.route,
-          reason: null,
-          target: targetFingerprint(checked.target),
-          agentType: checked.target.agentType,
-          answer,
-        }
-      : {
-          enabled,
-          available: false,
-          route: null,
-          reason: checked.reason ?? checked.error,
-          target: null,
-          agentType: null,
-          answer,
-        };
+    const off = (reason: string): AnswerStatus => ({ available: false, reason });
+    const closed = (reason: string, answer: AnswerStatus, keys: AnswerStatus = off(reason)) => ({
+      enabled,
+      available: false,
+      route: null,
+      reason,
+      target: null,
+      agentType: null,
+      answer,
+      answerKeys: keys,
+      answerMessage: off(reason),
+    });
+    const resolved = await this.#resolve(agentId);
+    if (!resolved.ok) return closed(resolved.reason ?? resolved.error, await this.#answerStatusFor(agentId));
+    const { cap, target } = resolved;
+    const keysReason =
+      target.route !== 'terminal' ? 'chat_route' : KEY_AGENTS.has(target.agentType) ? null : 'agent_keys_unknown';
+    // 端末の確かめは1回だけ読み、送信とキーの組で permission の違いだけを使い分ける。
+    const checked = await this.#check(resolved, 'status');
+    if (!checked.ok) {
+      const reason = checked.reason ?? checked.error;
+      const answer = target.route === 'terminal' ? off('terminal_route') : await this.#answerStatusFor(agentId);
+      return closed(reason, answer, off(keysReason ?? reason));
+    }
+    const sendRefusal: SendRefusal | null =
+      target.route === 'terminal'
+        ? (this.#gate(cap, 'sendTerminal', this.#blockedFor('terminal')) ??
+          (checked.permission ? { ok: false, error: 'not_sendable', reason: 'permission' } : null))
+        : null;
+    const answerKeys: AnswerStatus = keysReason
+      ? off(keysReason)
+      : this.#gate(cap, 'answerKeys', this.#blockedFor('terminal'))
+        ? off('unsupported')
+        : { available: true, reason: null };
+    const sendReason = sendRefusal ? (sendRefusal.reason ?? sendRefusal.error) : null;
+    const answer =
+      sendRefusal === null
+        ? this.#answerStatus(checked)
+        : target.route === 'terminal'
+          ? off('terminal_route')
+          : await this.#answerStatusFor(agentId);
+    const answerMessage: AnswerStatus =
+      sendReason !== null
+        ? off(sendReason)
+        : checked.readTranscript
+          ? { available: true, reason: null }
+          : off('unsupported');
+    // 送信が permission で通らなくても、キーの組で答えられるなら宛先の経路と種類を返す（画面が codex の判定に使う）。
+    const shown = sendRefusal === null || answerKeys.available;
+    return {
+      enabled,
+      available: sendRefusal === null,
+      route: shown ? target.route : null,
+      reason: sendReason,
+      target: sendRefusal === null ? targetFingerprint(target) : null,
+      agentType: shown ? target.agentType : null,
+      answer,
+      answerKeys,
+      answerMessage,
+    };
   }
   /** 送信の preflight が通ったときの、答えられるか（読み直さない）。 */
   #answerStatus(checked: Extract<Preflight, { ok: true }>): AnswerStatus {
@@ -266,7 +402,7 @@ export class SendService {
       // take と印の間に await を置かない。照会はこの印か未使用の票を必ず見る。
       this.#inFlight.add(operationId);
       activeId = operationId;
-      if (taken.value.prompt)
+      if (taken.value.prompt || taken.value.call)
         return await this.#refuse(
           { ok: false, error: 'ticket_invalid', reason: 'wrong_kind' },
           operationId,
@@ -350,11 +486,13 @@ export class SendService {
       const before = record.before;
       const target = before.target;
       const result =
-        before.action === 'answer' && target.route === 'chat'
-          ? await this.#deps.adapter.checkAnswer(target, before.prompt, before.digest, operationId)
-          : target.route === 'terminal'
-            ? await this.#deps.adapter.checkTerminal(target, operationId)
-            : await this.#deps.adapter.checkChat(target, operationId);
+        before.action === 'answer' && before.mode === 'keys'
+          ? await this.#checkKeys(before)
+          : before.action === 'answer' && before.mode === undefined && target.route === 'chat'
+            ? await this.#deps.adapter.checkAnswer(target, before.prompt, before.digest, operationId)
+            : target.route === 'terminal'
+              ? await this.#deps.adapter.checkTerminal(target, operationId)
+              : await this.#deps.adapter.checkChat(target, operationId);
       if (!result.ok && result.error === 'unreachable')
         return { ok: true, operationId, state: 'recorded', record, checkError: 'unreachable' };
       if (!result.ok && result.error === 'unsupported' && result.method) {
@@ -406,17 +544,19 @@ export class SendService {
     return { ok: true, ...ticket, operationId, preview: checked.preview, text, digest };
   }
   /** 質問への答えの意図。送らずに確かめ、使い捨ての票を出す。 */
-  async answerIntent({
-    agent,
-    prompt,
-    answers,
-    target,
-  }: {
-    agent: string;
-    prompt: { itemId: string; revision: number };
-    answers: unknown;
-    target?: string;
-  }): Promise<SendAnswer<AnswerIntentResult>> {
+  async answerIntent(
+    input:
+      | {
+          agent: string;
+          prompt: { itemId: string; revision: number };
+          callId?: never;
+          answers: unknown;
+          target?: string;
+        }
+      | { agent: string; callId: string; prompt?: never; answers: unknown; target?: string },
+  ): Promise<SendAnswer<AnswerIntentResult>> {
+    if (input.callId !== undefined) return this.#callIntent(input);
+    const { agent, prompt, answers, target } = input;
     if (!(await this.#deps.readSendEnabled())) return { ok: false, error: 'send_disabled' };
     const checked = await this.#preflight(agent, 'answer');
     if (!checked.ok) return checked;
@@ -452,6 +592,7 @@ export class SendService {
       this.#inFlight.add(operationId);
       activeId = operationId;
       const refuse = (failure: SendRefusal) => this.#refuse(failure, operationId, target.agentId);
+      if (taken.value.call) return await this.#callConfirm(taken.value, answers, refuse);
       if (!prompt || !questions || target.route !== 'chat')
         return await refuse({ ok: false, error: 'ticket_invalid', reason: 'wrong_kind' });
       const shown = checkAnswers(questions, answers);
@@ -500,5 +641,179 @@ export class SendService {
       if (activeId) this.#inFlight.delete(activeId);
       this.#busy = false;
     }
+  }
+  // ---- 端末の質問（keys）と後の発言の質問（message）への答え（callId で指す） ----
+
+  static #transcriptRefusal(error: TranscriptErrorCode): SendRefusal {
+    if (error === 'agent_not_found') return { ok: false, error: 'agent_not_found' };
+    if (error === 'no_session' || error === 'transcript_not_found')
+      return { ok: false, error: 'not_sendable', reason: error };
+    if (error === 'unsupported') return { ok: false, error: 'unsupported', missing: ['feature:readTranscript'] };
+    if (error === 'unknown_shape') return { ok: false, error: 'unknown_shape' };
+    return { ok: false, error: 'unreachable' };
+  }
+  /** 会話の記録の末尾から callId の質問を読み、まだ答えられていないものだけを返す。 */
+  async #readCallQuestion(agentId: string, callId: string): Promise<{ ok: true; part: QuestionPart } | SendRefusal> {
+    const read = this.#deps.readTranscript
+      ? await this.#deps.readTranscript(agentId)
+      : ({ ok: false, error: 'unreachable' } as const);
+    if (!read.ok) return SendService.#transcriptRefusal(read.error);
+    const found = findCallQuestion(read.messages, callId);
+    if (found === null) return { ok: false, error: 'target_changed', reason: 'question_gone' };
+    if (found.state !== 'pending') return { ok: false, error: 'target_changed', reason: 'question_answered' };
+    // 切った問いの文やラベルでは Orca と同じ発言を作れない。
+    if (found.part.answerVia === 'message' && found.part.truncated)
+      return { ok: false, error: 'not_sendable', reason: 'prompt_unsupported' };
+    return { ok: true, part: found.part };
+  }
+  /** 同じエージェントの同じ callId に送り始めた答えがあれば already_sent。記録が読めなければ record_unreadable。 */
+  async #alreadyStarted(agentId: string, callId: string): Promise<SendFailure | null> {
+    if (this.#startedCalls.has(`${agentId}\u0000${callId}`))
+      return { ok: false, error: 'not_sendable', reason: 'already_sent' };
+    try {
+      if (await this.#deps.journal.hasAnswer(agentId, callId))
+        return { ok: false, error: 'not_sendable', reason: 'already_sent' };
+    } catch {
+      return { ok: false, error: 'record_unreadable' };
+    }
+    return null;
+  }
+  /** 宛先と端末の確かめと、答えの検査。keys はキーの組の列、message は発言の文を作る（票には持たず、確定で作り直す）。 */
+  async #planCall(agentId: string, part: QuestionPart, answers: unknown): Promise<CallPlan> {
+    const mode: CallMode = part.answerVia === 'keys' ? 'keys' : 'message';
+    const checked = await this.#preflight(agentId, mode === 'keys' ? 'keys' : 'send');
+    if (!checked.ok) return checked;
+    if (mode === 'keys') {
+      const shown = promptMatches(terminalPromptOf(checked.listAll, checked.target.tabId), part.questions);
+      if (shown === 'unverified') return { ok: false, error: 'not_sendable', reason: 'prompt_unverified' };
+      if (shown === 'mismatch') return { ok: false, error: 'target_changed', reason: 'prompt_mismatch' };
+      const valid = checkAnswers(part.questions, answers);
+      if (!valid.ok) return valid;
+      const plan = planKeys(checked.target.agentType, part.questions, valid.answers);
+      if (!plan.ok) return { ok: false, error: plan.error, reason: plan.reason };
+      return { ok: true, checked, answers: valid.answers, groups: plan.groups };
+    }
+    if (!checked.readTranscript) return { ok: false, error: 'unsupported', missing: ['feature:readTranscript'] };
+    const valid = checkAnswers(part.questions, answers);
+    if (!valid.ok) return valid;
+    const text = formatAsyncAnswer(part.questions, valid.answers);
+    const textCheck = checkText(text);
+    if (!textCheck.ok) return { ok: false, error: 'invalid_answer', reason: textCheck.reason };
+    return { ok: true, checked, answers: valid.answers, text };
+  }
+  async #callIntent({
+    agent,
+    callId,
+    answers,
+    target,
+  }: {
+    agent: string;
+    callId: string;
+    answers: unknown;
+    target?: string;
+  }): Promise<SendAnswer<AnswerIntentResult>> {
+    if (!(await this.#deps.readSendEnabled())) return { ok: false, error: 'send_disabled' };
+    const question = await this.#readCallQuestion(agent, callId);
+    if (!question.ok) return question;
+    const started = await this.#alreadyStarted(agent, callId);
+    if (started) return started;
+    const plan = await this.#planCall(agent, question.part, answers);
+    if (!plan.ok) return plan as SendFailure;
+    if (target !== undefined && target !== targetFingerprint(plan.checked.target))
+      return { ok: false, error: 'target_changed', reason: 'changed_since_shown' };
+    const operationId = this.#operationId();
+    const digest = digestAnswers(plan.answers);
+    const ticket = this.#tickets.issue({
+      target: plan.checked.target,
+      digest,
+      operationId,
+      call: { callId, mode: question.part.answerVia === 'keys' ? 'keys' : 'message' },
+      questions: question.part.questions,
+    });
+    return { ok: true, ...ticket, operationId, preview: plan.checked.preview, digest };
+  }
+  /** callId の答えの確定。確かめ直し、送る前の記録の後に、keys は組を1組ずつ、message は発言を1回だけ送る。 */
+  async #callConfirm(
+    ticket: import('./ticket.ts').SendTicket,
+    answers: unknown,
+    refuse: (failure: SendRefusal) => Promise<SendFailure>,
+  ): Promise<ConfirmAnswer> {
+    const { operationId, target, digest, call, questions } = ticket;
+    if (!call || !questions) return await refuse({ ok: false, error: 'ticket_invalid', reason: 'wrong_kind' });
+    const shown = checkAnswers(questions, answers);
+    if (!shown.ok || digestAnswers(shown.answers) !== digest)
+      return await refuse({ ok: false, error: 'target_changed', reason: 'answer_changed' });
+    const question = await this.#readCallQuestion(target.agentId, call.callId);
+    if (!question.ok) return await refuse(SendService.#confirmRefusal(question));
+    if (question.part.answerVia !== call.mode)
+      return await refuse({ ok: false, error: 'target_changed', reason: 'question_changed' });
+    const started = await this.#alreadyStarted(target.agentId, call.callId);
+    if (started) return started.error === 'record_unreadable' ? started : await refuse(started as SendRefusal);
+    const plan = await this.#planCall(target.agentId, question.part, answers);
+    if (!plan.ok) return await refuse(SendService.#confirmRefusal(plan as SendRefusal));
+    const change = compareTargets(target, plan.checked.target);
+    if (change) return await refuse({ ok: false, error: 'target_changed', reason: change });
+    if (digestAnswers(plan.answers) !== digest)
+      return await refuse({ ok: false, error: 'target_changed', reason: 'answer_changed' });
+    const preview = plan.checked.preview;
+    try {
+      await this.#deps.journal.appendBefore({
+        operationId,
+        action: 'answer',
+        mode: call.mode,
+        route: target.route,
+        target: {
+          ...target,
+          repoName: preview.repoName,
+          worktreePath: preview.worktreePath,
+          branch: preview.branch,
+          title: preview.title,
+        },
+        callId: call.callId,
+        questionCount: plan.answers.length,
+        ...(plan.groups ? { totalGroups: plan.groups.length } : {}),
+        digest,
+        generation: {
+          runtimeId: target.runtimeId,
+          ...(target.route === 'terminal' ? { incarnationId: target.incarnationId } : {}),
+        },
+      });
+    } catch {
+      return await refuse({ ok: false, error: 'record_failed' });
+    }
+    // 送り始めた答えは、結果によらず二度と送らない（起動し直した後は記録の before の行から分かる）。
+    this.#startedCalls.add(`${target.agentId}\u0000${call.callId}`);
+    const result = plan.groups
+      ? await this.#deps.adapter.answerKeys(target as TerminalSendTarget, plan.groups, this.#deps.sleep ?? realSleep)
+      : target.route === 'terminal'
+        ? await this.#deps.adapter.sendTerminal(target, plan.text as string, operationId)
+        : await this.#deps.adapter.sendChat(target, plan.text as string, operationId, plan.checked.fence as number);
+    if (result.detail.code === 'method_not_found' && result.detail.method) this.#block(target, result.detail.method);
+    const recorded = await this.#deps.journal.appendAfter({ operationId, ...result });
+    return {
+      ok: true,
+      operationId,
+      ...result,
+      ...(recorded ? {} : { recordWarning: 'after_record_failed' as const }),
+    };
+  }
+  /** keys の結果不明の照会。会話の今の状態だけを読み、送り直さない。 */
+  async #checkKeys(before: BeforeRecord): Promise<SendRead<SendResult>> {
+    const callId = before.action === 'answer' && before.mode !== undefined ? before.callId : '';
+    const read = this.#deps.readTranscript
+      ? await this.#deps.readTranscript(before.target.agentId)
+      : ({ ok: false, error: 'unreachable' } as const);
+    if (!read.ok)
+      return read.error === 'unreachable' || read.error === 'read_failed'
+        ? { ok: false, error: 'unreachable' }
+        : { ok: true, outcome: 'unknown', detail: { code: read.error } };
+    const found = findCallQuestion(read.messages, callId);
+    if (found === null) return { ok: true, outcome: 'unknown', detail: { code: 'question_not_found' } };
+    if (found.state === 'failed') return { ok: true, outcome: 'refused', detail: { code: 'cancelled' } };
+    return {
+      ok: true,
+      outcome: 'unknown',
+      detail: { code: found.state === 'answered' ? 'resolved_unverified' : 'prompt_pending' },
+    };
   }
 }
