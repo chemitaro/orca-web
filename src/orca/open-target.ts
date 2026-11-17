@@ -35,7 +35,7 @@ export interface TabsSnapshot {
 export type OpenReason = 'requested-agent' | 'last-agent' | 'last-tab' | 'worktree-only';
 
 export type OpenTarget =
-  | { route: 'terminal-switch'; handle: string; tabId: string; paneKey: string; reason: OpenReason }
+  | { route: 'terminal-switch'; handle: string; tabId: string; leafId: string; paneKey: string; reason: OpenReason }
   | { route: 'tab-activate'; tabId: string; leafId?: string; reason: OpenReason }
   | { route: 'worktree-activate'; reason: 'worktree-only'; mayCreateInitialTerminal: boolean };
 
@@ -89,7 +89,14 @@ export function parseTabsSnapshot(result: unknown, worktreeId: string): TabsSnap
 function routeFor(tab: Tab, reason: OpenReason): OpenTarget {
   if (isTerminal(tab)) {
     if (tab.status === 'ready' && tab.handle !== null) {
-      return { route: 'terminal-switch', handle: tab.handle, tabId: tab.id, paneKey: paneKeyOf(tab), reason };
+      return {
+        route: 'terminal-switch',
+        handle: tab.handle,
+        tabId: tab.id,
+        leafId: tab.leafId,
+        paneKey: paneKeyOf(tab),
+        reason,
+      };
     }
     return { route: 'tab-activate', tabId: tab.id, leafId: tab.leafId, reason };
   }

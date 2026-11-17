@@ -60,7 +60,7 @@ const handler = createAppHandler({
   inbox: { snapshot: () => poller.inboxSnapshot(), noteViewer: () => poller.noteInboxViewer() },
   stallMinutes: config.stallMinutes,
   settings,
-  open: (request) => orca.open.open(request),
+  open: (request, address) => orca.openFrom(request, address),
   transcripts: { reader: transcriptReader, hub: transcriptHub },
   readOrigins: config.readOrigins,
   extraHosts: config.extraHosts,

@@ -12,6 +12,8 @@ interface Harness {
   port: number;
   tokens: TokenStore;
   opened: OpenRequest[];
+  /** 開く処理に渡った、要求の元のアドレス。 */
+  addresses: (string | undefined)[];
   send(options: SendOptions): Promise<Reply>;
 }
 
@@ -37,15 +39,19 @@ async function withApp(
     route: 'terminal-switch',
     reason: 'last-agent',
     worktreeId: r.worktree,
+    device: 'host',
+    screen: 'unverified',
   }),
 ): Promise<void> {
   const tokens = new TokenStore();
   const opened: OpenRequest[] = [];
+  const addresses: (string | undefined)[] = [];
   const server = createAppServer({
     tokens,
     readOrigins: ['http://127.0.0.1:47800'],
-    open: async (r) => {
+    open: async (r, address) => {
       opened.push(r);
+      addresses.push(address);
       return open(r);
     },
   });
@@ -71,7 +77,7 @@ async function withApp(
       req.end(body);
     });
   try {
-    await fn({ host, origin: `http://${host}`, port, tokens, opened, send });
+    await fn({ host, origin: `http://${host}`, port, tokens, opened, addresses, send });
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
@@ -153,7 +159,7 @@ test('すべての道で、許していない Host と Host の欠けを拒む�
   });
 });
 
-test('そろった要求だけが開く処理に届き、結果をそのまま返す', async () => {
+test('そろった要求だけが開く処理に届き、要求の TCP の元のアドレスを渡し、結果をそのまま返す', async () => {
   await withApp(async (h) => {
     const t = await token(h);
     const res = await h.send({ method: 'POST', path: '/api/open', headers: writeHeaders(h, t), body: openBody });
@@ -164,8 +170,20 @@ test('そろった要求だけが開く処理に届き、結果をそのまま�
       route: 'terminal-switch',
       reason: 'last-agent',
       worktreeId: '/p-1',
+      device: 'host',
+      screen: 'unverified',
     });
     assert.deepEqual(h.opened, [{ worktree: '/p-1', agent: 'a:1' }]);
+    assert.deepEqual(h.addresses, ['127.0.0.1']);
+    // 頭（X-Forwarded-For など）は、渡すアドレスを変えない。
+    const forwarded = await h.send({
+      method: 'POST',
+      path: '/api/open',
+      headers: { ...writeHeaders(h, t), 'x-forwarded-for': '100.64.0.9', 'x-real-ip': '100.64.0.9' },
+      body: openBody,
+    });
+    assert.equal(forwarded.status, 200);
+    assert.deepEqual(h.addresses, ['127.0.0.1', '127.0.0.1']);
     assert.equal(res.headers['access-control-allow-origin'], undefined);
     assert.equal(res.headers['cache-control'], 'no-store');
   });
@@ -330,6 +348,8 @@ test('開く処理の失敗は、誤りの種類ごとの HTTP の状態で返�
     ['orca_error', 502],
     ['unknown_shape', 502],
     ['unconfirmed', 504],
+    ['device_not_connected', 409],
+    ['device_unknown', 503],
   ];
   for (const [error, status] of statuses) {
     await withApp(
