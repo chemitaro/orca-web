@@ -29,6 +29,20 @@ export interface AnswerBeforeInput extends BeforeBase {
   route: 'chat';
   prompt: { itemId: string; revision: number };
   questionCount: number;
+  mode?: never;
+  text?: never;
+}
+/**
+ * 端末の質問（keys）と後の発言の質問（message）への答えの before。答えの中身（ラベル、番号、その他の文、キーの列、発言の文）は書かず、
+ * callId と問いの数と digest、keys は組の数だけを持つ。
+ */
+export interface CallAnswerBeforeInput extends BeforeBase {
+  action: 'answer';
+  mode: 'keys' | 'message';
+  callId: string;
+  questionCount: number;
+  totalGroups?: number;
+  prompt?: never;
   text?: never;
 }
 /** 承認への答えの before。選択肢の id・ラベルと承認の中身は書かず、digest と intent と承認の位置だけを持つ。 */
@@ -39,7 +53,7 @@ export interface ApprovalBeforeInput extends BeforeBase {
   intent: ApprovalIntent | null;
   text?: never;
 }
-export type BeforeInput = SendBeforeInput | AnswerBeforeInput | ApprovalBeforeInput;
+export type BeforeInput = SendBeforeInput | AnswerBeforeInput | CallAnswerBeforeInput | ApprovalBeforeInput;
 export type BeforeRecord = RowBase & BeforeInput & { kind: 'before' };
 export type ResultInput = SendResult & { operationId: string };
 export type ResultRecord = RowBase & SendResult & { kind: 'after' | 'check' };
@@ -63,7 +77,14 @@ export type RefusedRecord = RowBase & RefusedInput & { kind: 'refused' };
 type JournalRow = BeforeRecord | ResultRecord | RefusedRecord;
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+function isCallAnswerBefore(row: Record<string, unknown>): boolean {
+  if (row.text !== undefined || row.prompt !== undefined) return false;
+  if (typeof row.callId !== 'string' || row.callId.length === 0 || !Number.isInteger(row.questionCount)) return false;
+  if (row.mode === 'keys') return row.route === 'terminal' && Number.isInteger(row.totalGroups);
+  return row.mode === 'message' && row.totalGroups === undefined;
+}
 function isAnswerBefore(row: Record<string, unknown>): boolean {
+  if (row.action === 'answer' && row.mode !== undefined) return isCallAnswerBefore(row);
   const prompt = row.prompt;
   return (
     row.action === 'answer' &&
@@ -202,6 +223,27 @@ export class SendJournal {
     } finally {
       await file.close();
     }
+  }
+  /** 同じエージェントの同じ callId に、送り始めた答え（before の行）があるか。記録が読めなければ投げる。 */
+  async hasAnswer(agentId: string, callId: string): Promise<boolean> {
+    let raw: string;
+    try {
+      raw = await readFile(path.join(this.#dir, 'sends.jsonl'), 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
+    }
+    return raw
+      .split('\n')
+      .map(parseRow)
+      .some(
+        (row) =>
+          row?.kind === 'before' &&
+          row.action === 'answer' &&
+          row.mode !== undefined &&
+          row.callId === callId &&
+          row.target.agentId === agentId,
+      );
   }
   async read(operationId: string): Promise<SendRecord | null> {
     let raw: string;

@@ -48,6 +48,8 @@ export interface QuestionView {
   options: QuestionOptionView[];
   allowOther: boolean;
   otherAllowsEmpty: boolean;
+  /** 端末の単一選択の問いで、選択肢のどれかに空白だけでない preview があるか（Orca の hasPreviews）。ほかは偽。 */
+  preview: boolean;
 }
 
 export type QuestionState = 'pending' | 'answered' | 'cancelled';
@@ -58,10 +60,17 @@ export interface QuestionAnswerView {
   other: string | null;
 }
 
-/** 質問の部分。chat は構造化 Chat の journal の question、terminal は端末のエージェントの質問のツールの呼び出し。 */
+/**
+ * 答え方。rpc は構造化 Chat の journal の question（agentSession.respondToQuestion）、
+ * keys は端末のエージェントの質問のツール（Orca と同じキーの列）、message は request_user_input_async（後の発言）。
+ */
+export type AnswerVia = 'rpc' | 'keys' | 'message';
+
+/** 質問の部分。chat は構造化 Chat の件、terminal は端末のエージェントの件。 */
 export interface QuestionPart {
   type: 'question';
   source: 'chat' | 'terminal';
+  answerVia: AnswerVia;
   prompt: { itemId: string; revision: number } | null;
   callId: string | null;
   questions: QuestionView[];
@@ -125,7 +134,22 @@ export interface TranscriptMessage {
   /** ISO の時刻。Orca が持たなければ null。 */
   at: string | null;
   parts: TranscriptPart[];
+  /** 端末の利用者の発言で、まだ届いていないもの（Orca の isDeliveredNativeChatUserMessage に当たらない）。後の発言の質問の答えに数えない。 */
+  undelivered?: true;
+  /** role user の件のうち、Orca の from.kind が agent のもの（ほかのエージェントからの発言。端末と構造化 Chat）。利用者の答えに数えない。 */
+  fromAgent?: true;
 }
+
+/** Orca の isDeliveredNativeChatUserMessage が届いていないとする印（送っていない、止めた、送り直し待ち、待ち行列、送信中、届け先の状態）。 */
+const UNDELIVERED_FLAGS = [
+  'unsent',
+  'stoppedBeforeStart',
+  'awaitsRetry',
+  'sentWhileStopping',
+  'queued',
+  'pendingSend',
+  'deliveryState',
+] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -157,7 +181,10 @@ function withTruncated<T extends TranscriptPart>(part: T, truncated: boolean): T
   return truncated ? { ...part, truncated: true } : part;
 }
 
-/** NativeChatBlock を部品にする。知らない形は unsupported。terminal は端末の会話の件で、質問のツールの呼び出しを question にする。 */
+/**
+ * NativeChatBlock を部品にする。知らない形は unsupported。terminal は端末の会話の件で、質問のツールの呼び出しを question にする。
+ * request_user_input_async は端末でも構造化 Chat でも question（answerVia message）にする。
+ */
 function blockPart(block: unknown, shortened: boolean, terminal = false): TranscriptPart {
   if (!isRecord(block)) return { type: 'unsupported', what: 'unknown' };
   switch (block.type) {
@@ -171,6 +198,10 @@ function blockPart(block: unknown, shortened: boolean, terminal = false): Transc
       const name = str(block.name) ?? '';
       if (terminal && block.state !== 'failed' && isAskUserQuestionTool(name)) {
         const question = terminalQuestionPart(block.input, str(block.callId), shortened);
+        if (question) return question;
+      }
+      if (block.state !== 'failed' && isAsyncQuestionTool(name)) {
+        const question = asyncQuestionPart(block.input, str(block.callId), shortened, terminal ? 'terminal' : 'chat');
         if (question) return question;
       }
       const c = clipText(inputText(block.input), MAX_TOOL_INPUT_CHARS);
@@ -225,7 +256,16 @@ export function normalizeNativeMessages(messages: readonly unknown[]): Transcrip
     if (m.role === 'reasoning') continue;
     const { role, parts } = messageOf(m.role, m.blocks, m.shortened === true, true);
     if (parts.length === 0) continue;
-    out.push({ id: m.id, role, at: toIso(m.timestamp), parts });
+    const undelivered = role === 'user' && UNDELIVERED_FLAGS.some((flag) => Boolean(m[flag]));
+    const fromAgent = role === 'user' && isRecord(m.from) && m.from.kind === 'agent';
+    out.push({
+      id: m.id,
+      role,
+      at: toIso(m.timestamp),
+      parts,
+      ...(undelivered ? { undelivered: true as const } : {}),
+      ...(fromAgent ? { fromAgent: true as const } : {}),
+    });
   }
   return out;
 }
@@ -253,6 +293,11 @@ export interface ParsedJournalQuestion {
 export function isAskUserQuestionTool(name: string): boolean {
   const normalized = name.replaceAll(/[^a-z0-9]/gi, '').toLowerCase();
   return normalized === 'askuserquestion' || normalized === 'requestuserinput';
+}
+
+/** 名前の英数字だけを小文字にしたものが requestuserinputasync（Orca の CODEX_ASYNC_QUESTION_TOOL）。 */
+export function isAsyncQuestionTool(name: string): boolean {
+  return name.replaceAll(/[^a-z0-9]/gi, '').toLowerCase() === 'requestuserinputasync';
 }
 
 class Clipper {
@@ -319,6 +364,7 @@ function journalQuestion(raw: RawJournalQuestion, c: Clipper): QuestionView | nu
     options,
     allowOther: freeTextQuestionId !== undefined && freeTextQuestionId.length > 0,
     otherAllowsEmpty: isRecord(raw.freeTextInput) && raw.freeTextInput.allowEmpty === true,
+    preview: false,
   };
 }
 
@@ -465,6 +511,7 @@ function journalQuestionPart(item: Record<string, unknown>): TranscriptPart {
     {
       type: 'question',
       source: 'chat',
+      answerVia: 'rpc',
       prompt: parsed.prompt,
       callId: null,
       questions: parsed.questions,
@@ -475,16 +522,26 @@ function journalQuestionPart(item: Record<string, unknown>): TranscriptPart {
   );
 }
 
-/** Orca の parseCanonicalQuestionsInput と同じ規則（question か title、header、multiSelect か multiple・multi、options はラベルの文字か {label, description}）。 */
-function terminalQuestions(input: unknown, c: Clipper): QuestionView[] | null {
-  let value = input;
-  if (typeof value === 'string') {
-    try {
-      value = JSON.parse(value);
-    } catch {
-      return null;
-    }
+/** 物か JSON の文字の入力を物にする。読めなければ undefined。 */
+function inputValue(input: unknown): unknown {
+  if (typeof input !== 'string') return input;
+  try {
+    return JSON.parse(input);
+  } catch {
+    return undefined;
   }
+}
+
+/** Orca の askOptionPreview と同じ：空白だけでない preview の文字。 */
+const hasPreview = (option: unknown): boolean =>
+  isRecord(option) && typeof option.preview === 'string' && /\S/.test(option.preview);
+
+/**
+ * Orca の parseCanonicalQuestionsInput と同じ規則（question か title、header、multiSelect か multiple・multi、options はラベルの文字か {label, description}、
+ * 単一選択で preview のある選択肢があれば preview）。preview のない問いはその他の文（Claude の Type something、Codex のメモ）を許す。
+ */
+function terminalQuestions(input: unknown, c: Clipper): QuestionView[] | null {
+  const value = inputValue(input);
   if (!isRecord(value) || !Array.isArray(value.questions) || value.questions.length === 0) return null;
   const out: QuestionView[] = [];
   for (const raw of value.questions) {
@@ -504,26 +561,95 @@ function terminalQuestions(input: unknown, c: Clipper): QuestionView[] | null {
     }
     if (!text && options.length === 0) continue;
     if (options.length > MAX_QUESTION_OPTIONS) return null;
+    const preview = !multiSelect && Array.isArray(raw.options) && raw.options.some(hasPreview);
     out.push({
       id: String(out.length),
       header: typeof raw.header === 'string' ? c.clip(raw.header, MAX_QUESTION_LABEL_CHARS) : null,
       question: c.clip(text, MAX_QUESTION_CHARS),
       multiSelect,
       options,
-      allowOther: false,
+      allowOther: !preview,
       otherAllowsEmpty: false,
+      preview,
     });
   }
   return out.length > 0 && out.length <= MAX_QUESTIONS ? out : null;
 }
 
-/** 端末のエージェントの質問のツールの呼び出しを question の部分にする。読めなければ null（ツールの呼び出しのまま）。 */
-function terminalQuestionPart(input: unknown, callId: string | null, shortened: boolean): QuestionPart | null {
+/** 端末の質問のツールの入力（会話の記録の呼び出し、またはタブの agentStatus の interactivePrompt）を問いにする。読めなければ null。 */
+export function parseTerminalQuestions(input: unknown): { questions: QuestionView[]; truncated: boolean } | null {
   const c = new Clipper();
   const questions = terminalQuestions(input, c);
+  return questions === null ? null : { questions, truncated: c.truncated };
+}
+
+/** 端末のエージェントの質問のツールの呼び出しを question の部分にする。読めなければ null（ツールの呼び出しのまま）。 */
+function terminalQuestionPart(input: unknown, callId: string | null, shortened: boolean): QuestionPart | null {
+  const parsed = parseTerminalQuestions(input);
+  if (parsed === null) return null;
+  return withTruncated<QuestionPart>(
+    {
+      type: 'question',
+      source: 'terminal',
+      answerVia: 'keys',
+      prompt: null,
+      callId,
+      questions: parsed.questions,
+      state: 'pending',
+      answers: null,
+    },
+    parsed.truncated || shortened,
+  );
+}
+
+/** Orca の parseCodexAsyncQuestionsInput と同じ規則（questions の各要素の title が文字なら問い、options の文字だけを選択肢）。 */
+function asyncQuestions(input: unknown, c: Clipper): QuestionView[] | null {
+  const value = inputValue(input);
+  if (!isRecord(value) || !('questions' in value)) return null;
+  const out: QuestionView[] = [];
+  for (const raw of Array.isArray(value.questions) ? value.questions : []) {
+    if (!isRecord(raw) || typeof raw.title !== 'string') continue;
+    const labels = (Array.isArray(raw.options) ? raw.options : []).filter((o): o is string => typeof o === 'string');
+    if (labels.length > MAX_QUESTION_OPTIONS) return null;
+    out.push({
+      id: String(out.length),
+      header: null,
+      question: c.clip(raw.title, MAX_QUESTION_CHARS),
+      multiSelect: false,
+      options: labels.map((label, i) => ({
+        id: String(i),
+        label: c.clip(label, MAX_QUESTION_LABEL_CHARS),
+        description: null,
+      })),
+      allowOther: true,
+      otherAllowsEmpty: false,
+      preview: false,
+    });
+  }
+  return out.length > 0 && out.length <= MAX_QUESTIONS ? out : null;
+}
+
+/** request_user_input_async の呼び出しを、後の発言で答える question の部分にする。読めなければ null。 */
+function asyncQuestionPart(
+  input: unknown,
+  callId: string | null,
+  shortened: boolean,
+  source: QuestionPart['source'],
+): QuestionPart | null {
+  const c = new Clipper();
+  const questions = asyncQuestions(input, c);
   if (questions === null) return null;
   return withTruncated<QuestionPart>(
-    { type: 'question', source: 'terminal', prompt: null, callId, questions, state: 'pending', answers: null },
+    {
+      type: 'question',
+      source,
+      answerVia: 'message',
+      prompt: null,
+      callId,
+      questions,
+      state: 'pending',
+      answers: null,
+    },
     c.truncated || shortened,
   );
 }
@@ -729,11 +855,16 @@ export function normalizeJournalItems(items: readonly unknown[]): TranscriptMess
     if (kind === 'message') {
       if (body.role === 'reasoning') continue;
       const { role, parts } = messageOf(body.role, Array.isArray(body.blocks) ? body.blocks : [], shortened);
-      if (parts.length) out.push({ id, role, at, parts });
+      // ほかのエージェントからの発言（from.kind agent）は利用者の答えに数えない。
+      const fromAgent = role === 'user' && isRecord(body.from) && body.from.kind === 'agent';
+      if (parts.length) out.push({ id, role, at, parts, ...(fromAgent ? { fromAgent: true as const } : {}) });
       continue;
     }
     if (kind === 'tool-call') {
-      const call = blockPart({ type: 'tool-call', name: body.name, input: body.input, callId: body.callId }, shortened);
+      const call = blockPart(
+        { type: 'tool-call', name: body.name, input: body.input, callId: body.callId, state: body.state },
+        shortened,
+      );
       const parts: TranscriptPart[] = [call];
       if (isRecord(body.output)) {
         const c = clipText(str(body.output.head) ?? '', MAX_TOOL_OUTPUT_CHARS);

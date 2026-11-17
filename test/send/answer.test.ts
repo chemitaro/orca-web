@@ -16,6 +16,7 @@ const q = (id: string, extra: Partial<QuestionView> = {}): QuestionView => ({
   ],
   allowOther: false,
   otherAllowsEmpty: false,
+  preview: false,
   ...extra,
 });
 

@@ -28,6 +28,12 @@ export const APPROVAL_REASONS = {
   persistent_unconfirmed: '確かめてから答えてください',
   unknown_option: '選択肢が変わりました',
   invalid_option: '選択肢が変わりました',
+  // 質問の表の callId の答え（iss-00049）の理由も、承認の言葉にする（「質問」の字を出さない）。
+  already_sent: 'この許可の確認には一度答えを送りました。Orca で確かめてください',
+  prompt_unverified: '端末がこの許可の確認を出しているか確かめられません',
+  prompt_mismatch: '端末の許可の確認が変わりました',
+  prompt_unsupported: 'この形の許可の確認は、ここからは答えられません',
+  agent_keys_unknown: 'このエージェントの許可の確認は、ここからは答えられません',
 };
 
 export const TERMINAL_APPROVAL_REASON = APPROVAL_REASONS.terminal_route;

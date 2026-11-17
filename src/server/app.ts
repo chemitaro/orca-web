@@ -233,6 +233,9 @@ const APPROVAL_INTENT = '/api/approval/intent';
 const APPROVAL_CONFIRM = '/api/approval/confirm';
 const MAX_OPTION_ID_CHARS = 1024;
 
+const MAX_CALL_ID_CHARS = 1024;
+const isTargetFingerprint = (value: unknown): boolean => typeof value === 'string' && /^[a-f0-9]{32}$/.test(value);
+
 /** 答えと承認の意図に共通の `{agent, prompt: {itemId, revision}, target?}` の検査。鍵は keys のほかを許さない。 */
 function parsePromptIntent(
   body: unknown,
@@ -253,7 +256,7 @@ function parsePromptIntent(
     !isBoundedText(prompt.itemId, MAX_ITEM_ID_CHARS) ||
     !Number.isSafeInteger(prompt.revision) ||
     (prompt.revision as number) <= 0 ||
-    ('target' in body && (typeof body.target !== 'string' || !/^[a-f0-9]{32}$/.test(body.target)))
+    ('target' in body && !isTargetFingerprint(body.target))
   )
     return null;
   return {
@@ -264,12 +267,33 @@ function parsePromptIntent(
   };
 }
 
-/** 答えの意図 `{agent, prompt: {itemId, revision}, answers, target?}`。答えの中身はサービスが確かめる。 */
-function parseAnswerIntent(
-  body: unknown,
-): { agent: string; prompt: { itemId: string; revision: number }; answers: unknown[]; target?: string } | null {
+type AnswerIntentBody =
+  | { agent: string; prompt: { itemId: string; revision: number }; answers: unknown[]; target?: string }
+  | { agent: string; callId: string; answers: unknown[]; target?: string };
+
+/**
+ * 答えの意図。`{agent, prompt: {itemId, revision}, answers, target?}`（構造化 Chat の質問）か、
+ * `{agent, callId, answers, target?}`（端末の質問と後の発言の質問）。prompt と callId はちょうど片方。答えの中身はサービスが確かめる。
+ */
+function parseAnswerIntent(body: unknown): AnswerIntentBody | null {
+  if (!isRecord(body) || 'prompt' in body === 'callId' in body || !Array.isArray(body.answers)) return null;
+  if ('callId' in body) {
+    if (
+      Object.keys(body).some((k) => !['agent', 'callId', 'answers', 'target'].includes(k)) ||
+      !isBoundedText(body.agent, MAX_AGENT_CHARS) ||
+      !isBoundedText(body.callId, MAX_CALL_ID_CHARS) ||
+      ('target' in body && !isTargetFingerprint(body.target))
+    )
+      return null;
+    return {
+      agent: body.agent,
+      callId: body.callId,
+      answers: body.answers,
+      ...('target' in body ? { target: body.target as string } : {}),
+    };
+  }
   const parsed = parsePromptIntent(body, ['answers']);
-  if (!parsed || !Array.isArray(parsed.body.answers)) return null;
+  if (!parsed) return null;
   const { body: raw, ...rest } = parsed;
   return { ...rest, answers: raw.answers as unknown[] };
 }

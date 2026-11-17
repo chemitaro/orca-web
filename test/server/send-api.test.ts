@@ -86,6 +86,8 @@ test('送信の4つの道はサービスの結果をD-09の形にして返し、
             target: 'a'.repeat(32),
             agentType: 'codex',
             answer: { available: false, reason: 'terminal_route' },
+            answerKeys: { available: false, reason: 'terminal_route' },
+            answerMessage: { available: false, reason: 'terminal_route' },
             approval: { available: false, reason: 'terminal_route' },
           };
         },
@@ -129,6 +131,8 @@ test('送信の4つの道はサービスの結果をD-09の形にして返し、
         target: 'a'.repeat(32),
         agentType: 'codex',
         answer: { available: false, reason: 'terminal_route' },
+        answerKeys: { available: false, reason: 'terminal_route' },
+        answerMessage: { available: false, reason: 'terminal_route' },
         approval: { available: false, reason: 'terminal_route' },
       });
       const intent = await send('/api/send/intent', 'POST', JSON.stringify({ agent: 'agent', text: 'test' }));
@@ -166,6 +170,8 @@ test('守りはHost→方法→Content-Type→Origin→トークン→大きさ�
         target: null,
         agentType: null,
         answer: { available: false, reason: 'send_disabled' },
+        answerKeys: { available: false, reason: 'send_disabled' },
+        answerMessage: { available: false, reason: 'send_disabled' },
         approval: { available: false, reason: 'send_disabled' },
       };
     },
@@ -237,6 +243,8 @@ test('サービスの誤りはD-09のHTTP状態とreason/missingを返し、GET�
         target: null,
         agentType: null,
         answer: { available: false, reason: 'send_disabled' },
+        answerKeys: { available: false, reason: 'send_disabled' },
+        answerMessage: { available: false, reason: 'send_disabled' },
         approval: { available: false, reason: 'send_disabled' },
       };
     },
@@ -348,6 +356,8 @@ test('意図だけが32文字の小文字16進の target を受けてサービ�
             target: null,
             agentType: null,
             answer: { available: false, reason: 'send_disabled' },
+            answerKeys: { available: false, reason: 'send_disabled' },
+            answerMessage: { available: false, reason: 'send_disabled' },
             approval: { available: false, reason: 'send_disabled' },
           };
         },
@@ -440,6 +450,8 @@ function answerService(calls: unknown[]): NonNullable<AppOptions['send']> {
         target: 'a'.repeat(32),
         agentType: 'claude',
         answer: { available: true, reason: null },
+        answerKeys: { available: true, reason: null },
+        answerMessage: { available: true, reason: null },
         approval: { available: true, reason: null },
       };
     },
@@ -562,6 +574,67 @@ test('T-10 答えの誤りは invalid_answer を 400 で返し、答えの口の
   await withApp({ send: old }, async (send) => {
     assert.equal((await send('/api/answer/intent', 'POST', JSON.stringify(answerBody))).status, 503);
   });
+});
+
+// ---- callId の答え（iss-00049 D-06、T-12） ----
+
+const callBody = { agent: 'tab:leaf', callId: 'call-ask', answers: [{ questionId: '0', optionIds: ['1'] }] };
+
+test('T-12 /api/answer/intent は callId の物を受けてサービスに渡し、status は answerKeys と answerMessage を返す', async () => {
+  const calls: unknown[] = [];
+  await withApp({ send: answerService(calls) }, async (send) => {
+    const intent = await send('/api/answer/intent', 'POST', JSON.stringify(callBody));
+    assert.equal(intent.status, 200);
+    assert.equal(intent.cors, undefined);
+    const targeted = await send('/api/answer/intent', 'POST', JSON.stringify({ ...callBody, target: 'c'.repeat(32) }));
+    assert.equal(targeted.status, 200);
+    const long = await send('/api/answer/intent', 'POST', JSON.stringify({ ...callBody, callId: 'x'.repeat(1024) }));
+    assert.equal(long.status, 200);
+    const status = await send('/api/send/status?agent=chat:x');
+    assert.deepEqual(
+      [status.body.answerKeys, status.body.answerMessage],
+      [
+        { available: true, reason: null },
+        { available: true, reason: null },
+      ],
+    );
+  });
+  assert.deepEqual(calls.slice(0, 3), [
+    ['answerIntent', callBody],
+    ['answerIntent', { ...callBody, target: 'c'.repeat(32) }],
+    ['answerIntent', { ...callBody, callId: 'x'.repeat(1024) }],
+  ]);
+});
+
+test('T-12 /api/answer/intent は prompt と callId の両方・どちらもない・余分な鍵・長すぎるか空の callId を 400 で拒み、守りは今のまま', async () => {
+  const calls: unknown[] = [];
+  await withApp({ send: answerService(calls) }, async (send) => {
+    for (const bad of [
+      { ...callBody, prompt: answerBody.prompt },
+      { agent: 'tab:leaf', answers: callBody.answers },
+      { ...callBody, extra: 1 },
+      { ...callBody, callId: 'x'.repeat(1025) },
+      { ...callBody, callId: '' },
+      { ...callBody, callId: 3 },
+      { ...callBody, answers: 'x' },
+      { ...callBody, target: 'short' },
+    ]) {
+      const result = await send('/api/answer/intent', 'POST', JSON.stringify(bad));
+      assert.equal(result.status, 400, JSON.stringify(bad).slice(0, 80));
+      assert.equal(result.body.error, 'invalid_request');
+    }
+    for (const [headers, status, error] of [
+      [{ origin: 'http://evil.example' }, 403, 'origin_rejected'],
+      [{ 'x-orca-web-token': 'bad' }, 401, 'token_invalid'],
+      [{ 'content-type': 'text/plain' }, 415, 'unsupported_media_type'],
+    ] as const) {
+      const result = await send('/api/answer/intent', 'POST', JSON.stringify(callBody), headers);
+      assert.equal(result.status, status);
+      assert.equal(result.body.error, error);
+      assert.equal(result.cors, undefined);
+    }
+  });
+  assert.deepEqual(calls, []);
 });
 
 // ---- 承認への答えの口（iss-00050 D-05、T-10） ----

@@ -604,6 +604,47 @@ li.row.question {
   margin: 0;
 }
 
+/* 途中まで送った帯と送れない理由（iss-00049 D-07）。キーの組は送り直さないので、照会のボタンを置かず「Orca で開く」だけを足に出す。 */
+.question-partial {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--chat-danger-line);
+  border-radius: var(--ds-radius, 6px);
+  background: var(--chat-danger-bg);
+  color: var(--chat-danger-ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.question-partial-text {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+}
+
+.question-hint {
+  margin: 0;
+  color: var(--chat-danger);
+  font-size: 12px;
+}
+
+/* keys の未回答の注（F-02）。送るボタンの左に置き、狭い幅では上の行に折り返す。 */
+.question-keys-note {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+  color: var(--chat-muted);
+  font-size: 12px;
+}
+
+.question-card[data-state="declined"] .question-badge {
+  color: var(--chat-muted);
+}
+
 .question-actions {
   display: flex;
   flex-wrap: wrap;

@@ -331,6 +331,85 @@ test('T-09 答えの before は text を持たずに読め、action・prompt・q
   }
 });
 
+// ---- 端末と後の発言の答え（iss-00049 D-05、T-10） ----
+
+const callBefore = (extra: Record<string, unknown> = {}) => ({
+  operationId: 'keys-op',
+  action: 'answer' as const,
+  mode: 'keys' as const,
+  route: 'terminal' as const,
+  target: { ...terminalTarget(), repoName: null, worktreePath: null, branch: null, title: null },
+  callId: 'call-test',
+  questionCount: 1,
+  totalGroups: 3,
+  digest: 'd'.repeat(64),
+  generation: { runtimeId: 'runtime-test', incarnationId: 'inc-test' },
+  ...extra,
+});
+
+test('T-10 keys と message の答えの before は mode・callId・questionCount・digest・totalGroups だけを持って読め、形の欠けた行は捨てる', async (t) => {
+  const dir = await directory(t);
+  const { chatTarget } = await import('./fixture.ts');
+  const journal = new SendJournal(dir);
+  await journal.appendBefore(callBefore());
+  const message = {
+    operationId: 'message-op',
+    action: 'answer' as const,
+    mode: 'message' as const,
+    route: 'chat' as const,
+    target: { ...chatTarget(), repoName: null, worktreePath: null, branch: null, title: null },
+    callId: 'call-async',
+    questionCount: 2,
+    digest: 'e'.repeat(64),
+    generation: { runtimeId: 'runtime-test' },
+  };
+  await journal.appendBefore(message);
+  await journal.appendAfter({
+    operationId: 'keys-op',
+    outcome: 'unknown',
+    detail: { code: 'partial_sent', sentGroups: 1, totalGroups: 3 },
+  });
+  const keys = await new SendJournal(dir).read('keys-op');
+  assert.equal(keys?.before?.action, 'answer');
+  assert.deepEqual(keys?.detail, { code: 'partial_sent', sentGroups: 1, totalGroups: 3 });
+  assert.equal((await new SendJournal(dir).read('message-op'))?.before?.action, 'answer');
+  const rows = (await readFile(path.join(dir, 'sends.jsonl'), 'utf8'))
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  assert.deepEqual(Object.keys(rows[0]).sort(), [
+    'action',
+    'at',
+    'callId',
+    'digest',
+    'generation',
+    'kind',
+    'mode',
+    'operationId',
+    'questionCount',
+    'route',
+    'schema',
+    'target',
+    'totalGroups',
+  ]);
+  assert.equal('text' in rows[1], false);
+  for (const [id, broken] of [
+    ['no-call', { callId: undefined }],
+    ['empty-call', { callId: '' }],
+    ['no-count', { questionCount: undefined }],
+    ['no-groups', { totalGroups: undefined }],
+    ['keys-chat', { route: 'chat' }],
+    ['other-mode', { mode: 'paste' }],
+    ['with-text', { text: '秘密の文' }],
+  ] as const) {
+    await appendFile(
+      path.join(dir, 'sends.jsonl'),
+      `${JSON.stringify({ ...callBefore(broken), operationId: id, schema: 'orca-web.send-record/v1', kind: 'before', at: new Date().toISOString() })}\n`,
+    );
+    assert.equal(await new SendJournal(dir).read(id), null, id);
+  }
+});
+
 test('T-09 承認の before は text と選択肢を持たずに読め、prompt・intent が欠けたか知らない値の行は捨てる', async (t) => {
   const dir = await directory(t);
   const { chatTarget } = await import('./fixture.ts');
@@ -368,4 +447,19 @@ test('T-09 承認の before は text と選択肢を持たずに読め、prompt�
     );
     assert.equal(await new SendJournal(dir).read(id), null, id);
   }
+});
+
+test('T-10 hasAnswer は before の行から同じエージェントと callId の答えを見つけ、記録がなければ偽、読めなければ投げる', async (t) => {
+  const dir = await directory(t);
+  const journal = new SendJournal(dir);
+  assert.equal(await journal.hasAnswer(terminalTarget().agentId, 'call-test'), false);
+  await journal.appendBefore(before());
+  await journal.appendBefore(callBefore());
+  const fresh = new SendJournal(dir);
+  assert.equal(await fresh.hasAnswer(terminalTarget().agentId, 'call-test'), true);
+  assert.equal(await fresh.hasAnswer(terminalTarget().agentId, 'call-other'), false);
+  assert.equal(await fresh.hasAnswer('other-agent', 'call-test'), false);
+  await rm(path.join(dir, 'sends.jsonl'));
+  await mkdir(path.join(dir, 'sends.jsonl'));
+  await assert.rejects(fresh.hasAnswer(terminalTarget().agentId, 'call-test'));
 });

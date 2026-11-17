@@ -75,6 +75,7 @@ test('揃った録画から、機能ごとの期待する結果を返す', async
     sendTerminal: true,
     sendChat: false,
     answerChat: false,
+    answerKeys: true,
     answerApproval: false,
   });
   assert.deepEqual(report.features.openExistingTab.deferred, ['rpc:session.tabs.activate', 'rpc:worktree.activate']);
@@ -336,6 +337,39 @@ test('答えの機能は structured と question-answers の capability と読�
   assert.ok(noTranscript.features.answerChat.missing.includes('feature:readTranscript'));
   const { report: inconsistent } = await probe(cliWith(), undefined, 'other-runtime');
   assert.ok(inconsistent.features.answerChat.missing.includes('runtime-id:consistent'));
+});
+
+test('iss-00049 キーの組の答えは runtime の ID の一致と、タブと会話の読みを要し、書く RPC は呼ぶときまで確かめない', async () => {
+  const { report, rpc } = await probe();
+  assert.ok(report.features.answerKeys.available);
+  assert.deepEqual(report.features.answerKeys.satisfied, [
+    'runtime:reachable',
+    'runtime-id:consistent',
+    'feature:readTabs',
+    'feature:readTranscript',
+  ]);
+  assert.deepEqual(report.features.answerKeys.deferred, [
+    'rpc:terminal.send',
+    'rpc:terminal.agentStatus',
+    'rpc:terminal.inspectProcess',
+  ]);
+  assert.deepEqual(rpc.calls.map((c) => c.method).sort(), ['nativeChat.readSession', 'session.tabs.listAll']);
+  const { report: noTabs } = await probe(
+    undefined,
+    editRpc((method, frame) => {
+      if (method === 'session.tabs.listAll') frame.result = { wrong: [] };
+    }),
+  );
+  assert.ok(noTabs.features.answerKeys.missing.includes('feature:readTabs'));
+  const { report: noTranscript } = await probe(
+    undefined,
+    editRpc((method, frame) => {
+      if (method === 'nativeChat.readSession') frame.error = { code: 'method_not_found' };
+    }),
+  );
+  assert.deepEqual(noTranscript.features.answerKeys.missing, ['feature:readTranscript']);
+  const { report: inconsistent } = await probe(undefined, undefined, 'other-runtime');
+  assert.ok(inconsistent.features.answerKeys.missing.includes('runtime-id:consistent'));
 });
 
 test('承認の答えの機能は structured の capability と読む機能を要し、question-answers は要らず、答える RPC は確かめない', async () => {

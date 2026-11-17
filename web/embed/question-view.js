@@ -1,9 +1,13 @@
 // 質問のカードの組み立て（D-05）。選択、答えの形、カードの描く物、送る流れの状態は純粋な関数で、DOM に触らない。
 // 答える手段（answerer）は差し替えられる形：`{ availability(part, status), submit(part, answers), check?(operationId) }`。
-// この Issue は構造化 Chat の createChatAnswerer と、答えない端末の terminalAnswerer を持つ（iss-00049 が端末を差し替える）。
+// 手段は部分の answerVia で選ぶ：rpc は構造化 Chat の createChatAnswerer、keys（端末の質問へのキーの組）と message（後の発言）は
+// createCallAnswerer（iss-00049）。answerVia のない古い物は source の規則（端末は答えない terminalAnswerer）。
 // 自動で送り直さない。照会は「確かめる」を押したときだけ。値は文字にして返し、HTML として解かない（描く側は textContent を使う）。
 
 /** 理由と結果の言葉（1か所）。識別子ではなく言葉で示す。 */
+/** callId の答え（keys・message）の確定が refused のとき。送る前の記録を書いた後なので押し直せない（承認の言葉の表には混ぜない）。 */
+export const CALL_REFUSED_REASON = '送っていません。この質問には、ここからはもう送れません。Orca で答えてください';
+
 export const QUESTION_REASONS = {
   loading: '答えられるか確かめています…',
   status_unavailable: '答えられるか確かめられません（orca-web につながりません）',
@@ -43,7 +47,23 @@ export const QUESTION_REASONS = {
   resolved_unverified: '質問は答え済みですが、この答えか確かめられません',
   no_after_record: '送った後の記録がありません（送っている間に orca-web が止まった）',
   response_lost: '送った結果の応答を受け取れませんでした',
+  already_sent: 'この質問には一度答えを送りました。Orca で確かめてください',
+  question_answered: 'ほかの画面で答え済みです',
+  prompt_unverified: '端末がこの質問を出しているか確かめられません',
+  prompt_mismatch: '端末の質問が変わりました',
+  prompt_unsupported: 'この形の質問は、ここからは答えられません',
+  agent_keys_unknown: 'このエージェントの質問は、ここからは答えられません',
+  chat_route: '構造化 Chat のエージェントには、この答え方は使えません',
+  partial_sent: '途中まで送りました。Orca で確かめてください',
+  unconfirmed: '届いたか分かりません。Orca で確かめてください',
+  keys_sent: '答えを送りました。エージェントの返事を待っています',
+  control_character: 'その他の文は1行で、制御文字を含めないでください',
+  too_large: '答えが長すぎます（引用を含めて 16KB まで）',
+  permission: 'エージェントが権限の確認を待っています',
 };
+
+/** 途中まで答えたかもしれない質問の注（F-02）。keys の未回答のカードの送るボタンの近くに出す。 */
+const KEYS_NOTE = 'Orca の画面で途中まで答えた質問は、Orca で続けてください';
 
 export const TERMINAL_REASON = QUESTION_REASONS.terminal_route;
 const UNKNOWN_TEXT = '届いたか分かりません。自動では送り直しません';
@@ -109,6 +129,15 @@ export function setOther(selection, part, index, text) {
   });
 }
 
+/** キーの組の文はサーバーの hasKeyControl と同じく、Tab と改行も制御文字として送らない。 */
+function hasKeyControl(text) {
+  for (const character of text) {
+    const code = character.charCodeAt(0);
+    if (code < 32 || (code >= 127 && code <= 159)) return true;
+  }
+  return false;
+}
+
 function hasControl(text) {
   for (const character of text) {
     const code = character.charCodeAt(0);
@@ -122,7 +151,9 @@ const byteLength = (text) => new TextEncoder().encode(text).length;
 /**
  * 選択から、Orca の answers の形を作る。サーバーの checkAnswers と同じ条件（全部の問いに1件、出された選択肢だけ、
  * その他は allowOther の問いで、選んでいて空を許すか空白でない文のときだけ数える、単一はちょうど1つ、複数は1つ以上）。
- * @returns {{ ok: true, answers: { questionId: string, optionIds: string[], other?: string }[] } | { ok: false }}
+ * answerVia keys の部分は、その他の文に Tab・改行などの制御文字があれば reason control_character で送らない（サーバーの planKeys と同じ）。
+ * answerVia message の部分は、formatAsyncAnswer の文が 16,384 バイトを超えれば reason too_large で送らない。
+ * @returns {{ ok: true, answers: { questionId: string, optionIds: string[], other?: string }[] } | { ok: false, reason?: 'control_character' | 'too_large' }}
  */
 export function buildAnswers(part, selection) {
   const questions = questionsOf(part);
@@ -137,6 +168,8 @@ export function buildAnswers(part, selection) {
     if (chosen.optionIds.some((id) => !offered.has(id))) return { ok: false };
     if (new Set(chosen.optionIds).size !== chosen.optionIds.length) return { ok: false };
     const other = typeof chosen.other === 'string' ? chosen.other : null;
+    if (other !== null && part.answerVia === 'keys' && hasKeyControl(other))
+      return { ok: false, reason: 'control_character' };
     if (other !== null && (hasControl(other) || byteLength(other) > MAX_OTHER_BYTES)) return { ok: false };
     const counts = other !== null && (question.otherAllowsEmpty === true || other.trim().length > 0);
     if (counts && !question.allowOther) return { ok: false };
@@ -144,20 +177,46 @@ export function buildAnswers(part, selection) {
     if (count === 0 || (!question.multiSelect && count !== 1)) return { ok: false };
     answers.push({ questionId: question.id, optionIds: [...chosen.optionIds], ...(counts ? { other } : {}) });
   }
+  // 後の発言で答える質問は、引用を含めた発言の文が今の送信の本文の上限（サーバーの checkText）を超えれば送れない。
+  if (part.answerVia === 'message' && byteLength(formatAsyncAnswer(questions, answers)) > MAX_MESSAGE_BYTES)
+    return { ok: false, reason: 'too_large' };
   return { ok: true, answers };
 }
 
+/** 今の送信の本文の上限（src/send/ticket.ts の checkText と同じ 16,384 バイト）。 */
+const MAX_MESSAGE_BYTES = 16384;
+
 /**
- * 送る流れの初め。phase は idle → sending → done | refused | unknown（→ checking → …）。
- * @typedef {{ kind: 'done' } | { kind: 'refused', reason: string } | { kind: 'unknown', operationId: string | null, note?: string }} FlowResult
- * @typedef {{ phase: 'idle' | 'sending' | 'done' | 'refused' | 'unknown' | 'checking', result: FlowResult | null }} QuestionFlow
+ * 後の発言で答える質問の発言の文。サーバーの src/send/keys.ts の formatAsyncAnswer（Orca の formatAskAnswer の replyAsMessage）と同じ規則：
+ * 答えた問いごとに「> 問いの文（改行の続きは空白1つ）」、空行、選んだラベル（選択肢の番号の順）とその他の文（trim）を「, 」で並べた答え。問いの間は空行。
+ */
+export function formatAsyncAnswer(questions, answers) {
+  const byId = new Map(answers.map((a) => [a.questionId, a]));
+  return questions
+    .flatMap((q) => {
+      const answer = byId.get(q.id);
+      const indices = (answer?.optionIds ?? []).map(Number).sort((a, b) => a - b);
+      const labels = indices.map((i) => q.options[i]?.label ?? '').filter((l) => l.length > 0);
+      const other = typeof answer?.other === 'string' ? answer.other.trim() : '';
+      const text = (other ? [...labels, other] : labels).join(', ');
+      return text ? [`> ${String(q.question).replace(/[\r\n]+/g, ' ')}\n\n${text}`] : [];
+    })
+    .join('\n\n');
+}
+
+/**
+ * 送る流れの初め。phase は idle → sending → done | refused | unknown（→ checking → …）| partial | blocked。
+ * partial はキーの組を途中まで送ったか届いたか分からない形、blocked は二度と送らない拒み（どちらも押し直し・照会・閉じるを受けない）。
+ * @typedef {{ kind: 'done', note?: string } | { kind: 'refused', reason: string } | { kind: 'unknown', operationId: string | null, note?: string }
+ *   | { kind: 'partial', operationId: string | null, note: string } | { kind: 'blocked', reason: string }} FlowResult
+ * @typedef {{ phase: 'idle' | 'sending' | 'done' | 'refused' | 'unknown' | 'checking' | 'partial' | 'blocked', result: FlowResult | null }} QuestionFlow
  * @returns {QuestionFlow}
  */
 export function initialFlow() {
   return { phase: 'idle', result: null };
 }
 
-const RESULT_PHASES = { done: 'done', refused: 'refused', unknown: 'unknown' };
+const RESULT_PHASES = { done: 'done', refused: 'refused', unknown: 'unknown', partial: 'partial', blocked: 'blocked' };
 
 /** 流れの次の状態。受けない出来事には同じ物を返す（重なった押しを捨てる）。 */
 export function reduceFlow(flow, event) {
@@ -187,10 +246,15 @@ export function reduceFlow(flow, event) {
   }
 }
 
-/** 答え済みの問いごとの文（選んだラベルとその他の文を「、」で）。 */
+/** 閉じた形の状態。declined は端末の質問が答えずに閉じられた形（ツールの結果が誤り）。 */
+const CLOSED_STATES = new Set(['answered', 'cancelled', 'declined']);
+const CLOSED_TITLES = { answered: '答え済みの質問', cancelled: '取り消された質問', declined: '答えずに閉じられた質問' };
+
+/** 答え済みの問いごとの文（選んだラベルとその他の文を「、」で）。端末と後の発言の質問は結びつけた文。 */
 function summaryOf(part, answerText) {
   if (part.state === 'cancelled') return ['取り消されました'];
-  if (part.source === 'terminal') return [isText(answerText) ? answerText : '（答えを読めません）'];
+  if (part.source === 'terminal' || part.answerVia === 'keys' || part.answerVia === 'message')
+    return [isText(answerText) ? answerText : '（答えを読めません）'];
   if (!Array.isArray(part.answers)) return ['（答えを読めません）'];
   const byId = new Map(part.answers.filter(isRecord).map((a) => [a.questionId, a]));
   return questionsOf(part).map((question) => {
@@ -226,8 +290,9 @@ function noticeOf(flow) {
     case 'checking':
       return { kind: 'info', text: '記録と Orca に問い合わせています…' };
     case 'done':
-      return { kind: 'info', text: '答えました' };
+      return { kind: 'info', text: isText(flow.result?.note) ? flow.result.note : '答えました' };
     case 'refused':
+    case 'blocked':
       return { kind: 'error', text: flow.result?.reason ?? '送っていません' };
     case 'unknown':
       return isText(flow.result?.note) ? { kind: 'error', text: flow.result.note } : null;
@@ -237,8 +302,9 @@ function noticeOf(flow) {
 }
 
 /**
- * カードの描く物。state が answered・cancelled なら閉じた形（answerSummary に答えの文）。
- * availability は answerer.availability の結果。open は「Orca で開く」を出すか（端末の未回答）。
+ * カードの描く物。state が answered・cancelled・declined なら閉じた形（answerSummary に答えの文）。
+ * availability は answerer.availability の結果。open は「Orca で開く」を出すか（端末で答えられないとき、途中まで送った・二度と送らないとき）。
+ * partial は途中まで送った帯、hint はその他の文が送れない理由、keysNote は keys の未回答の注。
  * @param {any} part 会話の question の部分
  * @param {{ key?: string, selection?: any, flow?: QuestionFlow, availability?: { ok: true } | { ok: false, reason: string, open?: true },
  *   answerText?: string | null }} [options]
@@ -246,7 +312,7 @@ function noticeOf(flow) {
 export function buildQuestionCard(part, options = {}) {
   const flow = options.flow ?? initialFlow();
   const availability = options.availability ?? { ok: false, reason: QUESTION_REASONS.loading };
-  const closed = part.state === 'answered' || part.state === 'cancelled';
+  const closed = CLOSED_STATES.has(part.state);
   const selection = closed ? answeredSelection(part) : (options.selection ?? initialSelection(part));
   const editable = !closed && availability.ok === true && (flow.phase === 'idle' || flow.phase === 'refused');
   const questions = questionsOf(part).map((question, i) => {
@@ -271,20 +337,23 @@ export function buildQuestionCard(part, options = {}) {
       },
     };
   });
-  const answerable = buildAnswers(part, selection).ok;
-  const terminalLike = availability.ok !== true && availability.open === true;
+  const built = buildAnswers(part, selection);
+  const answerable = built.ok;
+  const stopped = flow.phase === 'partial' || flow.phase === 'blocked';
+  const terminalLike = stopped || (availability.ok !== true && availability.open === true);
   const count = questions.length;
   return {
     key: options.key ?? '',
     closed,
     state: part.state,
     source: part.source,
-    title: closed ? (part.state === 'cancelled' ? '取り消された質問' : '答え済みの質問') : '質問',
+    title: closed ? CLOSED_TITLES[part.state] : '質問',
     count,
     questions,
     answerSummary: closed ? summaryOf(part, options.answerText) : [],
     notice: closed ? null : noticeOf(flow),
-    reason: closed || availability.ok === true ? null : availability.reason,
+    reason: closed || stopped || availability.ok === true ? null : availability.reason,
+    hint: !closed && editable && built.ok === false && built.reason ? reasonText(built.reason) : null,
     button: {
       shown: !closed && !terminalLike,
       disabled: !(editable && answerable),
@@ -295,6 +364,8 @@ export function buildQuestionCard(part, options = {}) {
       !closed && (flow.phase === 'unknown' || flow.phase === 'checking')
         ? { text: UNKNOWN_TEXT, busy: flow.phase === 'checking' }
         : null,
+    partial: !closed && flow.phase === 'partial' ? { text: flow.result?.note ?? QUESTION_REASONS.unconfirmed } : null,
+    keysNote: !closed && part.answerVia === 'keys' && !terminalLike ? KEYS_NOTE : null,
     open: !closed && terminalLike,
     truncated: part.truncated === true,
   };
@@ -312,9 +383,18 @@ export const terminalAnswerer = {
   submit: async (_part, _answers) => ({ kind: 'refused', reason: TERMINAL_REASON }),
 };
 
-/** 部分の source で手段を選ぶ。表を差し替えれば別の手段を使える。 */
+/** 部分の answerVia で手段を選ぶ（answerVia のない古い物は source の規則）。表を差し替えれば別の手段を使える。 */
 export function answererFor(part, answerers) {
-  return part?.source === 'terminal' ? answerers.terminal : answerers.chat;
+  switch (part?.answerVia) {
+    case 'rpc':
+      return answerers.chat;
+    case 'keys':
+      return answerers.keys ?? answerers.terminal;
+    case 'message':
+      return answerers.message ?? answerers.terminal;
+    default:
+      return part?.source === 'terminal' ? answerers.terminal : answerers.chat;
+  }
 }
 
 const DELIVERED = new Set(['submitted', 'accepted', 'input_accepted']);
@@ -462,9 +542,110 @@ export function createChatAnswerer(deps) {
   };
 }
 
+/** 二度と送らない拒み。理由と「Orca で開く」を出し、押し直しを受けない。 */
+const BLOCKING = new Set([
+  'already_sent',
+  'question_answered',
+  'prompt_mismatch',
+  'prompt_unsupported',
+  'agent_keys_unknown',
+]);
+
+/** 意図・確定の拒み（ok: false）の結果。BLOCKING の理由は blocked、ほかは押し直せる refused。 */
+function callRefusal(body) {
+  const reason = refusalReason(body, QUESTION_REASONS);
+  return isRecord(body) && BLOCKING.has(body.reason) ? { kind: 'blocked', reason } : { kind: 'refused', reason };
+}
+
+/** Orca の askOptionPreview と同じ preview の問い、Codex の複数選択、9を超える番号は、キーの組で答えられない（planKeys と同じ）。 */
+function keysUnsupported(part, agentType) {
+  return questionsOf(part).some((q) =>
+    agentType === 'codex'
+      ? q.multiSelect === true || q.preview === true || q.options.length > 9
+      : q.options.length + 1 > 9,
+  );
+}
+
+/**
+ * 端末の質問（mode keys：キーの組）と後の発言の質問（mode message）の手段。callId で指し、意図と確定を続けて1回ずつ送る。
+ * keys の確定で途中まで送ったか届いたか分からなければ partial（照会しない）、message の結果不明は照会できる unknown。
+ * @param {{
+ *   agentId: string,
+ *   writer: { send: (path: string, method: 'POST', body: unknown) => Promise<{ status: number, body: any }> },
+ *   read?: (url: string) => Promise<{ status: number, body: any }>,
+ *   mode: 'keys' | 'message',
+ * }} deps
+ */
+export function createCallAnswerer(deps) {
+  const read = deps.read ?? readSameOrigin;
+  const keys = deps.mode === 'keys';
+  const cannot = (reason) => (keys ? { ok: false, reason, open: true } : { ok: false, reason });
+  const partial = (operationId, sentGroups) => ({
+    kind: 'partial',
+    operationId,
+    note:
+      typeof sentGroups === 'number' && sentGroups > 0 ? QUESTION_REASONS.partial_sent : QUESTION_REASONS.unconfirmed,
+  });
+  /** 確定の後に届いたか分からない形。 */
+  const lost = (operationId, detail) =>
+    keys ? partial(operationId, isRecord(detail) ? detail.sentGroups : undefined) : { kind: 'unknown', operationId };
+  return {
+    /** status は GET /api/send/status の本体、読めなければ 'failed'、まだなら null。 */
+    availability(part, status) {
+      // callId のない質問は、答えの口（/api/answer/intent の callId）で指せない。
+      if (!isText(part?.callId)) return { ok: false, reason: QUESTION_REASONS.unknown_shape, open: true };
+      if (status === null || status === undefined) return { ok: false, reason: QUESTION_REASONS.loading };
+      if (!isRecord(status)) return cannot(QUESTION_REASONS.status_unavailable);
+      if (status.enabled !== true) return cannot(QUESTION_REASONS.send_disabled);
+      const item = keys ? status.answerKeys : status.answerMessage;
+      if (!isRecord(item) || typeof item.available !== 'boolean') return cannot(QUESTION_REASONS.unknown_shape);
+      if (!item.available) return cannot(reasonText(item.reason ?? 'unsupported'));
+      if (keys && keysUnsupported(part, status.agentType))
+        return { ok: false, reason: QUESTION_REASONS.prompt_unsupported, open: true };
+      // 切った問いは、Orca と同じ発言を作れず、端末が出している問いと同じかも確かめられない（keys・message とも）。
+      if (part?.truncated === true) return { ok: false, reason: QUESTION_REASONS.prompt_unsupported, open: true };
+      return { ok: true };
+    },
+    async submit(part, answers) {
+      if (!isText(part?.callId)) return { kind: 'refused', reason: QUESTION_REASONS.unknown_shape };
+      let intent;
+      try {
+        intent = await deps.writer.send('/api/answer/intent', 'POST', {
+          agent: deps.agentId,
+          callId: part.callId,
+          answers,
+        });
+      } catch {
+        return { kind: 'refused', reason: QUESTION_REASONS.network };
+      }
+      const body = isRecord(intent?.body) ? intent.body : {};
+      if (intent?.status !== 200 || !isText(body.ticket) || !isText(body.operationId)) return callRefusal(body);
+      const operationId = body.operationId;
+      let confirm;
+      try {
+        confirm = await deps.writer.send('/api/answer/confirm', 'POST', { ticket: body.ticket, answers });
+      } catch {
+        return lost(operationId);
+      }
+      const result = isRecord(confirm?.body) ? confirm.body : {};
+      if (confirm?.status === 200 && typeof result.outcome === 'string') {
+        if (DELIVERED.has(result.outcome))
+          return keys ? { kind: 'done', note: QUESTION_REASONS.keys_sent } : { kind: 'done' };
+        // 送る前の記録を書いた後の拒みなので、同じ callId には二度と送れない（R-04）。押し直せない形にする。
+        if (result.outcome === 'refused') return { kind: 'blocked', reason: CALL_REFUSED_REASON };
+        return lost(operationId, result.detail);
+      }
+      // 送る前の拒み（ok: false と error）は送っていない。ほかの形は届いたか分からない。
+      if (result.ok === false && isText(result.error)) return callRefusal(result);
+      return lost(operationId);
+    },
+    check: (operationId) => checkOperation(read, operationId, QUESTION_REASONS),
+  };
+}
+
 /**
  * カードの key ごとの選択と流れの板。描き直しや追記でも状態を保つ。submit は送れるときだけ answerer.submit を1回呼ぶ。
- * @param {{ answerers: { chat: any, terminal: any }, onChange?: (key: string) => void }} deps
+ * @param {{ answerers: { chat: any, terminal: any, keys?: any, message?: any }, onChange?: (key: string) => void }} deps
  */
 export function createQuestionBoard(deps) {
   /** @type {Map<string, { selection: any, flow: QuestionFlow }>} */

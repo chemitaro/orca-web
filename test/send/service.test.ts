@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, open, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -7,10 +8,16 @@ import type { CapabilityReport } from '../../src/orca/capabilities.ts';
 import type { RpcOutcome } from '../../src/orca/rpc.ts';
 import { createSendAdapter } from '../../src/orca/send.ts';
 import { SendRpc } from '../../src/orca/send-gates.ts';
+import { digestAnswers } from '../../src/send/answer.ts';
 import { SendJournal } from '../../src/send/journal.ts';
-import { SendService } from '../../src/send/service.ts';
+import { type SendDeps, SendService, transcriptTail } from '../../src/send/service.ts';
 import { targetFingerprint } from '../../src/send/target.ts';
 import { digestText, TicketStore } from '../../src/send/ticket.ts';
+import {
+  normalizeJournalItems,
+  normalizeNativeMessages,
+  type TranscriptMessage,
+} from '../../src/transcript/normalize.ts';
 import { agent, fact, repo, state, worktree } from '../runs/fixture.ts';
 import {
   CHAT_AGENT,
@@ -76,6 +83,7 @@ async function fixture(t: import('node:test').TestContext, agentType: 'claude' |
       sendTerminal: feature(),
       sendChat: feature(),
       answerChat: feature(),
+      answerKeys: feature(),
       answerApproval: feature(),
     },
   };
@@ -366,6 +374,8 @@ test('status は送信せず Chat の fence と利用可能性を確かめる', 
     target: targetFingerprint(chatTarget()),
     agentType: 'claude',
     answer: { available: true, reason: null },
+    answerKeys: { available: false, reason: 'chat_route' },
+    answerMessage: { available: true, reason: null },
     approval: { available: true, reason: null },
   });
   assert.ok(f.calls.some((c) => c.method === 'agentSession.history'));
@@ -380,6 +390,8 @@ test('status は送信せず Chat の fence と利用可能性を確かめる', 
     target: null,
     agentType: null,
     answer: { available: false, reason: 'unknown_shape' },
+    answerKeys: { available: false, reason: 'chat_route' },
+    answerMessage: { available: false, reason: 'unknown_shape' },
     approval: { available: false, reason: 'unknown_shape' },
   });
   assert.equal(f.sends().length, 0);
@@ -913,6 +925,8 @@ test('status は端末の指紋と種類を返し、preflight が通らなけれ
     target: targetFingerprint(terminalTarget()),
     agentType: 'codex',
     answer: { available: false, reason: 'terminal_route' },
+    answerKeys: { available: true, reason: null },
+    answerMessage: { available: true, reason: null },
     approval: { available: false, reason: 'terminal_route' },
   });
   f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: '/bin/zsh' } }));
@@ -924,6 +938,8 @@ test('status は端末の指紋と種類を返し、preflight が通らなけれ
     target: null,
     agentType: null,
     answer: { available: false, reason: 'terminal_route' },
+    answerKeys: { available: false, reason: 'shell_foreground' },
+    answerMessage: { available: false, reason: 'shell_foreground' },
     approval: { available: false, reason: 'terminal_route' },
   });
   assert.equal(f.sends().length, 0);
@@ -1368,6 +1384,685 @@ test('T-09 結果不明の答えは check で質問の今の状態を照会し�
   assert.equal(answerCalls(f).length, 1);
 });
 
+// ---- 端末の質問（keys）と後の発言の質問（message）への答え（iss-00049 D-05、T-08〜T-12） ----
+
+const ASK_INPUT = {
+  questions: [{ question: '仮の端末の問い', options: [{ label: 'ラベル秘密A' }, { label: 'ラベル秘密B' }] }],
+};
+const ASYNC_INPUT = { questions: [{ title: '仮の後の問い', options: ['ラベル秘密A', 'ラベル秘密B'] }] };
+const CALL = 'call-ask-test';
+const KEY_ANSWERS = [{ questionId: '0', optionIds: [], other: '秘密の文' }];
+const PICK_ANSWERS = [{ questionId: '0', optionIds: ['1'] }];
+const callMessage = (name: string, input: unknown, callId = CALL) => ({
+  id: `m-${callId}`,
+  role: 'assistant',
+  blocks: [{ type: 'tool-call', name, input, callId }],
+});
+const toolResult = (callId = CALL, isError = false) => ({
+  id: `r-${callId}`,
+  role: 'tool',
+  blocks: [{ type: 'tool-result', output: 'x', isError, callId }],
+});
+const userSays = (text: string) => ({ id: `u-${text.length}`, role: 'user', blocks: [{ type: 'text', text }] });
+const accepted = ok({ send: { accepted: true, writeSettlement: { outcome: 'accepted' } } });
+
+async function callFixture(
+  t: import('node:test').TestContext,
+  { agentType = 'claude', input = ASK_INPUT }: { agentType?: string; input?: unknown } = {},
+) {
+  const f = await fixture(t, agentType === 'codex' ? 'codex' : 'claude');
+  const status = (extra: Record<string, unknown> = {}) => ({
+    agentType,
+    providerSession: { id: 'session-terminal-test' },
+    state: 'waiting',
+    toolName: 'AskUserQuestion',
+    interactivePrompt: JSON.stringify(input),
+    ...extra,
+  });
+  const setPrompt = (extra: Record<string, unknown> = {}) =>
+    f.responses.set(
+      'session.tabs.listAll',
+      ok(inventory([{ ...terminalTab(), agentStatus: status(extra) }, chatTab()])),
+    );
+  setPrompt();
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'permission' } }));
+  f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: agentType } }));
+  const a = f.snapshot.agents[0];
+  if (a) a.agentType = fact(agentType);
+  let native: unknown[] = [callMessage('AskUserQuestion', input)];
+  let transcript: { ok: true; messages: TranscriptMessage[] } | { ok: false; error: string } | null = null;
+  const reads: string[] = [];
+  let session: { source: 'nativeChat' | 'agentSession'; sessionId: string } | null = null;
+  const sessionOf = (agentId: string) =>
+    session ??
+    (agentId === CHAT_AGENT
+      ? { source: 'agentSession' as const, sessionId: 'session-chat-test' }
+      : { source: 'nativeChat' as const, sessionId: 'session-terminal-test' });
+  const readTranscript = async (agentId: string) => {
+    reads.push(agentId);
+    if (transcript && !transcript.ok) return transcript as { ok: false; error: 'unreachable' };
+    const messages = transcript ? transcript.messages : normalizeNativeMessages(native);
+    assert.ok(messages);
+    return { ok: true as const, messages, session: sessionOf(agentId) };
+  };
+  const keyQueue: RpcOutcome[] = [];
+  const baseGet = f.responses.get.bind(f.responses);
+  let beforeSeenAtFirstKey: boolean | null = null;
+  f.responses.get = (method: string) => {
+    if (method === 'terminal.send' && keyQueue.length) {
+      if (beforeSeenAtFirstKey === null) {
+        try {
+          beforeSeenAtFirstKey = readFileSync(path.join(f.sendsDir, 'sends.jsonl'), 'utf8').includes('"before"');
+        } catch {
+          beforeSeenAtFirstKey = false;
+        }
+      }
+      return keyQueue.shift();
+    }
+    return baseGet(method);
+  };
+  const sleeps: number[] = [];
+  const deps = { ...f.deps, readTranscript, sleep: async (ms: number) => void sleeps.push(ms) };
+  const service = new SendService(deps);
+  return {
+    ...f,
+    service,
+    deps,
+    sleeps,
+    reads,
+    keyQueue,
+    beforeSeenAtFirstKey: () => beforeSeenAtFirstKey,
+    setPrompt,
+    setNative: (rows: unknown[]) => {
+      native = rows;
+    },
+    setTranscript: (value: typeof transcript) => {
+      transcript = value;
+    },
+    setSession: (value: typeof session) => {
+      session = value;
+    },
+    writes: () =>
+      f.calls.filter((c) =>
+        ['terminal.send', 'agentSession.send', 'agentSession.respondToQuestion'].includes(c.method),
+      ),
+    queueKeys: (...outcomes: RpcOutcome[]) => keyQueue.push(...outcomes),
+    fresh: () => new SendService({ ...deps, journal: new SendJournal(f.sendsDir), tickets: new TicketStore() }),
+  };
+}
+const keyTexts = (f: { writes(): { params: unknown }[] }) => f.writes().map((c) => (c.params as { text: string }).text);
+
+test('T-08 answerIntent（callId）：端末の質問に、確かめが通れば票を返し、status が permission でも通り、書き込みを送らない', async (t) => {
+  const f = await callFixture(t);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.ok(intent.ok, JSON.stringify(intent));
+  assert.equal(intent.preview.route, 'terminal');
+  assert.equal(intent.digest, digestAnswers(KEY_ANSWERS));
+  assert.deepEqual(f.reads, [TERMINAL_AGENT]);
+  assert.equal(f.writes().length, 0);
+  assert.equal(await f.journal.read(intent.operationId), null);
+});
+
+test('T-08 answerIntent（callId）：決めた誤りと理由を返し、書き込みの RPC を送らない', async (t) => {
+  const cases: [
+    string,
+    (f: Awaited<ReturnType<typeof callFixture>>) => unknown,
+    Record<string, unknown>,
+    Partial<{ agent: string; answers: unknown; agentType: string; input: unknown }>?,
+  ][] = [
+    ['sendEnabled 偽', (f) => f.setEnabled(false), { error: 'send_disabled' }],
+    ['会話にない', (f) => f.setNative([]), { error: 'target_changed', reason: 'question_gone' }],
+    [
+      'ツールの結果がある',
+      (f) => f.setNative([callMessage('AskUserQuestion', ASK_INPUT), toolResult()]),
+      { error: 'target_changed', reason: 'question_answered' },
+    ],
+    [
+      '失敗したツールの結果がある',
+      (f) => f.setNative([callMessage('AskUserQuestion', ASK_INPUT), toolResult(CALL, true)]),
+      { error: 'target_changed', reason: 'question_answered' },
+    ],
+    ['会話が読めない', (f) => f.setTranscript({ ok: false, error: 'unreachable' }), { error: 'unreachable' }],
+    [
+      'interactivePrompt がない',
+      (f) => f.setPrompt({ interactivePrompt: undefined }),
+      { error: 'not_sendable', reason: 'prompt_unverified' },
+    ],
+    [
+      'state が working',
+      (f) => f.setPrompt({ state: 'working' }),
+      { error: 'not_sendable', reason: 'prompt_unverified' },
+    ],
+    [
+      'interactivePrompt が違う',
+      (f) =>
+        f.setPrompt({ interactivePrompt: JSON.stringify({ questions: [{ question: '別の問い', options: ['a'] }] }) }),
+      { error: 'target_changed', reason: 'prompt_mismatch' },
+    ],
+    [
+      '前面がシェル',
+      (f) => f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: '/bin/zsh' } })),
+      { error: 'not_sendable', reason: 'shell_foreground' },
+    ],
+    [
+      'エージェントが動いていない',
+      (f) => f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: false, status: null } })),
+      { error: 'not_sendable', reason: 'no_agent' },
+    ],
+    ['答えの誤り', () => {}, { error: 'invalid_answer', reason: 'invalid_shape' }, { answers: [] }],
+    [
+      'その他の文の改行',
+      () => {},
+      { error: 'invalid_answer', reason: 'control_character' },
+      { answers: [{ questionId: '0', optionIds: [], other: 'a\nb' }] },
+    ],
+    [
+      '知らない種類のエージェント',
+      () => {},
+      { error: 'not_sendable', reason: 'agent_keys_unknown' },
+      { agentType: 'gemini' },
+    ],
+    [
+      'codex の複数選択',
+      () => {},
+      { error: 'not_sendable', reason: 'prompt_unsupported' },
+      {
+        agentType: 'codex',
+        input: { questions: [{ question: '仮', multiSelect: true, options: ['a', 'b'] }] },
+        answers: [{ questionId: '0', optionIds: ['0'] }],
+      },
+    ],
+    [
+      '能力がない',
+      (f) =>
+        (f.cap.features.answerKeys = {
+          available: false,
+          missing: ['feature:readTranscript'],
+          satisfied: [],
+          deferred: [],
+        }),
+      { error: 'unsupported', missing: ['feature:readTranscript'] },
+    ],
+  ];
+  for (const [name, setup, expected, options = {}] of cases) {
+    await t.test(name, async (t) => {
+      const f = await callFixture(t, {
+        ...(options.agentType ? { agentType: options.agentType } : {}),
+        ...(options.input ? { input: options.input } : {}),
+      });
+      await setup(f);
+      const answers = options.answers ?? KEY_ANSWERS;
+      assert.deepEqual(await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers }), {
+        ok: false,
+        ...expected,
+      });
+      assert.equal(f.writes().length, 0);
+    });
+  }
+});
+
+test('T-08 answerIntent（callId）：構造化 Chat の宛先に keys の質問は chat_route、truncated の async は prompt_unsupported', async (t) => {
+  const f = await callFixture(t);
+  assert.deepEqual(await f.service.answerIntent({ agent: CHAT_AGENT, callId: CALL, answers: KEY_ANSWERS }), {
+    ok: false,
+    error: 'not_sendable',
+    reason: 'chat_route',
+  });
+  f.setNative([callMessage('request_user_input_async', { questions: [{ title: 'q'.repeat(5000), options: ['a'] }] })]);
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  assert.deepEqual(
+    await f.service.answerIntent({
+      agent: TERMINAL_AGENT,
+      callId: CALL,
+      answers: PICK_ANSWERS.map((a) => ({ ...a, optionIds: ['0'] })),
+    }),
+    {
+      ok: false,
+      error: 'not_sendable',
+      reason: 'prompt_unsupported',
+    },
+  );
+  assert.equal(f.writes().length, 0);
+});
+
+test('T-08 answerIntent（callId）：前に送った記録があれば、新しい SendService でも already_sent', async (t) => {
+  const f = await callFixture(t);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS });
+  assert.ok(intent.ok);
+  f.queueKeys(accepted);
+  const confirmed = await f.service.answerConfirm({ ticket: intent.ticket, answers: PICK_ANSWERS });
+  assert.ok(confirmed.ok);
+  const expected = { ok: false, error: 'not_sendable', reason: 'already_sent' };
+  assert.deepEqual(
+    await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS }),
+    expected,
+  );
+  assert.deepEqual(
+    await f.fresh().answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS }),
+    expected,
+  );
+  assert.equal(f.writes().length, 1);
+});
+
+test('T-09 answerConfirm（keys）：before の記録の後に組を1組ずつ送り、組の間に 1000ms、同じ票の2回目は送らない', async (t) => {
+  const f = await callFixture(t);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.ok(intent.ok);
+  f.queueKeys(accepted, accepted, accepted);
+  const confirmed = await f.service.answerConfirm({ ticket: intent.ticket, answers: KEY_ANSWERS });
+  assert.deepEqual(confirmed, {
+    ok: true,
+    operationId: intent.operationId,
+    outcome: 'input_accepted',
+    detail: { code: 'keys_sent', sentGroups: 3, totalGroups: 3 },
+  });
+  assert.equal(f.beforeSeenAtFirstKey(), true);
+  assert.deepEqual(keyTexts(f), ['3', '秘密の文', '\r']);
+  assert.deepEqual(f.sleeps, [1000, 1000]);
+  const record = await f.journal.read(intent.operationId);
+  assert.equal(record?.outcome, 'input_accepted');
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: KEY_ANSWERS }), {
+    ok: false,
+    error: 'ticket_invalid',
+    reason: 'unknown',
+  });
+  assert.equal(f.writes().length, 3);
+});
+
+test('T-09 answerConfirm（keys）：途中で止まれば partial_sent で残りを送らず、その後の同じ callId を already_sent で拒む', async (t) => {
+  const f = await callFixture(t);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.ok(intent.ok);
+  f.queueKeys(accepted, { ok: false, kind: 'timeout', message: 'private' }, accepted);
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: KEY_ANSWERS }), {
+    ok: true,
+    operationId: intent.operationId,
+    outcome: 'unknown',
+    detail: { code: 'partial_sent', sentGroups: 1, totalGroups: 3 },
+  });
+  assert.equal(f.writes().length, 2);
+  const again = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.deepEqual(again, { ok: false, error: 'not_sendable', reason: 'already_sent' });
+});
+
+test('T-09 answerConfirm（keys）：送っている間の2回目は busy で送らない', async (t) => {
+  const f = await callFixture(t);
+  const first = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS });
+  const second = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS });
+  assert.ok(first.ok && second.ok);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  f.deps.sleep = async () => {};
+  const baseGet = f.responses.get;
+  f.responses.get = (method: string) => {
+    if (method === 'terminal.send') {
+      entered.resolve();
+      return release.promise.then(() => accepted) as unknown as RpcOutcome;
+    }
+    return baseGet(method);
+  };
+  const running = f.service.answerConfirm({ ticket: first.ticket, answers: PICK_ANSWERS });
+  await entered.promise;
+  assert.deepEqual(await f.service.answerConfirm({ ticket: second.ticket, answers: PICK_ANSWERS }), {
+    ok: false,
+    error: 'busy',
+  });
+  release.resolve();
+  assert.ok((await running).ok);
+  assert.equal(f.writes().length, 1);
+});
+
+test('T-09 answerConfirm（keys）：確定の前にツールの結果・interactivePrompt の変化・答えの違いがあれば送らない', async (t) => {
+  for (const [name, change, answers, expected] of [
+    [
+      'ツールの結果',
+      (f) => f.setNative([callMessage('AskUserQuestion', ASK_INPUT), toolResult()]),
+      KEY_ANSWERS,
+      { error: 'target_changed', reason: 'question_answered' },
+    ],
+    [
+      'interactivePrompt',
+      (f) => f.setPrompt({ interactivePrompt: JSON.stringify({ questions: [{ question: '別', options: ['a'] }] }) }),
+      KEY_ANSWERS,
+      { error: 'target_changed', reason: 'prompt_mismatch' },
+    ],
+    [
+      'interactivePrompt が消えた',
+      (f) => f.setPrompt({ interactivePrompt: undefined, state: 'working' }),
+      KEY_ANSWERS,
+      { error: 'not_sendable', reason: 'prompt_unverified' },
+    ],
+    ['答えの digest', () => {}, PICK_ANSWERS, { error: 'target_changed', reason: 'answer_changed' }],
+  ] as [string, (f: Awaited<ReturnType<typeof callFixture>>) => void, unknown, Record<string, unknown>][]) {
+    await t.test(name, async (t) => {
+      const f = await callFixture(t);
+      const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+      assert.ok(intent.ok);
+      change(f);
+      assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers }), { ok: false, ...expected });
+      assert.equal(f.writes().length, 0);
+      const record = await f.journal.read(intent.operationId);
+      assert.equal(record?.before, null);
+      // 送っていないので、同じ callId はもう一度答えられる
+      assert.equal(await f.journal.hasAnswer(TERMINAL_AGENT, CALL), false);
+    });
+  }
+});
+
+test('T-09 answerConfirm：before の記録を書けないか、記録が読めなければ送らない', async (t) => {
+  const f = await callFixture(t);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.ok(intent.ok);
+  const journal: SendDeps['journal'] = {
+    appendBefore: async () => {
+      throw new Error('disk');
+    },
+    appendRefused: (input) => f.journal.appendRefused(input),
+    hasAnswer: (a, c) => f.journal.hasAnswer(a, c),
+    read: (id) => f.journal.read(id),
+    appendAfter: (input) => f.journal.appendAfter(input),
+    appendCheck: (input) => f.journal.appendCheck(input),
+  };
+  (f.deps as SendDeps).journal = journal;
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: KEY_ANSWERS }), {
+    ok: false,
+    error: 'record_failed',
+  });
+  (f.deps as SendDeps).journal = {
+    ...journal,
+    hasAnswer: async () => {
+      throw new Error('unreadable');
+    },
+  };
+  assert.deepEqual(await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS }), {
+    ok: false,
+    error: 'record_unreadable',
+  });
+  assert.equal(f.writes().length, 0);
+});
+
+test('T-09 票の種類を取り違えない：call の票は今の確定で、送信の票は答えの確定で受けない', async (t) => {
+  const f = await callFixture(t);
+  const call = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.ok(call.ok);
+  assert.deepEqual(await f.service.confirm({ ticket: call.ticket, text: 'hello' }), {
+    ok: false,
+    error: 'ticket_invalid',
+    reason: 'wrong_kind',
+  });
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  const text = await f.service.intent({ agent: TERMINAL_AGENT, text: 'hello' });
+  assert.ok(text.ok);
+  assert.deepEqual(await f.service.answerConfirm({ ticket: text.ticket, answers: KEY_ANSWERS }), {
+    ok: false,
+    error: 'ticket_invalid',
+    reason: 'wrong_kind',
+  });
+  assert.equal(f.writes().length, 0);
+});
+
+test('T-09 answerConfirm（message）：端末は Orca と同じ形の発言を agentPrompt で1回送り、構造化 Chat は agentSession.send で1回送る', async (t) => {
+  const f = await callFixture(t);
+  f.setNative([callMessage('request_user_input_async', ASYNC_INPUT), toolResult()]);
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  const answers = [{ questionId: '0', optionIds: ['1'] }];
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers });
+  assert.ok(intent.ok, JSON.stringify(intent));
+  const confirmed = await f.service.answerConfirm({ ticket: intent.ticket, answers });
+  assert.ok(confirmed.ok);
+  assert.equal(confirmed.outcome, 'submitted');
+  assert.deepEqual(keyTexts(f), ['> 仮の後の問い\n\nラベル秘密B']);
+  assert.equal((f.writes()[0]?.params as { agentPrompt?: boolean } | undefined)?.agentPrompt, true);
+  // 引用のある発言の後は question_answered
+  f.setNative([
+    callMessage('request_user_input_async', ASYNC_INPUT),
+    toolResult(),
+    userSays('> 仮の後の問い\n\nラベル秘密B'),
+  ]);
+  assert.deepEqual(await f.fresh().answerIntent({ agent: TERMINAL_AGENT, callId: 'other', answers }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'question_gone',
+  });
+  assert.deepEqual(await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'question_answered',
+  });
+
+  const c = await callFixture(t);
+  const journalAsync = normalizeJournalItems([
+    {
+      itemId: 't',
+      sequence: 1,
+      body: { kind: 'tool-call', name: 'request_user_input_async', input: ASYNC_INPUT, callId: CALL },
+    },
+  ]);
+  assert.ok(journalAsync);
+  c.setTranscript({ ok: true, messages: journalAsync });
+  const chatIntent = await c.service.answerIntent({ agent: CHAT_AGENT, callId: CALL, answers });
+  assert.ok(chatIntent.ok, JSON.stringify(chatIntent));
+  const chatConfirmed = await c.service.answerConfirm({ ticket: chatIntent.ticket, answers });
+  assert.ok(chatConfirmed.ok);
+  assert.deepEqual(
+    c.writes().map((w) => [w.method, (w.params as { body: { blocks: { text: string }[] } }).body.blocks[0]?.text]),
+    [['agentSession.send', '> 仮の後の問い\n\nラベル秘密B']],
+  );
+});
+
+test('T-10 keys・message の答えの記録の行に、ラベル、番号、その他の文、キー、発言の文が入らず、mode・callId・questionCount・digest・totalGroups が入る', async (t) => {
+  const f = await callFixture(t);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.ok(intent.ok);
+  f.queueKeys(accepted, settledRefused());
+  await f.service.answerConfirm({ ticket: intent.ticket, answers: KEY_ANSWERS });
+  f.setNative([callMessage('request_user_input_async', ASYNC_INPUT, 'call-async')]);
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  const async = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: 'call-async', answers: PICK_ANSWERS });
+  assert.ok(async.ok);
+  await f.service.answerConfirm({ ticket: async.ticket, answers: PICK_ANSWERS });
+  await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: 'call-async', answers: PICK_ANSWERS });
+  const raw = await readFile(path.join(f.sendsDir, 'sends.jsonl'), 'utf8');
+  for (const secret of ['ラベル秘密', '秘密の文', '"3"', '仮の後の問い', '"optionIds"', '\\r', '"text"']) {
+    assert.equal(raw.includes(secret), false, secret);
+  }
+  const befores = raw
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+    .filter((r) => r.kind === 'before');
+  assert.deepEqual(
+    befores.map((r) => [r.action, r.mode, r.route, r.callId, r.questionCount, r.digest, r.totalGroups]),
+    [
+      ['answer', 'keys', 'terminal', CALL, 1, digestAnswers(KEY_ANSWERS), 3],
+      ['answer', 'message', 'terminal', 'call-async', 1, digestAnswers(PICK_ANSWERS), undefined],
+    ],
+  );
+  const after = raw
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+    .find((r) => r.kind === 'after' && r.operationId === intent.operationId);
+  assert.deepEqual(after.detail, { code: 'partial_sent', sentGroups: 1, totalGroups: 3 });
+});
+const settledRefused = () => ok({ send: { accepted: false, writeSettlement: { outcome: 'refused' } } });
+
+test('T-11 照会：keys の結果不明は会話の今の状態から決め、送り直さない。after のない記録は no_after_record', async (t) => {
+  const f = await callFixture(t);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.ok(intent.ok);
+  f.queueKeys({ ok: false, kind: 'timeout', message: 'private' });
+  const confirmed = await f.service.answerConfirm({ ticket: intent.ticket, answers: KEY_ANSWERS });
+  assert.ok(confirmed.ok && confirmed.detail.code === 'unconfirmed');
+  const lastCheck = async () => {
+    const checked = await f.service.check(intent.operationId, { query: true });
+    assert.ok(checked.ok && checked.state === 'recorded');
+    return [checked.record.outcome, checked.record.checks.at(-1)?.detail.code];
+  };
+  assert.deepEqual(await lastCheck(), ['unknown', 'prompt_pending']);
+  f.setNative([callMessage('AskUserQuestion', ASK_INPUT), toolResult()]);
+  assert.deepEqual(await lastCheck(), ['unknown', 'resolved_unverified']);
+  f.setNative([]);
+  assert.deepEqual(await lastCheck(), ['unknown', 'question_not_found']);
+  f.setNative([callMessage('AskUserQuestion', ASK_INPUT), toolResult(CALL, true)]);
+  assert.deepEqual(await lastCheck(), ['refused', 'cancelled']);
+  assert.equal(f.writes().length, 1);
+
+  // 送る途中で止まった（after の行がない）記録
+  const g = await callFixture(t);
+  await g.journal.appendBefore({
+    operationId: '1234567890123-00000000000000000000000000000099',
+    action: 'answer',
+    mode: 'keys',
+    route: 'terminal',
+    target: { ...terminalTarget(), agentType: 'claude', repoName: null, worktreePath: null, branch: null, title: null },
+    callId: CALL,
+    questionCount: 1,
+    totalGroups: 3,
+    digest: 'd'.repeat(64),
+    generation: { runtimeId: RUNTIME, incarnationId: 'inc-test' },
+  });
+  const crashed = await g.service.check('1234567890123-00000000000000000000000000000099', { query: true });
+  assert.ok(crashed.ok && crashed.state === 'recorded');
+  assert.equal(crashed.record.outcome, 'unknown');
+  assert.equal(crashed.record.detail.code, 'no_after_record');
+  assert.deepEqual(await g.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS }), {
+    ok: false,
+    error: 'not_sendable',
+    reason: 'already_sent',
+  });
+  assert.equal(g.writes().length, 0);
+});
+
+test('T-11 照会：message の結果不明は今の照会（操作の ID）を使う', async (t) => {
+  const f = await callFixture(t);
+  f.setNative([callMessage('request_user_input_async', ASYNC_INPUT)]);
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS });
+  assert.ok(intent.ok);
+  f.responses.set('terminal.send', { ok: false, kind: 'timeout', message: 'private' });
+  const confirmed = await f.service.answerConfirm({ ticket: intent.ticket, answers: PICK_ANSWERS });
+  assert.ok(confirmed.ok && confirmed.outcome === 'unknown');
+  const checked = await f.service.check(intent.operationId, { query: true });
+  assert.ok(checked.ok && checked.state === 'recorded');
+  assert.equal(checked.record.outcome, 'submitted');
+  assert.ok(f.calls.some((c) => c.method === 'orchestration.requestShow'));
+  assert.equal(f.writes().length, 1);
+});
+
+test('T-12 status：answerKeys と answerMessage を返し、端末の Claude で answerKeys が available、permission でも宛先の種類を返す', async (t) => {
+  const f = await callFixture(t);
+  f.calls.length = 0;
+  assert.deepEqual(await f.service.status(TERMINAL_AGENT), {
+    enabled: true,
+    available: false,
+    route: 'terminal',
+    reason: 'permission',
+    target: null,
+    agentType: 'claude',
+    answer: { available: false, reason: 'terminal_route' },
+    approval: { available: false, reason: 'terminal_route' },
+    answerKeys: { available: true, reason: null },
+    answerMessage: { available: false, reason: 'permission' },
+  });
+  // 今の status（listAll・agentStatus・2回目の listAll）より読みの RPC を増やさない
+  assert.deepEqual(
+    f.calls.map((c) => c.method),
+    ['session.tabs.listAll', 'terminal.agentStatus', 'terminal.inspectProcess'],
+  );
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  f.calls.length = 0;
+  const idle = await f.service.status(TERMINAL_AGENT);
+  assert.deepEqual(
+    [idle.available, idle.answerKeys, idle.answerMessage, idle.agentType],
+    [true, { available: true, reason: null }, { available: true, reason: null }, 'claude'],
+  );
+  assert.equal(f.calls.length, 3);
+  f.calls.length = 0;
+  const chat = await f.service.status(CHAT_AGENT);
+  assert.deepEqual(
+    [chat.available, chat.answer, chat.answerKeys, chat.answerMessage],
+    [
+      true,
+      { available: true, reason: null },
+      { available: false, reason: 'chat_route' },
+      { available: true, reason: null },
+    ],
+  );
+  assert.equal(f.calls.length, 2);
+  f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: '/bin/zsh' } }));
+  const shell = await f.service.status(TERMINAL_AGENT);
+  assert.deepEqual(
+    [shell.route, shell.agentType, shell.answerKeys],
+    [null, null, { available: false, reason: 'shell_foreground' }],
+  );
+  assert.equal(f.writes().length, 0);
+});
+
+test('T-12 status：知らない種類は agent_keys_unknown、能力がなければ unsupported、会話の読みがなければ answerMessage が unsupported', async (t) => {
+  const g = await callFixture(t, { agentType: 'gemini' });
+  g.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  const gemini = await g.service.status(TERMINAL_AGENT);
+  assert.deepEqual(gemini.answerKeys, { available: false, reason: 'agent_keys_unknown' });
+  const f = await callFixture(t);
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  f.cap.features.answerKeys = { available: false, missing: ['feature:readTranscript'], satisfied: [], deferred: [] };
+  f.cap.features.readTranscript = {
+    available: false,
+    missing: ['rpc:nativeChat.readSession'],
+    satisfied: [],
+    deferred: [],
+  };
+  const status = await f.service.status(TERMINAL_AGENT);
+  assert.deepEqual(
+    [status.available, status.answerKeys, status.answerMessage],
+    [true, { available: false, reason: 'unsupported' }, { available: false, reason: 'unsupported' }],
+  );
+});
+
+test('iss-00049 transcriptTail：会話の読みを解いて末尾の 200 件を読み、正規化した件を返し、誤りはそのまま返す', async () => {
+  const target = {
+    agentId: TERMINAL_AGENT,
+    source: 'nativeChat' as const,
+    agentType: 'claude',
+    sessionId: 's',
+    transcriptPath: null,
+    key: '0'.repeat(16),
+  };
+  const reads: unknown[] = [];
+  const reader = {
+    resolve: async (id: string) =>
+      id === TERMINAL_AGENT ? { ok: true as const, target } : { ok: false as const, error: 'agent_not_found' as const },
+    read: async (_t: unknown, options: unknown) => {
+      reads.push(options);
+      return {
+        ok: true as const,
+        page: {
+          source: 'nativeChat' as const,
+          rows: [callMessage('AskUserQuestion', ASK_INPUT)],
+          hasMore: false,
+          before: null,
+        },
+      };
+    },
+  };
+  const tail = transcriptTail(reader);
+  const read = await tail(TERMINAL_AGENT);
+  assert.ok(read.ok);
+  assert.equal(read.messages[0]?.parts[0]?.type, 'question');
+  assert.deepEqual(read.session, { source: 'nativeChat', sessionId: 's' });
+  assert.deepEqual(reads, [{ limit: 200 }]);
+  assert.deepEqual(await tail('other'), { ok: false, error: 'agent_not_found' });
+  const broken = transcriptTail({
+    ...reader,
+    read: async () => ({
+      ok: true as const,
+      page: { source: 'nativeChat' as const, rows: [1], hasMore: false, before: null },
+    }),
+  });
+  assert.deepEqual(await broken(TERMINAL_AGENT), { ok: false, error: 'unknown_shape' });
+});
+
 // ---- 承認への答え（iss-00050 D-04、T-07〜T-09） ----
 
 const APPROVAL_ITEM = 'item-approval-test';
@@ -1788,4 +2483,185 @@ test('status の approval は能力 answerApproval と止めた承認の RPC を
   // 端末は terminal_route
   status = await f.service.status(TERMINAL_AGENT);
   assert.deepEqual(status.approval, { available: false, reason: 'terminal_route' });
+});
+
+// ---- 最終品質ゲート attempt 1 の直し ----
+
+test('FQG 会話の読みのセッションが宛先のセッションと違えば、意図も確定も session_changed で1組も送らない', async (t) => {
+  const f = await callFixture(t);
+  f.setSession({ source: 'nativeChat', sessionId: 'session-old' });
+  const expected = { ok: false, error: 'target_changed', reason: 'session_changed' };
+  assert.deepEqual(
+    await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS }),
+    expected,
+  );
+  f.setSession({ source: 'agentSession', sessionId: 'session-terminal-test' });
+  assert.deepEqual(
+    await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS }),
+    expected,
+  );
+  f.setSession(null);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.ok(intent.ok);
+  f.setSession({ source: 'nativeChat', sessionId: 'session-new' });
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: KEY_ANSWERS }), expected);
+  assert.equal(f.writes().length, 0);
+  assert.equal(await f.journal.hasAnswer(TERMINAL_AGENT, CALL), false);
+  // 構造化 Chat は宛先の sessionId と比べる
+  const c = await callFixture(t);
+  const journalAsync = normalizeJournalItems([
+    {
+      itemId: 't',
+      sequence: 1,
+      body: { kind: 'tool-call', name: 'request_user_input_async', input: ASYNC_INPUT, callId: CALL },
+    },
+  ]);
+  assert.ok(journalAsync);
+  c.setTranscript({ ok: true, messages: journalAsync });
+  c.setSession({ source: 'agentSession', sessionId: 'session-other' });
+  assert.deepEqual(await c.service.answerIntent({ agent: CHAT_AGENT, callId: CALL, answers: PICK_ANSWERS }), expected);
+  assert.equal(c.writes().length, 0);
+});
+
+test('FQG keys の照会は、会話のセッションが記録の宛先と違えば question_not_found で送らない', async (t) => {
+  const f = await callFixture(t);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
+  assert.ok(intent.ok);
+  f.queueKeys({ ok: false, kind: 'timeout', message: 'private' });
+  assert.ok((await f.service.answerConfirm({ ticket: intent.ticket, answers: KEY_ANSWERS })).ok);
+  f.setNative([callMessage('AskUserQuestion', ASK_INPUT), toolResult(CALL, true)]);
+  f.setSession({ source: 'nativeChat', sessionId: 'session-new' });
+  const checked = await f.service.check(intent.operationId, { query: true });
+  assert.ok(checked.ok && checked.state === 'recorded');
+  assert.equal(checked.record.outcome, 'unknown');
+  assert.equal(checked.record.checks.at(-1)?.detail.code, 'question_not_found');
+  assert.equal(f.writes().length, 1);
+});
+
+test('FQG 意図と確定の間に同じ callId の問いの文や選択肢が変われば question_changed で送らない', async (t) => {
+  for (const input of [
+    { questions: [{ question: '変わった問い', options: [{ label: 'ラベル秘密A' }, { label: 'ラベル秘密B' }] }] },
+    { questions: [{ question: '仮の端末の問い', options: [{ label: 'ラベル秘密A' }, { label: '別のラベル' }] }] },
+  ]) {
+    const f = await callFixture(t);
+    const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS });
+    assert.ok(intent.ok);
+    f.setNative([callMessage('AskUserQuestion', input)]);
+    f.setPrompt({ interactivePrompt: JSON.stringify(input) });
+    assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: PICK_ANSWERS }), {
+      ok: false,
+      error: 'target_changed',
+      reason: 'question_changed',
+    });
+    assert.equal(f.writes().length, 0);
+  }
+});
+
+test('FQG 切った keys の質問は prompt_unsupported で送らない', async (t) => {
+  const long = { questions: [{ question: 'q'.repeat(5000), options: [{ label: 'a' }, { label: 'b' }] }] };
+  const f = await callFixture(t, { input: long });
+  assert.deepEqual(await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS }), {
+    ok: false,
+    error: 'not_sendable',
+    reason: 'prompt_unsupported',
+  });
+  assert.equal(f.writes().length, 0);
+});
+
+test('FQG2 送る前の確かめは、届いていない引用の発言があっても question_answered で拒む（二重を避ける）', async (t) => {
+  const f = await callFixture(t);
+  f.setNative([
+    callMessage('request_user_input_async', ASYNC_INPUT),
+    { ...userSays('> 仮の後の問い\n\nラベル秘密A'), queued: true },
+  ]);
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  assert.deepEqual(await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'question_answered',
+  });
+  assert.equal(f.writes().length, 0);
+});
+
+test('FQG3 ほかのエージェントからの引用の発言は利用者の答えに数えず、送る（question_answered にしない）', async (t) => {
+  const f = await callFixture(t);
+  f.setNative([
+    callMessage('request_user_input_async', ASYNC_INPUT),
+    { ...userSays('> 仮の後の問い\n\nラベル秘密A'), from: { kind: 'agent', id: 'other-agent' } },
+  ]);
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS });
+  assert.ok(intent.ok, JSON.stringify(intent));
+  const confirmed = await f.service.answerConfirm({ ticket: intent.ticket, answers: PICK_ANSWERS });
+  assert.ok(confirmed.ok);
+  assert.equal(f.writes().length, 1);
+});
+
+test('FQG3-2 構造化 Chat の request_user_input_async の後の、ほかのエージェントの引用の発言では拒まず送る', async (t) => {
+  const c = await callFixture(t);
+  const items = normalizeJournalItems([
+    {
+      itemId: 't',
+      sequence: 1,
+      body: { kind: 'tool-call', name: 'request_user_input_async', input: ASYNC_INPUT, callId: CALL },
+    },
+    {
+      itemId: 'u',
+      sequence: 2,
+      body: {
+        kind: 'message',
+        role: 'user',
+        from: { kind: 'agent', id: 'other-agent' },
+        blocks: [{ type: 'text', text: '> 仮の後の問い\n\nラベル秘密A' }],
+      },
+    },
+  ]);
+  assert.ok(items);
+  c.setTranscript({ ok: true, messages: items });
+  const intent = await c.service.answerIntent({ agent: CHAT_AGENT, callId: CALL, answers: PICK_ANSWERS });
+  assert.ok(intent.ok, JSON.stringify(intent));
+  assert.ok((await c.service.answerConfirm({ ticket: intent.ticket, answers: PICK_ANSWERS })).ok);
+  assert.equal(c.writes().length, 1);
+});
+
+test('FQG3-3 意図と確定の間に選択肢の説明が変われば question_changed で送らない', async (t) => {
+  const f = await callFixture(t);
+  const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS });
+  assert.ok(intent.ok);
+  const input = {
+    questions: [
+      {
+        question: '仮の端末の問い',
+        options: [{ label: 'ラベル秘密A', description: '新しい説明' }, { label: 'ラベル秘密B' }],
+      },
+    ],
+  };
+  f.setNative([callMessage('AskUserQuestion', input)]);
+  f.setPrompt({ interactivePrompt: JSON.stringify(input) });
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: PICK_ANSWERS }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'question_changed',
+  });
+  assert.equal(f.writes().length, 0);
+});
+
+test('FQG3-3 interactivePrompt の説明だけが違えば prompt_mismatch で送らない', async (t) => {
+  const f = await callFixture(t);
+  f.setPrompt({
+    interactivePrompt: JSON.stringify({
+      questions: [
+        {
+          question: '仮の端末の問い',
+          options: [{ label: 'ラベル秘密A', description: '別' }, { label: 'ラベル秘密B' }],
+        },
+      ],
+    }),
+  });
+  assert.deepEqual(await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'prompt_mismatch',
+  });
+  assert.equal(f.writes().length, 0);
 });

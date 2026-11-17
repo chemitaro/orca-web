@@ -2,8 +2,9 @@
 // 詳細はいつも畳んで始め、利用者の開け閉めをそのまま残す（描き直しでも details を作り直さない）。見出しには稼働の印を1つ出す（D-08）。
 // 会話の下に送る欄（D-05）を置く。流れと状態は send-view.js、描くのは send-dom.js。送れないときは欄を止めて理由を示す。
 // 会話の質問はカード（D-05、iss-00048）で描く。選択と流れは question-view.js の板がカードの key ごとに持ち、描き直しでも保つ。
-// 答える手段は answerer の表（構造化 Chat は意図と確定、端末は答えずに「Orca で開く」）で選ぶ。送れるかは送る欄と同じ
-// /api/send/status の読み（enabled と answer）を使う。
+// 答える手段は answerer の表で、部分の answerVia（rpc は構造化 Chat の意図と確定、keys は端末の質問へのキーの組、
+// message は後の発言。どれも callId か prompt で指す）で選ぶ。送れるかは送る欄と同じ /api/send/status の読み
+// （enabled、answer、answerKeys、answerMessage、agentType）を使う。
 // 会話の承認もカード（D-06、iss-00050）で描く。状態は approval-view.js の板がカードの key ごとに持ち、手段は approver の表
 // （構造化 Chat は意図と確定、端末と答えられない承認は読むだけで「Orca で開く」）で選ぶ。送れるかは /api/send/status の approval。
 // 文字はすべて textContent で入れる（会話の本文、ツールの出力、題名、送る本文、質問と選択肢は信頼しないデータ）。
@@ -14,7 +15,13 @@ import { watchWorktreeSummary } from './agent-marks.js';
 import { buildChat, buildDetail, errorLabel, initialChat, olderResult, reduceChat } from './agent-view.js';
 import { buildApprovalCard, createApprovalBoard, createChatApprover, readOnlyApprover } from './approval-view.js';
 import { createOpenBoard, createOpenControl, runOpen } from './open-control.js';
-import { buildQuestionCard, createChatAnswerer, createQuestionBoard, terminalAnswerer } from './question-view.js';
+import {
+  buildQuestionCard,
+  createCallAnswerer,
+  createChatAnswerer,
+  createQuestionBoard,
+  terminalAnswerer,
+} from './question-view.js';
 import { renderSendPanel } from './send-dom.js';
 import { buildSendView, composerKeyAction, createSendFlow } from './send-view.js';
 
@@ -73,7 +80,14 @@ async function read(url) {
 }
 const statusShape = (status) =>
   status && typeof status === 'object'
-    ? JSON.stringify([status.enabled, status.answer, status.approval])
+    ? JSON.stringify([
+        status.enabled,
+        status.answer,
+        status.approval,
+        status.answerKeys,
+        status.answerMessage,
+        status.agentType,
+      ])
     : String(status);
 function noteStatus(status) {
   const changed = statusShape(status) !== statusShape(sendStatus);
@@ -84,7 +98,12 @@ function noteStatus(status) {
 /** 今の会話の質問の行（key ごと）。 */
 let questionRows = new Map();
 const questionBoard = createQuestionBoard({
-  answerers: { chat: createChatAnswerer({ agentId, writer, read }), terminal: terminalAnswerer },
+  answerers: {
+    chat: createChatAnswerer({ agentId, writer, read }),
+    terminal: terminalAnswerer,
+    keys: createCallAnswerer({ agentId, writer, read, mode: 'keys' }),
+    message: createCallAnswerer({ agentId, writer, read, mode: 'message' }),
+  },
   onChange: (key) => renderQuestionRow(key),
 });
 /** 今の会話の承認の行（key ごと）。 */
@@ -269,6 +288,7 @@ els.log.addEventListener('click', (event) => {
 });
 
 // その他の文。描き直さず（入力中の欄と変換を壊さない）、送るボタンの押せるかだけを写す。
+// 送れない理由（keys の制御文字）が出るか消えるときだけ、その行を描き直す（フォーカスと入力の位置は戻す）。
 els.log.addEventListener('input', (event) => {
   const field = /** @type {HTMLTextAreaElement | null} */ (event.target);
   if (field?.dataset?.action !== 'other-text') return;
@@ -277,8 +297,14 @@ els.log.addEventListener('input', (event) => {
   const row = questionRows.get(key);
   if (!card || !row) return;
   questionBoard.setOther(key, row.part, Number(field.dataset.question), field.value);
+  const view = questionView(row);
+  const shown = card.querySelector('.question-hint')?.textContent ?? null;
+  if (shown !== view.hint) {
+    renderQuestionRow(key);
+    return;
+  }
   const submit = /** @type {HTMLButtonElement | null} */ (card.querySelector('button[data-action="submit"]'));
-  if (submit) submit.disabled = questionView(row).button.disabled;
+  if (submit) submit.disabled = view.button.disabled;
 });
 
 els.log.addEventListener(

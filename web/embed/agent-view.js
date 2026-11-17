@@ -138,6 +138,21 @@ export function buildDetail(state, agentId, options = {}) {
   return { title: agentLabel(agent, worktreeNames), rows, open };
 }
 
+/** ツールの結果で答え済みになる質問か。keys と、answerVia のない古い端末の質問。 */
+const answersByResult = (part) =>
+  part.answerVia === 'keys' || (part.answerVia === undefined && part.source === 'terminal');
+
+/** Orca の askAnswerQuote と同じ引用（改行の続きを空白1つにした問いの文と空行）。 */
+const quoteOf = (question) => `> ${String(question?.question ?? '').replace(/[\r\n]+/g, ' ')}\n\n`;
+
+/** 文が、どれかの問いの引用で始まるか、空行の後に含む。 */
+function quotesQuestion(text, questions) {
+  return (Array.isArray(questions) ? questions : []).some((q) => {
+    const quote = quoteOf(q);
+    return text.startsWith(quote) || text.includes(`\n\n${quote}`);
+  });
+}
+
 const unsupportedText = (what) => `表示できない（${UNSUPPORTED_LABELS[what] ?? UNSUPPORTED_LABELS.unknown}）`;
 
 /**
@@ -146,8 +161,11 @@ const unsupportedText = (what) => `表示できない（${UNSUPPORTED_LABELS[wha
  *    | { kind: 'unsupported', key, role, at, text } | { kind: 'notice', key, at, text }
  *    | { kind: 'question', key, at, part, answerText } | { kind: 'approval', key, at, part }
  * ツールの結果は、同じ callId の呼び出しの行に入れる（なければ単独の行）。
- * 端末の質問（source terminal）は、同じ callId のツールの結果を答えとして結びつけ、part の state を answered に、
- * answerText を結果の文にする（結果が先でも後でも。結びつけた結果は単独の行にしない）。
+ * キーの組で答える質問（answerVia keys。answerVia のない古い物は source terminal）は、同じ callId のツールの結果を答えとして結びつけ、
+ * part の state を answered（結果が isError なら答えずに閉じた declined）に、answerText を結果の文にする
+ * （結果が先でも後でも。結びつけた結果は単独の行にしない）。
+ * 後の発言で答える質問（answerVia message）は、受付のツールの結果では答え済みにせず、後の利用者の発言の文が
+ * どれかの問いの引用（先頭か空行の後）を含めば answered にし、answerText をその文にする。
  */
 export function buildChat(messages) {
   const rows = [];
@@ -156,9 +174,19 @@ export function buildChat(messages) {
   const questionsByCall = new Map();
   /** まだ持ち主のない結果の行（callId ごと）。後に来た端末の質問が引き取る。 */
   const orphanResults = new Map();
-  const answerQuestion = (row, output) => {
-    row.part = { ...row.part, state: 'answered' };
+  /** 後の発言を待つ質問の行。 */
+  const awaitingMessage = [];
+  const answerQuestion = (row, output, isError = false) => {
+    row.part = { ...row.part, state: isError ? 'declined' : 'answered' };
     row.answerText = output;
+  };
+  const answerByMessage = (text) => {
+    for (let i = awaitingMessage.length - 1; i >= 0; i--) {
+      const row = awaitingMessage[i];
+      if (!quotesQuestion(text, row.part.questions)) continue;
+      answerQuestion(row, text);
+      awaitingMessage.splice(i, 1);
+    }
   };
   for (const m of messages) {
     // 思考は出さない（正規化で落とすが、画面でも描かない）。
@@ -188,6 +216,15 @@ export function buildChat(messages) {
     };
     m.parts.forEach((part, index) => {
       if (part.type === 'text') {
+        // 届いていない（undelivered の）発言と、ほかのエージェントからの（fromAgent の）発言の引用では答え済みにしない。
+        if (
+          m.role === 'user' &&
+          m.undelivered !== true &&
+          m.fromAgent !== true &&
+          awaitingMessage.length &&
+          typeof part.text === 'string'
+        )
+          answerByMessage(part.text);
         if (!texts.length) first = index;
         texts.push(part.text);
         truncated ||= part.truncated === true;
@@ -210,13 +247,14 @@ export function buildChat(messages) {
         if (part.callId) toolsByCall.set(part.callId, row);
       } else if (part.type === 'question') {
         const row = { kind: 'question', key, at: m.at, part, answerText: null };
-        const callId = part.source === 'terminal' ? part.callId : null;
+        if (part.answerVia === 'message' && part.state === 'pending') awaitingMessage.push(row);
+        const callId = answersByResult(part) ? part.callId : null;
         if (callId) {
           const orphan = orphanResults.get(callId);
           if (orphan) {
             rows.splice(rows.indexOf(orphan), 1);
             orphanResults.delete(callId);
-            answerQuestion(row, orphan.output);
+            answerQuestion(row, orphan.output, orphan.isError);
           } else {
             questionsByCall.set(callId, row);
           }
@@ -228,7 +266,7 @@ export function buildChat(messages) {
       } else if (part.type === 'tool-result') {
         const question = part.callId ? questionsByCall.get(part.callId) : undefined;
         if (question && question.answerText === null) {
-          answerQuestion(question, part.output);
+          answerQuestion(question, part.output, part.isError === true);
           return;
         }
         const owner = part.callId ? toolsByCall.get(part.callId) : undefined;

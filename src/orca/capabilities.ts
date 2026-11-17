@@ -12,6 +12,7 @@ export type FeatureName =
   | 'sendTerminal'
   | 'sendChat'
   | 'answerChat'
+  | 'answerKeys'
   | 'answerApproval';
 
 export interface FeatureReport {
@@ -234,6 +235,12 @@ export async function probeCapabilities(deps: ProbeDeps): Promise<CapabilityRepo
     .need('feature:readTabs', readTabsReport.available)
     .need('feature:readTranscript', readTranscript.report().available)
     .defer('rpc:agentSession.respondToQuestion');
+  // 端末のエージェントの質問への答え（キーの組を terminal.send で1組ずつ送る）。会話の記録で質問を確かめる。
+  const answerKeys = base()
+    .need('runtime-id:consistent', runtimeIdConsistent)
+    .need('feature:readTabs', readTabsReport.available)
+    .need('feature:readTranscript', readTranscript.report().available)
+    .defer('rpc:terminal.send', 'rpc:terminal.agentStatus', 'rpc:terminal.inspectProcess');
   // 構造化 Chat の承認への答え（agentSession.respondToApproval の optionId）。question-answers.v1 は要らない。
   const answerApproval = base()
     .need('capability:agent-session.structured.v1', capabilities.has('agent-session.structured.v1'))
@@ -257,6 +264,7 @@ export async function probeCapabilities(deps: ProbeDeps): Promise<CapabilityRepo
       sendTerminal: sendTerminal.report(),
       sendChat: sendChat.report(),
       answerChat: answerChat.report(),
+      answerKeys: answerKeys.report(),
       answerApproval: answerApproval.report(),
     },
   };

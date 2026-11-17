@@ -1,4 +1,4 @@
-// 確認つきの送信と、質問と承認への答えだけを通す RPC の門。読む門の許可一覧は広げない。
+// 確認つきの送信と、質問（構造化 Chat の答えと、端末のキーの組）と承認への答えだけを通す RPC の門。読む門の許可一覧は広げない。
 import { READ_METHODS, type RpcCallOptions, type RpcOutcome, type RpcTransport } from './rpc.ts';
 
 export const SEND_READ_METHODS: readonly string[] = [
@@ -34,6 +34,60 @@ function terminalSend(params: unknown, options?: RpcCallOptions): boolean {
     (params.waitSubmitMs as number) >= 0 &&
     (params.waitSubmitMs as number) <= 60000 &&
     isOperationId(options?.envelope?.orchestrationRequestId)
+  );
+}
+
+const ESC = '\u001b';
+/** 質問への答えのキー（Orca の buildAskAnswerKeys・buildCodexAskAnswerKeys が使う raw の組）。 */
+const ANSWER_KEYS: ReadonlySet<string> = new Set([
+  ...'123456789',
+  '\r',
+  `${ESC}[C`,
+  `${ESC}[A`,
+  `${ESC}[B`,
+  '\t',
+  'n',
+  '\x7f',
+]);
+const PASTE_START = `${ESC}[200~`;
+const PASTE_END = `${ESC}[201~`;
+const MAX_PLAIN_KEY_TEXT_BYTES = 512;
+const MAX_PASTE_KEY_TEXT_BYTES = 70_000;
+
+/** C0（Tab・CR・LF を含む）、DEL、C1 のない文。 */
+function isPlainText(text: string): boolean {
+  for (const character of text) {
+    const code = character.charCodeAt(0);
+    if (code < 32 || (code >= 127 && code <= 159)) return false;
+  }
+  return true;
+}
+
+/** キーの組の text：決めたキー、1〜512 バイトの制御文字のない文、または括弧付きの貼り付けで包んだ制御文字のない文（全体で 70,000 バイトまで）。 */
+function isKeyText(text: unknown): boolean {
+  if (typeof text !== 'string' || text.length === 0) return false;
+  if (ANSWER_KEYS.has(text)) return true;
+  const bytes = Buffer.byteLength(text, 'utf8');
+  if (text.startsWith(PASTE_START) && text.endsWith(PASTE_END)) {
+    const inner = text.slice(PASTE_START.length, text.length - PASTE_END.length);
+    return inner.length > 0 && bytes <= MAX_PASTE_KEY_TEXT_BYTES && isPlainText(inner);
+  }
+  return bytes <= MAX_PLAIN_KEY_TEXT_BYTES && isPlainText(text);
+}
+
+/** 質問への答えのキーの組。enter は偽、書き込みの受け取りを求め、封筒・agentPrompt・requireAgentStatus を付けない。 */
+function terminalKeyGroup(params: unknown, options?: RpcCallOptions): boolean {
+  return (
+    hasKeys(params, ['terminal', 'text', 'enter', 'requireWriteSettlement', 'client']) &&
+    isText(params.terminal) &&
+    params.terminal.startsWith('term_') &&
+    isKeyText(params.text) &&
+    params.enter === false &&
+    params.requireWriteSettlement === true &&
+    hasKeys(params.client, ['id', 'type']) &&
+    params.client.id === 'orca-web' &&
+    params.client.type === 'desktop' &&
+    options?.envelope === undefined
   );
 }
 
@@ -124,7 +178,7 @@ export class SendRpc implements RpcTransport {
   call<T = unknown>(method: string, params: unknown, options?: RpcCallOptions): Promise<RpcOutcome<T>> {
     if (
       !(method === 'terminal.send'
-        ? terminalSend(params, options)
+        ? terminalSend(params, options) || terminalKeyGroup(params, options)
         : method === 'agentSession.send'
           ? chatSend(params)
           : method === 'agentSession.respondToQuestion'

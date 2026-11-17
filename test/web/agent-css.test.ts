@@ -288,6 +288,27 @@ test('T-15：端末のカードの「Orca で開く」は幅 390px 以下でも�
     assert.doesNotMatch(rule.selector, /question|orca-open/, rule.selector);
 });
 
+// iss-00049 T-17：途中まで送った帯、送れない理由、keys の注、答えずに閉じた印。色は --chat-*（上の T-15 で SpecDock の変数を先に使うと確かめる）、
+// 角丸は var(--ds-…, 既定)、長い語は折り返し、幅 390px でも隠さない。
+test('iss-00049 T-17：帯の規則は var(--ds-…, 既定) の角丸と --chat-* の色を使い、折り返す', () => {
+  const band = only('.question-partial', (m) => m === null);
+  assert.equal(band.get('border-radius'), 'var(--ds-radius, 6px)');
+  for (const prop of ['border', 'background', 'color'])
+    assert.match(band.get(prop) ?? '', /var\(--chat-[a-z-]+\)/, `.question-partial の ${prop}`);
+  assert.equal(band.get('flex-wrap'), 'wrap');
+  assert.equal(band.get('min-width'), '0');
+  assert.equal(band.get('overflow-wrap'), 'anywhere');
+  const text = only('.question-partial-text', (m) => m === null);
+  assert.equal(text.get('min-width'), '0');
+  const note = only('.question-keys-note', (m) => m === null);
+  assert.equal(note.get('min-width'), '0');
+  assert.match(note.get('color') ?? '', /^var\(--chat-/);
+  const hint = only('.question-hint', (m) => m === null);
+  assert.match(hint.get('color') ?? '', /^var\(--chat-/);
+  const declined = only('.question-card[data-state="declined"] .question-badge', (m) => m === null);
+  assert.match(declined.get('color') ?? '', /^var\(--chat-/);
+});
+
 // 承認のカード（iss-00050 T-15、R-07、D-06）。枠と選択肢は質問のカードの規則を使い、差分の規則は --chat-* と var(--ds-…, 既定) を通す。
 const approvalRules = rules.filter((r) => /\.approval-/.test(r.selector));
 /** 改行で並べた選択子も、空白を1つにして比べる。 */

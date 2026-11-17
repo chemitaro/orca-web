@@ -312,3 +312,114 @@ test('T-12：buildChat は、構造化 Chat の question に同じ callId の結
   assert.equal(rows[0].part.state, 'pending');
   assert.equal(rows[2].text, '表示できない（質問）');
 });
+
+// ---- iss-00049 T-15：答え方ごとの答え済みの判定 ----
+
+const keysQuestion = (over: Record<string, unknown> = {}) => questionPart({ answerVia: 'keys', ...over });
+const messageQuestion = (over: Record<string, unknown> = {}) =>
+  questionPart({
+    answerVia: 'message',
+    callId: 'call-m',
+    questions: [
+      {
+        id: '0',
+        header: null,
+        question: 'どちらに\nしますか',
+        multiSelect: false,
+        options: [{ id: '0', label: 'はい', description: null }],
+        allowOther: true,
+        otherAllowsEmpty: false,
+      },
+    ],
+    ...over,
+  });
+
+test('iss-00049 T-15：keys の質問は isError の結果で declined（結果の文）、そうでなければ answered', () => {
+  const declined = buildChat([
+    msg('m1', 'assistant', [keysQuestion()]),
+    msg('m2', 'tool', [{ type: 'tool-result', output: 'User declined to answer', isError: true, callId: 'call-q' }]),
+  ]);
+  assert.deepEqual(
+    declined.map((r: { kind: string }) => r.kind),
+    ['question'],
+  );
+  assert.equal(declined[0].part.state, 'declined');
+  assert.equal(declined[0].answerText, 'User declined to answer');
+  const earlier = buildChat([
+    msg('m0', 'tool', [{ type: 'tool-result', output: '閉じた', isError: true, callId: 'call-q' }]),
+    msg('m1', 'assistant', [keysQuestion()]),
+  ]);
+  assert.equal(earlier.length, 1);
+  assert.equal(earlier[0].part.state, 'declined', '結果が先でも同じ');
+  const answered = buildChat([
+    msg('m1', 'assistant', [keysQuestion()]),
+    msg('m2', 'tool', [{ type: 'tool-result', output: 'はい', isError: false, callId: 'call-q' }]),
+  ]);
+  assert.equal(answered[0].part.state, 'answered');
+  assert.equal(answered[0].answerText, 'はい');
+});
+
+test('iss-00049 T-15：message の質問は受付の結果では pending のまま、後の利用者の発言の引用で answered、引用でない発言では pending', () => {
+  const accepted = buildChat([
+    msg('m1', 'assistant', [
+      messageQuestion(),
+      { type: 'tool-result', output: 'queued', isError: false, callId: 'call-m' },
+    ]),
+  ]);
+  assert.deepEqual(
+    accepted.map((r: { kind: string }) => r.kind),
+    ['question', 'tool'],
+  );
+  assert.equal(accepted[0].part.state, 'pending', '受付の結果では答え済みにしない');
+
+  const reply = '> どちらに しますか\n\nはい';
+  const answered = buildChat([
+    msg('m1', 'assistant', [messageQuestion()]),
+    msg('m2', 'user', [{ type: 'text', text: reply }]),
+  ]);
+  assert.equal(answered[0].part.state, 'answered');
+  assert.equal(answered[0].answerText, reply);
+  const after = buildChat([
+    msg('m1', 'assistant', [messageQuestion()]),
+    msg('m2', 'user', [{ type: 'text', text: `前置き\n\n${reply}` }]),
+  ]);
+  assert.equal(after[0].part.state, 'answered', '空行の後の引用');
+
+  for (const text of ['はい', '> どちらに\nしますか\n\nはい', 'x > どちらに しますか\n\nはい']) {
+    const rows = buildChat([msg('m1', 'assistant', [messageQuestion()]), msg('m2', 'user', [{ type: 'text', text }])]);
+    assert.equal(rows[0].part.state, 'pending', JSON.stringify(text));
+  }
+  const before = buildChat([
+    msg('m0', 'user', [{ type: 'text', text: reply }]),
+    msg('m1', 'assistant', [messageQuestion()]),
+  ]);
+  assert.equal(before[1].part.state, 'pending', '前の発言では答え済みにしない');
+  const byAssistant = buildChat([
+    msg('m1', 'assistant', [messageQuestion()]),
+    msg('m2', 'assistant', [{ type: 'text', text: reply }]),
+  ]);
+  assert.equal(byAssistant[0].part.state, 'pending', '利用者の発言だけ');
+});
+
+test('FQG2 T-15：届いていない（undelivered の）引用の発言では、message の質問は pending のまま', () => {
+  const reply = '> どちらに しますか\n\nはい';
+  const rows = buildChat([
+    msg('m1', 'assistant', [messageQuestion()]),
+    { ...msg('m2', 'user', [{ type: 'text', text: reply }]), undelivered: true },
+  ]);
+  assert.equal(rows[0].part.state, 'pending');
+  const later = buildChat([
+    msg('m1', 'assistant', [messageQuestion()]),
+    { ...msg('m2', 'user', [{ type: 'text', text: reply }]), undelivered: true },
+    msg('m3', 'user', [{ type: 'text', text: reply }]),
+  ]);
+  assert.equal(later[0].part.state, 'answered', '後で届いた引用で答え済み');
+});
+
+test('FQG3 T-15：ほかのエージェントからの（fromAgent の）引用の発言では、message の質問は pending のまま', () => {
+  const rows = buildChat([
+    msg('m1', 'assistant', [messageQuestion()]),
+    { ...msg('m2', 'user', [{ type: 'text', text: '> どちらに しますか\n\nはい' }]), fromAgent: true },
+  ]);
+  assert.equal(rows[0].part.state, 'pending');
+});

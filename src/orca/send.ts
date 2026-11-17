@@ -2,7 +2,10 @@
 import { createHash } from 'node:crypto';
 import { answerForm, digestAnswers, type QuestionAnswer } from '../send/answer.ts';
 import { digestOption } from '../send/approval.ts';
+import { ANSWER_STEP_MS } from '../send/keys.ts';
 import type { ChatSendTarget, TerminalSendTarget } from '../send/model.ts';
+import { promptMatches } from '../send/question-state.ts';
+import { terminalPromptOf } from '../send/target.ts';
 import {
   type ApprovalOptionView,
   type JournalQuestionAnswer,
@@ -25,6 +28,9 @@ export interface SendDetail {
   queuedState?: string;
   replayed?: true;
   warning?: string;
+  /** キーの組の答え：受けられた組の数と全部の組の数。 */
+  sentGroups?: number;
+  totalGroups?: number;
 }
 export interface SendResult {
   outcome: SendOutcome;
@@ -218,6 +224,33 @@ function readFailure(outcome: Extract<RpcOutcome, { ok: false }>, method: string
     return { ok: false, error: 'terminal_gone' };
   return { ok: false, error: 'unknown_shape' };
 }
+export type KeyAck = 'accepted' | 'refused' | 'unknown';
+/** Orca の readTerminalSendAcknowledgment を、キーの組では厳しくした読み（writeSettlement がなく accepted が真なら unknown）。unverifiable は unknown。 */
+function keyAcknowledgment(result: unknown): KeyAck {
+  const reply = object(result);
+  if (!('send' in reply)) return 'unknown';
+  const sent = reply.send;
+  if (typeof sent !== 'object' || sent === null) return 'unknown';
+  const receipt = sent as Record<string, unknown>;
+  if ('writeSettlement' in receipt) {
+    const settlement = receipt.writeSettlement;
+    if (typeof settlement === 'object' && settlement !== null && 'outcome' in settlement) {
+      if (settlement.outcome === 'refused') return 'refused';
+      if (settlement.outcome === 'accepted' && receipt.accepted === true) return 'accepted';
+    }
+    return 'unknown';
+  }
+  // キーの組は書き込みの完了を求める。writeSettlement がなければ（古い Orca）受けたとは言えないので、次の組を送らない。
+  if (receipt.accepted === false) return 'refused';
+  return 'unknown';
+}
+/** キーの組の RPC の結果。unavailable・method_not_found・invalid_argument は書く前の拒み、ほかの誤りは結果不明。 */
+function classifyKeyGroup(outcome: RpcOutcome): { ack: KeyAck; code?: string } {
+  if (outcome.ok) return { ack: keyAcknowledgment(outcome.result) };
+  if (outcome.kind === 'unavailable') return { ack: 'refused' };
+  const code = outcome.kind === 'orca-error' ? (outcome.code ?? 'orca-error') : outcome.kind;
+  return code === 'method_not_found' || code === 'invalid_argument' ? { ack: 'refused', code } : { ack: 'unknown' };
+}
 export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').SendRpc }) {
   /** 末尾の 200 件から itemId の項目を読む。 */
   async function readJournalItem(
@@ -255,6 +288,52 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
       answers: parsed.answers,
     };
   }
+  /** 端末の前面のプロセス（terminal.inspectProcess、宛先の incarnation）。送る前の確かめと、キーの組の間の読み直しが使う。 */
+  async function readForeground(
+    handle: string,
+    incarnationId: string,
+    agentType: string,
+  ): Promise<SendRead<{ isShell: boolean; matchesAgent: boolean }>> {
+    const result = await rpc.call('terminal.inspectProcess', {
+      terminal: handle,
+      expectedIncarnationId: incarnationId,
+    });
+    if (!result.ok) return readFailure(result, 'terminal.inspectProcess');
+    const foreground = object(object(result.result).process).foregroundProcess;
+    if (typeof foreground !== 'string' || !foreground.trim()) return { ok: false, error: 'foreground_unknown' };
+    const normalized = foreground
+      .trim()
+      .replace(/^["']|["']$/g, '')
+      .toLowerCase();
+    const basename = normalized.split(/[\\/]/).pop() ?? normalized;
+    const processName = basename.replace(/\.(?:exe|cmd|bat|ps1)$/i, '');
+    const shellNames =
+      '|bash|zsh|sh|fish|cmd|cmd.exe|powershell|powershell.exe|pwsh|pwsh.exe|nu|ksh|mksh|dash|ash|tcsh|csh|elvish|xonsh'.split(
+        '|',
+      );
+    return {
+      ok: true,
+      isShell: [normalized, basename, processName].some((name) => shellNames.includes(name)),
+      matchesAgent:
+        (agentType === 'claude' && processName === 'claude') ||
+        (agentType === 'codex' && (processName === 'codex' || processName.startsWith('codex-'))),
+    };
+  }
+  async function sendGroup(target: TerminalSendTarget, bytes: string): Promise<{ ack: KeyAck; code?: string }> {
+    return classifyKeyGroup(
+      await rpc.call(
+        'terminal.send',
+        {
+          terminal: target.handle,
+          text: bytes,
+          enter: false,
+          requireWriteSettlement: true,
+          client: { id: 'orca-web', type: 'desktop' },
+        },
+        { timeoutMs: 10000 },
+      ),
+    );
+  }
   /** 末尾の 200 件から itemId の承認を読む。見つからなければ question_not_found（名前は質問と共有する）。 */
   async function readApproval(sessionId: string, itemId: string): Promise<SendRead<ApprovalRead>> {
     const found = await readJournalItem(sessionId, itemId);
@@ -272,6 +351,53 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
     };
   }
   return {
+    /** キーの組を1つ送り、受けられたか（accepted）、受けられなかったか（refused）、分からないか（unknown）を返す。 */
+    async sendKeyGroup(target: TerminalSendTarget, bytes: string): Promise<KeyAck> {
+      return (await sendGroup(target, bytes)).ack;
+    },
+    /**
+     * 答えの組を1組ずつ送る。1組目はすぐ、次の組は前の組が受けられてから sleep(ANSWER_STEP_MS) の後に送る。
+     * 受けられない組で止め、残りを送らない。自動で送り直さない。
+     */
+    async answerKeys(
+      target: TerminalSendTarget,
+      groups: readonly string[],
+      questions: readonly QuestionView[],
+      sleep: (ms: number) => Promise<void>,
+    ): Promise<SendResult> {
+      const totalGroups = groups.length;
+      let sentGroups = 0;
+      const stopped = (): SendResult =>
+        sentGroups > 0
+          ? { outcome: 'unknown', detail: { code: 'partial_sent', sentGroups, totalGroups } }
+          : { outcome: 'refused', detail: { code: 'not_sent', sentGroups, totalGroups } };
+      for (const [index, bytes] of groups.entries()) {
+        if (index > 0) {
+          await sleep(ANSWER_STEP_MS);
+          // 組の間にエージェントが終わると、残りの文と Enter がシェルに届く。送る直前に前面を読み直し、違えば止める。
+          const foreground = await readForeground(target.handle, target.incarnationId, target.agentType);
+          if (!foreground.ok || foreground.isShell || !foreground.matchesAgent) return stopped();
+        }
+        // 各組の直前に、宛先のペインがまだ同じ質問を出しているかを読み直す（答えられた・取り消された・変わったら止める）。
+        const tabs = await rpc.call('session.tabs.listAll', {});
+        if (!tabs.ok || promptMatches(terminalPromptOf(tabs.result, target), questions) !== 'match') return stopped();
+        const { ack, code } = await sendGroup(target, bytes);
+        if (ack === 'accepted') {
+          sentGroups += 1;
+          continue;
+        }
+        const method = code === 'method_not_found' ? { method: 'terminal.send' } : {};
+        if (sentGroups > 0)
+          return { outcome: 'unknown', detail: { code: 'partial_sent', ...method, sentGroups, totalGroups } };
+        if (ack === 'refused')
+          return {
+            outcome: 'refused',
+            detail: { code: code === 'method_not_found' ? code : 'not_sent', ...method, sentGroups, totalGroups },
+          };
+        return { outcome: 'unknown', detail: { code: 'unconfirmed', sentGroups, totalGroups } };
+      }
+      return { outcome: 'input_accepted', detail: { code: 'keys_sent', sentGroups, totalGroups } };
+    },
     async checkChat(target: ChatSendTarget, operationId: string): Promise<SendRead<SendResult>> {
       const result = await rpc.call('agentSession.sendRecorded', {
         sessionId: target.sessionId,
@@ -468,36 +594,7 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
         return { ok: false, error: 'unknown_shape' };
       return { ok: true, fence: page.fence as number };
     },
-    async readForeground(
-      handle: string,
-      incarnationId: string,
-      agentType: string,
-    ): Promise<SendRead<{ isShell: boolean; matchesAgent: boolean }>> {
-      const result = await rpc.call('terminal.inspectProcess', {
-        terminal: handle,
-        expectedIncarnationId: incarnationId,
-      });
-      if (!result.ok) return readFailure(result, 'terminal.inspectProcess');
-      const foreground = object(object(result.result).process).foregroundProcess;
-      if (typeof foreground !== 'string' || !foreground.trim()) return { ok: false, error: 'foreground_unknown' };
-      const normalized = foreground
-        .trim()
-        .replace(/^["']|["']$/g, '')
-        .toLowerCase();
-      const basename = normalized.split(/[\\/]/).pop() ?? normalized;
-      const processName = basename.replace(/\.(?:exe|cmd|bat|ps1)$/i, '');
-      const shellNames =
-        '|bash|zsh|sh|fish|cmd|cmd.exe|powershell|powershell.exe|pwsh|pwsh.exe|nu|ksh|mksh|dash|ash|tcsh|csh|elvish|xonsh'.split(
-          '|',
-        );
-      return {
-        ok: true,
-        isShell: [normalized, basename, processName].some((name) => shellNames.includes(name)),
-        matchesAgent:
-          (agentType === 'claude' && processName === 'claude') ||
-          (agentType === 'codex' && (processName === 'codex' || processName.startsWith('codex-'))),
-      };
-    },
+    readForeground,
     async readTerminalStatus(handle: string): Promise<SendRead<{ isRunningAgent: boolean; status: string | null }>> {
       const result = await rpc.call('terminal.agentStatus', { terminal: handle });
       if (!result.ok) return readFailure(result, 'terminal.agentStatus');

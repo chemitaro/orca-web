@@ -1,5 +1,6 @@
 // 質問のカード（D-05）を DOM の要素にする。描く物は question-view.js の buildQuestionCard が決める。
 // 文字はすべて textContent で入れ、HTML として解かない（innerHTML も属性の文字列の HTML も使わない）。
+// 途中まで送った帯（partial）と答えずに閉じた形（declined）も同じ規則で描く（iss-00049）。
 // 押しは data 属性（data-action、data-question、data-option）で親が受ける。「Orca で開く」は共有の部品 createOpenControl を使う。
 // document を受けるので、テストは小さな偽の document で確かめる。
 import { createOpenControl } from './open-control.js';
@@ -69,6 +70,9 @@ function questionBlock(doc, question, index) {
   return block;
 }
 
+/** 閉じた形の印。declined は答えずに閉じた端末の質問。 */
+const CLOSED_BADGES = { answered: '答え済み', cancelled: '取り消し', declined: '答えずに閉じた' };
+
 function questionList(doc, view) {
   const list = make(doc, 'div', null, 'question-list');
   view.questions.forEach((question, i) => {
@@ -94,7 +98,7 @@ export function renderQuestionCard(doc, view, { open = false } = {}) {
     const details = make(doc, 'details', null, 'question-closed');
     details.open = open;
     const summary = make(doc, 'summary', null, 'question-summary');
-    summary.append(make(doc, 'span', view.state === 'cancelled' ? '取り消し' : '答え済み', 'question-badge'));
+    summary.append(make(doc, 'span', CLOSED_BADGES[view.state] ?? '答え済み', 'question-badge'));
     summary.append(make(doc, 'span', view.questions[0]?.question ?? '', 'question-summary-text'));
     const answers = make(doc, 'ul', null, 'question-answers');
     for (const line of view.answerSummary) answers.append(make(doc, 'li', line));
@@ -110,6 +114,13 @@ export function renderQuestionCard(doc, view, { open = false } = {}) {
   root.append(head, questionList(doc, view));
   if (view.truncated) root.append(make(doc, 'p', '（長いので切りました）', 'cut'));
   if (view.reason) root.append(make(doc, 'p', view.reason, 'question-reason'));
+  if (view.hint) root.append(make(doc, 'p', view.hint, 'question-hint'));
+  if (view.partial) {
+    const band = make(doc, 'div', null, 'question-partial');
+    band.setAttribute('role', 'status');
+    band.append(make(doc, 'p', view.partial.text, 'question-partial-text'));
+    root.append(band);
+  }
   if (view.unknown) {
     const band = make(doc, 'div', null, 'question-unknown');
     band.append(make(doc, 'p', view.unknown.text, 'question-unknown-text'));
@@ -133,12 +144,13 @@ export function renderQuestionCard(doc, view, { open = false } = {}) {
     openControl = createOpenControl(doc, { size: 'md' });
     foot.append(openControl.root);
   }
+  if (view.keysNote) foot.append(make(doc, 'p', view.keysNote, 'question-keys-note'));
   if (view.button.shown) {
     const submit = button(doc, 'submit', 'question-submit', view.button.disabled);
     submit.textContent = view.button.label;
     submit.setAttribute('aria-busy', view.button.busy ? 'true' : 'false');
     foot.append(submit);
   }
-  if (openControl || view.button.shown) root.append(foot);
+  if (openControl || view.button.shown || view.keysNote) root.append(foot);
   return { root, openControl };
 }
