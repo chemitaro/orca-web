@@ -20,6 +20,8 @@ ID: "iss-00050"
   - round-2：結果の形式が無効（題が80字超。指摘の中身は P3 1件：照会の code の言葉が質問のまま）。中身を直し、round-3 で評価し直した。
   - round-3：合格、指摘なし。
 
+- 区切りのレビュー CP-1（code-reviewer、Opus 5.5 / medium、standards と spec の両方）：範囲 `3b7aece..81fff5b`、合格（P0〜P3 すべて0、`.workbench/code-review/iss-00050-cp1/round-1.json`）。実装担当の報告の lint 0、test 860/860、build 0 を、タスク担当が同じコミットで再び確かめた。
+
 ## Verification
 
 ## Residual Risks / Follow-ups
