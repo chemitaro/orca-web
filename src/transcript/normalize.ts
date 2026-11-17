@@ -9,6 +9,13 @@ export const TRANSCRIPT_SCHEMA = 'orca-web.transcript/v1';
 export const MAX_TEXT_CHARS = 100_000;
 export const MAX_TOOL_INPUT_CHARS = 4_000;
 export const MAX_TOOL_OUTPUT_CHARS = 8_000;
+export const MAX_QUESTION_CHARS = 4_000;
+export const MAX_QUESTION_LABEL_CHARS = 500;
+export const MAX_QUESTION_DESCRIPTION_CHARS = 2_000;
+export const MAX_QUESTION_OTHER_CHARS = 4_000;
+/** Orca の答えは1〜4件、1つの答えの optionIds は64件まで。これを超える質問は部分にしない。 */
+export const MAX_QUESTIONS = 4;
+export const MAX_QUESTION_OPTIONS = 64;
 
 export type TranscriptRole = 'user' | 'assistant' | 'tool' | 'system';
 
@@ -16,7 +23,44 @@ export type TranscriptPart =
   | { type: 'text'; text: string; truncated?: true }
   | { type: 'tool-call'; name: string; input: string; callId: string | null; truncated?: true }
   | { type: 'tool-result'; output: string; isError: boolean; callId: string | null; truncated?: true }
+  | QuestionPart
   | { type: 'unsupported'; what: UnsupportedWhat };
+
+export interface QuestionOptionView {
+  id: string;
+  label: string;
+  description: string | null;
+}
+
+export interface QuestionView {
+  id: string;
+  header: string | null;
+  question: string;
+  multiSelect: boolean;
+  options: QuestionOptionView[];
+  allowOther: boolean;
+  otherAllowsEmpty: boolean;
+}
+
+export type QuestionState = 'pending' | 'answered' | 'cancelled';
+
+export interface QuestionAnswerView {
+  questionId: string;
+  optionIds: string[];
+  other: string | null;
+}
+
+/** 質問の部分。chat は構造化 Chat の journal の question、terminal は端末のエージェントの質問のツールの呼び出し。 */
+export interface QuestionPart {
+  type: 'question';
+  source: 'chat' | 'terminal';
+  prompt: { itemId: string; revision: number } | null;
+  callId: string | null;
+  questions: QuestionView[];
+  state: QuestionState;
+  answers: QuestionAnswerView[] | null;
+  truncated?: true;
+}
 
 /** 「表示できない」の部分の名前。Orca の文字はそのまま入れない。 */
 export type UnsupportedWhat =
@@ -31,6 +75,8 @@ export type UnsupportedWhat =
   | 'unknown';
 
 const JOURNAL_UNSUPPORTED: ReadonlySet<string> = new Set(['diff', 'approval', 'question', 'status', 'plan']);
+
+const QUESTION_UNSUPPORTED: TranscriptPart = { type: 'unsupported', what: 'question' };
 
 export interface TranscriptMessage {
   id: string;
@@ -70,8 +116,8 @@ function withTruncated<T extends TranscriptPart>(part: T, truncated: boolean): T
   return truncated ? { ...part, truncated: true } : part;
 }
 
-/** NativeChatBlock を部品にする。知らない形は unsupported。 */
-function blockPart(block: unknown, shortened: boolean): TranscriptPart {
+/** NativeChatBlock を部品にする。知らない形は unsupported。terminal は端末の会話の件で、質問のツールの呼び出しを question にする。 */
+function blockPart(block: unknown, shortened: boolean, terminal = false): TranscriptPart {
   if (!isRecord(block)) return { type: 'unsupported', what: 'unknown' };
   switch (block.type) {
     case 'text': {
@@ -82,6 +128,10 @@ function blockPart(block: unknown, shortened: boolean): TranscriptPart {
     }
     case 'tool-call': {
       const name = str(block.name) ?? '';
+      if (terminal && block.state !== 'failed' && isAskUserQuestionTool(name)) {
+        const question = terminalQuestionPart(block.input, str(block.callId), shortened);
+        if (question) return question;
+      }
       const c = clipText(inputText(block.input), MAX_TOOL_INPUT_CHARS);
       return withTruncated(
         { type: 'tool-call', name, input: c.text, callId: str(block.callId) },
@@ -118,10 +168,11 @@ function messageOf(
   roleValue: unknown,
   blocks: readonly unknown[],
   shortened: boolean,
+  terminal = false,
 ): { role: TranscriptRole; parts: TranscriptPart[] } {
   const role = typeof roleValue === 'string' && ROLES.has(roleValue) ? (roleValue as TranscriptRole) : null;
   if (role === null) return { role: 'assistant', parts: blocks.map(() => UNKNOWN) };
-  const parts = blocks.map((b) => blockPart(b, shortened));
+  const parts = blocks.map((b) => blockPart(b, shortened, terminal));
   return { role, parts: role === 'system' ? parts.map((p) => (p.type === 'text' ? p : UNKNOWN)) : parts };
 }
 
@@ -131,11 +182,309 @@ export function normalizeNativeMessages(messages: readonly unknown[]): Transcrip
   for (const m of messages) {
     if (!isRecord(m) || typeof m.id !== 'string' || !Array.isArray(m.blocks)) return null;
     if (m.role === 'reasoning') continue;
-    const { role, parts } = messageOf(m.role, m.blocks, m.shortened === true);
+    const { role, parts } = messageOf(m.role, m.blocks, m.shortened === true, true);
     if (parts.length === 0) continue;
     out.push({ id: m.id, role, at: toIso(m.timestamp), parts });
   }
   return out;
+}
+
+// ---- 質問（Orca v1.4.261 の agent-session-question-answer.ts、native-chat-ask.ts、agent-question-answered-intent.ts に合わせる） ----
+
+/** 構造化 Chat の質問の答え。Orca の AgentSessionQuestionAnswer と同じ形（other は任意で、切らない）。 */
+export interface JournalQuestionAnswer {
+  questionId: string;
+  optionIds: string[];
+  other?: string;
+}
+
+/** journal の question の項目を読んだもの。answers は Orca の生の答え（表示用に切らない）。 */
+export interface ParsedJournalQuestion {
+  prompt: { itemId: string; revision: number };
+  questions: QuestionView[];
+  state: QuestionState;
+  answers: JournalQuestionAnswer[] | null;
+  /** 問いの文・ラベル・説明を上限で切ったか。 */
+  truncated: boolean;
+}
+
+/** Orca の isAskUserQuestionTool と同じ判定（英数字だけを小文字にする）。request_user_input_async は含まない。 */
+export function isAskUserQuestionTool(name: string): boolean {
+  const normalized = name.replaceAll(/[^a-z0-9]/gi, '').toLowerCase();
+  return normalized === 'askuserquestion' || normalized === 'requestuserinput';
+}
+
+class Clipper {
+  truncated = false;
+  clip(text: string, max: number): string {
+    if (text.length <= max) return text;
+    this.truncated = true;
+    return text.slice(0, max);
+  }
+}
+
+const SINGLE_QUESTION_ID = 'q1';
+const GROUP_ANSWER_PREFIX = 'question-group:';
+const RESOLUTION_STATES: Readonly<Record<string, QuestionState>> = {
+  pending: 'pending',
+  resolved: 'answered',
+  cancelled: 'cancelled',
+};
+
+const optStr = (value: unknown): string | null | undefined =>
+  value === undefined ? undefined : typeof value === 'string' ? value : null;
+
+/** journal の選択肢。id と label は文字、description は任意の文字。違えば null。 */
+function journalOptions(raw: unknown, c: Clipper): QuestionOptionView[] | null {
+  if (!Array.isArray(raw) || raw.length > MAX_QUESTION_OPTIONS) return null;
+  const out: QuestionOptionView[] = [];
+  for (const o of raw) {
+    if (!isRecord(o) || typeof o.id !== 'string' || o.id.length === 0 || typeof o.label !== 'string') return null;
+    const description = optStr(o.description);
+    if (description === null) return null;
+    out.push({
+      id: o.id,
+      label: c.clip(o.label, MAX_QUESTION_LABEL_CHARS),
+      description: description === undefined ? null : c.clip(description, MAX_QUESTION_DESCRIPTION_CHARS),
+    });
+  }
+  return out;
+}
+
+interface RawJournalQuestion {
+  id: unknown;
+  question: unknown;
+  header?: unknown;
+  multiSelect?: unknown;
+  options: unknown;
+  freeTextQuestionId?: unknown;
+  freeTextInput?: unknown;
+}
+
+function journalQuestion(raw: RawJournalQuestion, c: Clipper): QuestionView | null {
+  if (typeof raw.id !== 'string' || raw.id.length === 0 || typeof raw.question !== 'string') return null;
+  const header = optStr(raw.header);
+  const freeTextQuestionId = optStr(raw.freeTextQuestionId);
+  if (header === null || freeTextQuestionId === null) return null;
+  if (raw.multiSelect !== undefined && typeof raw.multiSelect !== 'boolean') return null;
+  if (raw.freeTextInput !== undefined && !isRecord(raw.freeTextInput)) return null;
+  const options = journalOptions(raw.options, c);
+  if (options === null) return null;
+  return {
+    id: raw.id,
+    header: header === undefined ? null : c.clip(header, MAX_QUESTION_LABEL_CHARS),
+    question: c.clip(raw.question, MAX_QUESTION_CHARS),
+    multiSelect: raw.multiSelect === true,
+    options,
+    allowOther: freeTextQuestionId !== undefined && freeTextQuestionId.length > 0,
+    otherAllowsEmpty: isRecord(raw.freeTextInput) && raw.freeTextInput.allowEmpty === true,
+  };
+}
+
+/** Orca の agentSessionPromptQuestions と同じ規則：questions があればそれ、なければ項目そのものを1問にする。 */
+function journalQuestions(body: Record<string, unknown>, c: Clipper): QuestionView[] | null {
+  if (typeof body.question !== 'string' || !Array.isArray(body.options)) return null;
+  if (body.questions !== undefined) {
+    if (!Array.isArray(body.questions) || body.questions.length === 0 || body.questions.length > MAX_QUESTIONS)
+      return null;
+    const out: QuestionView[] = [];
+    for (const q of body.questions) {
+      if (!isRecord(q)) return null;
+      const view = journalQuestion(q as unknown as RawJournalQuestion, c);
+      if (view === null) return null;
+      out.push(view);
+    }
+    // 外の項目の選択肢も形だけは確かめる（Orca の型では必ずある）。
+    return journalOptions(body.options, new Clipper()) === null ? null : out;
+  }
+  const freeTextQuestionId = optStr(body.freeTextQuestionId);
+  if (freeTextQuestionId === null) return null;
+  const view = journalQuestion(
+    {
+      id: freeTextQuestionId ?? SINGLE_QUESTION_ID,
+      question: body.question,
+      multiSelect: false,
+      options: body.options,
+      freeTextQuestionId,
+      freeTextInput: body.freeTextInput,
+    },
+    c,
+  );
+  return view === null ? null : [view];
+}
+
+/** 答えの形（questionId、optionIds、任意の other）。違えば null。 */
+function answerOf(value: unknown): JournalQuestionAnswer | null {
+  if (!isRecord(value) || typeof value.questionId !== 'string' || !Array.isArray(value.optionIds)) return null;
+  if (!value.optionIds.every((id) => typeof id === 'string')) return null;
+  if (value.other !== undefined && typeof value.other !== 'string') return null;
+  return {
+    questionId: value.questionId,
+    optionIds: [...(value.optionIds as string[])],
+    ...(typeof value.other === 'string' ? { other: value.other } : {}),
+  };
+}
+
+function answersOf(value: unknown): JournalQuestionAnswer[] | null {
+  if (!Array.isArray(value)) return null;
+  const out: JournalQuestionAnswer[] = [];
+  for (const v of value) {
+    const a = answerOf(v);
+    if (a === null) return null;
+    out.push(a);
+  }
+  return out;
+}
+
+function decodeGroupedAnswers(encoded: string): JournalQuestionAnswer[] | null {
+  if (!encoded.startsWith(GROUP_ANSWER_PREFIX)) return null;
+  try {
+    return answersOf(JSON.parse(decodeURIComponent(encoded.slice(GROUP_ANSWER_PREFIX.length))));
+  } catch {
+    return null;
+  }
+}
+
+function decodeFreeText(optionId: string): { questionId: string; answer: string } | null {
+  const separator = optionId.indexOf(':');
+  if (separator <= 0) return null;
+  try {
+    return {
+      questionId: decodeURIComponent(optionId.slice(0, separator)),
+      answer: decodeURIComponent(optionId.slice(separator + 1)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Orca の legacyAgentSessionQuestionAnswers と同じ規則で、古い形の selectedOptionId を解く。解けなければ null。 */
+function legacyAnswers(body: Record<string, unknown>, questions: QuestionView[], optionId: string) {
+  const grouped = body.questions !== undefined ? decodeGroupedAnswers(optionId) : null;
+  if (grouped) return grouped;
+  const questionId = questions.length === 1 ? (questions[0] as QuestionView).id : null;
+  if (questionId === null) return null;
+  const options = Array.isArray(body.options) ? body.options : [];
+  if (options.some((o) => isRecord(o) && o.id === optionId)) return [{ questionId, optionIds: [optionId] }];
+  const freeText = decodeFreeText(optionId);
+  const freeTextQuestionId = typeof body.freeTextQuestionId === 'string' ? body.freeTextQuestionId : '';
+  const allowEmpty = isRecord(body.freeTextInput) && body.freeTextInput.allowEmpty === true;
+  return freeTextQuestionId &&
+    freeText?.questionId === freeTextQuestionId &&
+    (freeText.answer.trim().length > 0 || allowEmpty)
+    ? [{ questionId, optionIds: [], other: freeText.answer }]
+    : null;
+}
+
+/**
+ * journal の question の項目（agentSession.history の page.items の1件）を読む。知らない形なら null（F-03）。
+ * 会話の正規化と、答えの送信の読み（`readQuestion`）が共有する。
+ */
+export function parseJournalQuestion(item: unknown): ParsedJournalQuestion | null {
+  if (!isRecord(item) || typeof item.itemId !== 'string' || item.itemId.length === 0 || !isRecord(item.body))
+    return null;
+  const body = item.body;
+  if (body.kind !== 'question') return null;
+  const revision = item.revision;
+  if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision <= 0) return null;
+  const resolution = body.resolution;
+  if (!isRecord(resolution) || typeof resolution.state !== 'string') return null;
+  const state = Object.hasOwn(RESOLUTION_STATES, resolution.state) ? RESOLUTION_STATES[resolution.state] : undefined;
+  if (state === undefined) return null;
+  const c = new Clipper();
+  const questions = journalQuestions(body, c);
+  if (questions === null) return null;
+  let answers: JournalQuestionAnswer[] | null = null;
+  if (resolution.answers !== undefined) {
+    answers = answersOf(resolution.answers);
+    if (answers === null) return null;
+  } else if (typeof resolution.selectedOptionId === 'string') {
+    answers = legacyAnswers(body, questions, resolution.selectedOptionId);
+  }
+  return {
+    prompt: { itemId: item.itemId, revision },
+    questions,
+    state,
+    answers: state === 'answered' ? answers : null,
+    truncated: c.truncated,
+  };
+}
+
+function journalQuestionPart(item: Record<string, unknown>): TranscriptPart {
+  const parsed = parseJournalQuestion(item);
+  if (parsed === null) return QUESTION_UNSUPPORTED;
+  const c = new Clipper();
+  const answers =
+    parsed.answers?.map((a) => ({
+      questionId: a.questionId,
+      optionIds: a.optionIds,
+      other: a.other === undefined ? null : c.clip(a.other, MAX_QUESTION_OTHER_CHARS),
+    })) ?? null;
+  return withTruncated<QuestionPart>(
+    {
+      type: 'question',
+      source: 'chat',
+      prompt: parsed.prompt,
+      callId: null,
+      questions: parsed.questions,
+      state: parsed.state,
+      answers,
+    },
+    parsed.truncated || c.truncated || item.shortened === true,
+  );
+}
+
+/** Orca の parseCanonicalQuestionsInput と同じ規則（question か title、header、multiSelect か multiple・multi、options はラベルの文字か {label, description}）。 */
+function terminalQuestions(input: unknown, c: Clipper): QuestionView[] | null {
+  let value = input;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!isRecord(value) || !Array.isArray(value.questions) || value.questions.length === 0) return null;
+  const out: QuestionView[] = [];
+  for (const raw of value.questions) {
+    if (!isRecord(raw)) continue;
+    const text = typeof raw.question === 'string' ? raw.question : typeof raw.title === 'string' ? raw.title : '';
+    const multiSelect = 'multiSelect' in raw ? raw.multiSelect === true : raw.multiple === true || raw.multi === true;
+    const options: QuestionOptionView[] = [];
+    for (const o of Array.isArray(raw.options) ? raw.options : []) {
+      const label = typeof o === 'string' ? o : isRecord(o) && typeof o.label === 'string' ? o.label : null;
+      if (label === null) continue;
+      const description = isRecord(o) && typeof o.description === 'string' ? o.description : null;
+      options.push({
+        id: String(options.length),
+        label: c.clip(label, MAX_QUESTION_LABEL_CHARS),
+        description: description === null ? null : c.clip(description, MAX_QUESTION_DESCRIPTION_CHARS),
+      });
+    }
+    if (!text && options.length === 0) continue;
+    if (options.length > MAX_QUESTION_OPTIONS) return null;
+    out.push({
+      id: String(out.length),
+      header: typeof raw.header === 'string' ? c.clip(raw.header, MAX_QUESTION_LABEL_CHARS) : null,
+      question: c.clip(text, MAX_QUESTION_CHARS),
+      multiSelect,
+      options,
+      allowOther: false,
+      otherAllowsEmpty: false,
+    });
+  }
+  return out.length > 0 && out.length <= MAX_QUESTIONS ? out : null;
+}
+
+/** 端末のエージェントの質問のツールの呼び出しを question の部分にする。読めなければ null（ツールの呼び出しのまま）。 */
+function terminalQuestionPart(input: unknown, callId: string | null, shortened: boolean): QuestionPart | null {
+  const c = new Clipper();
+  const questions = terminalQuestions(input, c);
+  if (questions === null) return null;
+  return withTruncated<QuestionPart>(
+    { type: 'question', source: 'terminal', prompt: null, callId, questions, state: 'pending', answers: null },
+    c.truncated || shortened,
+  );
 }
 
 /** 出さない journal の kind（会話の本文ではない）。 */
@@ -185,6 +534,10 @@ export function normalizeJournalItems(items: readonly unknown[]): TranscriptMess
         );
       }
       out.push({ id, role: 'tool', at, parts });
+      continue;
+    }
+    if (kind === 'question') {
+      out.push({ id, role: 'assistant', at, parts: [journalQuestionPart(item)] });
       continue;
     }
     const what = typeof kind === 'string' && JOURNAL_UNSUPPORTED.has(kind) ? (kind as UnsupportedWhat) : 'unknown';
