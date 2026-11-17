@@ -36,3 +36,8 @@ ID: "iss-00049"
   - `node --test test/transcript/*.test.ts test/send/*.test.ts`：174 pass・0 fail。`npm run lint`：成功。`npm test`：849 pass・0 fail。
   - QuestionView に必ず付く preview を足したので、`test/send/answer.test.ts` の仮の問いに `preview: false` を足した（期待値は変えていない）。
   - 途中の状態：画面（S-03 の前）は、端末の async の質問を、同じ callId の受付の tool-result で答え済みに見せる（D-07 で直す）。
+- S-02（コミット f40c8ee）：キーの組の門・アダプター・能力 answerKeys（D-04）、SendService の callId の意図と確定・照会・status の answerKeys・answerMessage と、記録の keys・message の行と hasAnswer（D-05）、`/api/answer/intent` の callId の物と readTranscript のつなぎ（D-06）。テストを先に書いて失敗を確かめてから作った（T-06〜T-12）。
+  - `npm run lint`：成功。`npm test`：896 pass・0 fail。`npm run build`：成功。
+  - 今の送信と構造化 Chat の答えのテストは、status の期待値に answerKeys・answerMessage を足したほかは変えずに通る（`test/server/send-api.test.ts` の偽の status にも同じ2つの項目を足した）。
+  - FeatureName に answerKeys を足したので、能力の表を手で組む `test/orca/open.test.ts`、`test/state/helpers.ts`、`test/transcript/fixture.ts` に `answerKeys: feature(false)` を1行ずつ足した（計画の対象の外。型の検査のため）。
+  - 読み方：`SendDeps.readTranscript` は任意にした（ないときは callId の答えは unreachable）。サーバーの組み立ては `src/server/main.ts` で `transcriptTail(transcriptReader)` をつなぐ。status は端末の確かめを1回だけ読み、permission の違いだけで送信とキーの組を使い分ける（端末の失敗のときの rpc の answer は2回目の preflight を読まずに terminal_route）。keys の invalid_answer の reason は、64組を超えると too_large、組が0なら no_choice。
