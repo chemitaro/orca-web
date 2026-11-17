@@ -134,7 +134,20 @@ export interface TranscriptMessage {
   /** ISO の時刻。Orca が持たなければ null。 */
   at: string | null;
   parts: TranscriptPart[];
+  /** 端末の利用者の発言で、まだ届いていないもの（Orca の isDeliveredNativeChatUserMessage に当たらない）。後の発言の質問の答えに数えない。 */
+  undelivered?: true;
 }
+
+/** Orca の isDeliveredNativeChatUserMessage が届いていないとする印（送っていない、止めた、送り直し待ち、待ち行列、送信中、届け先の状態）。 */
+const UNDELIVERED_FLAGS = [
+  'unsent',
+  'stoppedBeforeStart',
+  'awaitsRetry',
+  'sentWhileStopping',
+  'queued',
+  'pendingSend',
+  'deliveryState',
+] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -241,7 +254,8 @@ export function normalizeNativeMessages(messages: readonly unknown[]): Transcrip
     if (m.role === 'reasoning') continue;
     const { role, parts } = messageOf(m.role, m.blocks, m.shortened === true, true);
     if (parts.length === 0) continue;
-    out.push({ id: m.id, role, at: toIso(m.timestamp), parts });
+    const undelivered = role === 'user' && UNDELIVERED_FLAGS.some((flag) => Boolean(m[flag]));
+    out.push({ id: m.id, role, at: toIso(m.timestamp), parts, ...(undelivered ? { undelivered: true as const } : {}) });
   }
   return out;
 }

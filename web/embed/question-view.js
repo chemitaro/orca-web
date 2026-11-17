@@ -5,6 +5,9 @@
 // 自動で送り直さない。照会は「確かめる」を押したときだけ。値は文字にして返し、HTML として解かない（描く側は textContent を使う）。
 
 /** 理由と結果の言葉（1か所）。識別子ではなく言葉で示す。 */
+/** callId の答え（keys・message）の確定が refused のとき。送る前の記録を書いた後なので押し直せない（承認の言葉の表には混ぜない）。 */
+export const CALL_REFUSED_REASON = '送っていません。この質問には、ここからはもう送れません。Orca で答えてください';
+
 export const QUESTION_REASONS = {
   loading: '答えられるか確かめています…',
   status_unavailable: '答えられるか確かめられません（orca-web につながりません）',
@@ -600,7 +603,8 @@ export function createCallAnswerer(deps) {
       if (confirm?.status === 200 && typeof result.outcome === 'string') {
         if (DELIVERED.has(result.outcome))
           return keys ? { kind: 'done', note: QUESTION_REASONS.keys_sent } : { kind: 'done' };
-        if (result.outcome === 'refused') return outcomeResult(result, operationId, QUESTION_REASONS);
+        // 送る前の記録を書いた後の拒みなので、同じ callId には二度と送れない（R-04）。押し直せない形にする。
+        if (result.outcome === 'refused') return { kind: 'blocked', reason: CALL_REFUSED_REASON };
         return lost(operationId, result.detail);
       }
       // 送る前の拒み（ok: false と error）は送っていない。ほかの形は届いたか分からない。

@@ -400,3 +400,18 @@ test('iss-00049 T-15：message の質問は受付の結果では pending のま�
   ]);
   assert.equal(byAssistant[0].part.state, 'pending', '利用者の発言だけ');
 });
+
+test('FQG2 T-15：届いていない（undelivered の）引用の発言では、message の質問は pending のまま', () => {
+  const reply = '> どちらに しますか\n\nはい';
+  const rows = buildChat([
+    msg('m1', 'assistant', [messageQuestion()]),
+    { ...msg('m2', 'user', [{ type: 'text', text: reply }]), undelivered: true },
+  ]);
+  assert.equal(rows[0].part.state, 'pending');
+  const later = buildChat([
+    msg('m1', 'assistant', [messageQuestion()]),
+    { ...msg('m2', 'user', [{ type: 'text', text: reply }]), undelivered: true },
+    msg('m3', 'user', [{ type: 'text', text: reply }]),
+  ]);
+  assert.equal(later[0].part.state, 'answered', '後で届いた引用で答え済み');
+});

@@ -733,7 +733,8 @@ test('T-07 sendKeyGroup：writeSettlement と accepted と RPC の誤りを acce
     [ok({ send: { accepted: false, writeSettlement: { outcome: 'accepted' } } }), 'unknown'],
     [ok({ send: { accepted: true, writeSettlement: { outcome: 'pending' } } }), 'unknown'],
     [ok({ send: { accepted: true, writeSettlement: null } }), 'unknown'],
-    [ok({ send: { accepted: true } }), 'accepted'],
+    // writeSettlement がなければ書き込みの完了を確かめられない（requireWriteSettlement を知らない古い Orca）
+    [ok({ send: { accepted: true } }), 'unknown'],
     [ok({ send: { accepted: false } }), 'refused'],
     [ok({ send: {} }), 'unknown'],
     [ok({}), 'unknown'],
@@ -1021,4 +1022,13 @@ test('T-05 checkApproval は今の状態を読むだけで結果を返し、送�
   reply = { ok: false, kind: 'timeout', message: 'private' };
   assert.deepEqual(await check(), { ok: false, error: 'unreachable' });
   assert.ok(calls.every((c) => c.method === 'agentSession.history'));
+});
+
+test('D-04 answerKeys：writeSettlement のない受け取りは1組目で unconfirmed として止め、次を送らない', async () => {
+  const { adapter, calls } = keyRpc([ok({ send: { accepted: true } }), settled('accepted')]);
+  assert.deepEqual(await adapter.answerKeys(terminalTarget(), ['1', '\r'], sleeper([])), {
+    outcome: 'unknown',
+    detail: { code: 'unconfirmed', sentGroups: 0, totalGroups: 2 },
+  });
+  assert.equal(calls.length, 1);
 });

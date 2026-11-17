@@ -209,7 +209,7 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 - 照会は送信と同じ `GET /api/send/<操作の ID>?check=1`。質問の今の状態を読み、記録の答えと同じ答えが付いていれば submitted、別の答えなら refused（`resolved_by_other`）、まだ未回答なら unknown（`prompt_pending`）。自動で送り直さない。
 - 送れるかの口 `GET /api/send/status` は `answer`（構造化 Chat の RPC）、`answerKeys`（キーの列）、`answerMessage`（後の発言）をそれぞれ `{available, reason}` で返す。
 - キーの列の結果：全部の組が受けられたら `input_accepted`（`keys_sent`）、1組目が拒まれたら refused（`not_sent`）、1組目が届いたか分からなければ unknown（`unconfirmed`）、途中で止まれば unknown（`partial_sent`）。detail に送った組の数 `sentGroups` と全部の数 `totalGroups` が付く。照会は会話の記録の今の状態だけを読み（答え済みなら `resolved_unverified`）、送り直さない。
-- 記録：答えの送る前の行は `action: "answer"`、`mode`（rpc・keys・message）、itemId と revision か callId、問いの数、答えの digest、組の数だけを持ち、答えの中身（選んだ id、ラベル、その他の文、キー、発言の文）を書かない。
+- 記録：答えの送る前の行は `action: "answer"`、`mode`（keys・message。構造化 Chat の rpc の行は mode を持たない）、itemId と revision か callId、問いの数、答えの digest、組の数だけを持ち、答えの中身（選んだ id、ラベル、その他の文、キー、発言の文）を書かない。
 
 ### 許可の確認（承認）に答える
 

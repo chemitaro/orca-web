@@ -721,7 +721,8 @@ export class SendService {
       ? await this.#deps.readTranscript(agentId)
       : ({ ok: false, error: 'unreachable' } as const);
     if (!read.ok) return SendService.#transcriptRefusal(read.error);
-    const found = findCallQuestion(read.messages, callId);
+    // 届くのを待っている引用の発言も答えに数え、同じ質問に二度送らない（R-05）。
+    const found = findCallQuestion(read.messages, callId, { countUndelivered: true });
     if (found === null) return { ok: false, error: 'target_changed', reason: 'question_gone' };
     if (found.state !== 'pending') return { ok: false, error: 'target_changed', reason: 'question_answered' };
     // 切った問いの文やラベルでは、Orca と同じ発言を作れず、端末が出している問いと同じかも確かめられない。

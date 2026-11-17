@@ -181,3 +181,12 @@ test('FQG sameQuestions：問いの文・header・複数選択・選択肢の id
   }
   assert.equal(sameQuestions(base, [...base, ...base]), false);
 });
+
+test('FQG2 T-05 findCallQuestion：届いていない引用の発言は、既定では数えず、countUndelivered なら数える', () => {
+  const q = question('a2', 'message', '一つ目');
+  const undelivered: TranscriptMessage = { ...msg('user', say('> 一つ目\n\n甲')), undelivered: true };
+  const rows = [msg('assistant', q), undelivered];
+  assert.equal(findCallQuestion(rows, 'a2')?.state, 'pending', 'カードと同じく届いた発言だけ');
+  assert.equal(findCallQuestion(rows, 'a2', { countUndelivered: true })?.state, 'answered', '送る前は二重を避ける');
+  assert.equal(findCallQuestion([...rows, msg('user', say('> 一つ目\n\n甲'))], 'a2')?.state, 'answered');
+});

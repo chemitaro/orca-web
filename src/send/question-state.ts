@@ -26,8 +26,16 @@ export function quotesQuestion(text: string, questions: readonly Pick<QuestionVi
   });
 }
 
-/** callId の質問の部分（answerVia keys か message）を探し、今の状態を決める。同じ callId が2つあれば後の物。見つからなければ null。 */
-export function findCallQuestion(messages: readonly TranscriptMessage[], callId: string): CallQuestion | null {
+/**
+ * callId の質問の部分（answerVia keys か message）を探し、今の状態を決める。同じ callId が2つあれば後の物。見つからなければ null。
+ * message の質問の答えには、届いた利用者の発言だけを数える（カードの答え済みと同じ）。countUndelivered が真なら届いていない発言の引用も数える
+ * （送る前の確かめ。届くのを待っている答えがあれば、もう一度送らない）。
+ */
+export function findCallQuestion(
+  messages: readonly TranscriptMessage[],
+  callId: string,
+  { countUndelivered = false }: { countUndelivered?: boolean } = {},
+): CallQuestion | null {
   let found: { part: QuestionPart; message: number; index: number } | null = null;
   messages.forEach((m, mi) => {
     m.parts.forEach((p, pi) => {
@@ -48,6 +56,7 @@ export function findCallQuestion(messages: readonly TranscriptMessage[], callId:
       if (
         part.answerVia === 'message' &&
         m.role === 'user' &&
+        (countUndelivered || m.undelivered !== true) &&
         p.type === 'text' &&
         quotesQuestion(p.text, part.questions)
       ) {

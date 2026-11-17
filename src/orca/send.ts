@@ -223,7 +223,7 @@ function readFailure(outcome: Extract<RpcOutcome, { ok: false }>, method: string
   return { ok: false, error: 'unknown_shape' };
 }
 export type KeyAck = 'accepted' | 'refused' | 'unknown';
-/** Orca の readTerminalSendAcknowledgment と同じ読み。unverifiable は unknown。 */
+/** Orca の readTerminalSendAcknowledgment を、キーの組では厳しくした読み（writeSettlement がなく accepted が真なら unknown）。unverifiable は unknown。 */
 function keyAcknowledgment(result: unknown): KeyAck {
   const reply = object(result);
   if (!('send' in reply)) return 'unknown';
@@ -238,7 +238,7 @@ function keyAcknowledgment(result: unknown): KeyAck {
     }
     return 'unknown';
   }
-  if (receipt.accepted === true) return 'accepted';
+  // キーの組は書き込みの完了を求める。writeSettlement がなければ（古い Orca）受けたとは言えないので、次の組を送らない。
   if (receipt.accepted === false) return 'refused';
   return 'unknown';
 }

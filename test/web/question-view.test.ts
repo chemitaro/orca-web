@@ -667,9 +667,18 @@ test('iss-00049 T-14：keys の partial_sent・unconfirmed・応答の欠けは 
     kind: 'unknown',
     operationId: 'op-1',
   });
+  // 確定の refused は送る前の記録を書いた後なので、同じ callId には二度と送れない（押し直せない blocked）
+  const blocked = {
+    kind: 'blocked',
+    reason: '送っていません。この質問には、ここからはもう送れません。Orca で答えてください',
+  };
   assert.deepEqual(
     await run('keys', { status: 200, body: { outcome: 'refused', detail: { code: 'not_sent', sentGroups: 0 } } }),
-    { kind: 'refused', reason: '送っていません' },
+    blocked,
+  );
+  assert.deepEqual(
+    await run('message', { status: 200, body: { outcome: 'refused', detail: { refusedReason: 'no-agent' } } }),
+    blocked,
   );
 });
 

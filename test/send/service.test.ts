@@ -2567,3 +2567,18 @@ test('FQG 切った keys の質問は prompt_unsupported で送らない', async
   });
   assert.equal(f.writes().length, 0);
 });
+
+test('FQG2 送る前の確かめは、届いていない引用の発言があっても question_answered で拒む（二重を避ける）', async (t) => {
+  const f = await callFixture(t);
+  f.setNative([
+    callMessage('request_user_input_async', ASYNC_INPUT),
+    { ...userSays('> 仮の後の問い\n\nラベル秘密A'), queued: true },
+  ]);
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  assert.deepEqual(await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'question_answered',
+  });
+  assert.equal(f.writes().length, 0);
+});

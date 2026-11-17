@@ -1167,3 +1167,29 @@ test('T-02 端末：interactivePrompt のほかの項目は出さず、上限を
   assert.equal(part.truncated, true);
   assert.ok(!JSON.stringify(messages).includes('仮の秘密'));
 });
+
+test('FQG2 端末の role user の件のうち、Orca の届いた発言に当たらないものに undelivered: true を付ける', () => {
+  const user = (extra: Record<string, unknown>) => ({
+    id: 'u',
+    role: 'user',
+    timestamp: 0,
+    blocks: [{ type: 'text', text: 'x' }],
+    ...extra,
+  });
+  for (const extra of [
+    { unsent: true },
+    { stoppedBeforeStart: true },
+    { awaitsRetry: true },
+    { sentWhileStopping: true },
+    { queued: true },
+    { pendingSend: { id: 'p' } },
+    { deliveryState: 'pending' },
+  ]) {
+    assert.equal(normalizeNativeMessages([user(extra)])?.[0]?.undelivered, true, JSON.stringify(extra));
+  }
+  for (const extra of [{}, { queued: false, unsent: false }]) {
+    assert.equal('undelivered' in (normalizeNativeMessages([user(extra)])?.[0] ?? {}), false, JSON.stringify(extra));
+  }
+  const assistant = normalizeNativeMessages([{ ...user({ queued: true }), role: 'assistant' }])?.[0];
+  assert.equal(assistant && 'undelivered' in assistant, false);
+});
