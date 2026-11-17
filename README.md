@@ -220,16 +220,21 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 - カード：題、道具、説明、理由、要るパス、計画の本文と計画のファイル、操作の中身（長ければ下見と「詳しく」）、選択肢のボタン（ラベルと説明、最初の選択肢が主）。答え済みは選んだ選択肢を示して閉じ、取り消されたものは「取り消されました」と示して閉じる。
 - 構造化 Chat の承認は、カードから答えられる。Orca のチャットの画面と同じ RPC `agentSession.respondToApproval`（itemId と revision の比較つき、optionId）で1回だけ送る。
 - 「常に許可」「常に拒否」のように後の確認を省く選択（intent が `allow_always`・`reject_always`）は、押すと確かめの段（何が以後省かれるかの1行と「<ラベル> で答える」「やめる」）を出し、確かめて初めて送る。サーバーも `confirmPersistent: true` のない意図ではその選択肢を受けない。確かめの段にいる間に送れなくなれば（`sendEnabled` が偽など）、「<ラベル> で答える」は押せず理由を示す（「やめる」は押せる）。
-- 端末のエージェントの許可の確認（Claude Code の permission prompt など）は、タブの agentStatus の `interactivePrompt` から道具と要約を読み、会話の最後にカードで出す（待っている間だけ。タブの今のセッションが読んでいる会話のセッションと同じときだけ付け、切り替え直後の古い会話には付けない）。答えるボタンは出さず、「端末のエージェントの許可は、Orca で答えてください」と「Orca で開く」を出す。端末への答え（キーの列）は後の Issue。
+- 端末のエージェントの許可の確認（Claude Code の permission prompt など）は、タブの agentStatus の `interactivePrompt` から道具と要約を読み、会話の最後にカードで出す（待っている間だけ。タブの今のセッションが読んでいる会話のセッションと同じときだけ付け、切り替え直後の古い会話には付けない）。カードから答えられる（端末の Claude Code と Codex）。選択肢は Orca と同じ「Allow once」（allow_once）と「Reject」（reject_once）の2つだけで、常に許可は出さない（Orca も出さない）。答えは Orca と同じ1キー（許可は `1`、拒否は Escape）を、`terminal.send`（enter 偽、書き込みの受け取りを求める）で1回だけ送る。
+  - 許可の確認ごとに同一性 `promptId`（`interactivePrompt` と `stateStartedAt` の digest。`ta_` と16進20字）を持ち、意図と確定のどちらでも、送る前に、宛先のペインのタブの agentStatus が待っていて同じ `promptId` の承認を出していること、前面のプロセスがそのエージェントであること、同じ `promptId` に前に送り始めていないことを確かめる。送る前の記録を書いた後、キーを送る直前にも前面と agentStatus を読み直し、違えば送らない。
+  - 確かめられない（`interactivePrompt` がない）なら送らずに止まり、理由と「Orca で開く」を出す（押し直せる）。許可の確認が消えた・変わった、前に送った、切った承認、キーを知らない種類のエージェントでは押し直せない形にする。端末の承認の未回答のカードは、いつも「Orca で開く」を出す。
+  - 届いたか分からない（unknown）ときは自動で送り直さず、「届いたか分かりません。Orca で確かめてください」の帯と「Orca で開く」を出す。送り始めた `promptId` には、結果によらず二度と送らない（起動し直しても記録から分かる）。
+  - 送れるかは `GET /api/send/status` の `answerKeys`（端末の質問のキーの組と同じ確かめ）で決める。
+  - 残る危険：タブの一覧に `interactivePrompt` が出ない Orca ではカードは出ない（安全側）。送る直前の読みと書き込みの間に許可の確認が変わると、`1` が別の確認を許しうる・Escape が動き出したターンを止めうる（Orca 自身は同じ処理の中で読み直すので、隙間はそれより広い）。端末の実機の確かめは本人の確かめに残してある（iss-00054 の report.md）。
 - URL を開く承認と、この版の知らない種類の承認は読むだけ（「Orca で答えてください」と「Orca で開く」）。
 - 答えられないとき（`sendEnabled` が偽、Orca が承認の能力を持たない、宛先が送れない状態）は、カードは読めるが押せず、理由を1行で示す。
 
 承認の API（送信と同じ守り）：
 
-- `POST /api/approval/intent`：`{agent, prompt: {itemId, revision}, optionId, confirmPersistent?, target?}`。宛先を解き、Orca の会話を読み直して、承認が同じ revision で未回答なこと、選択肢があること、常に許可・常に拒否なら `confirmPersistent` が真なことを確かめ、使い捨ての票を返す。誤りは質問の答えと同じ状態と理由（選択肢の誤りと未確認は 400 `invalid_answer`）。
+- `POST /api/approval/intent`：構造化 Chat は `{agent, prompt: {itemId, revision}, optionId, confirmPersistent?, target?}`、端末は `{agent, promptId, optionId, confirmPersistent?, target?}`（prompt と promptId はちょうど片方）。宛先を解き、Orca の会話を読み直して、承認が同じ revision で未回答なこと、選択肢があること、常に許可・常に拒否なら `confirmPersistent` が真なことを確かめ、使い捨ての票を返す。誤りは質問の答えと同じ状態と理由（選択肢の誤りと未確認は 400 `invalid_answer`）。
 - `POST /api/approval/confirm`：`{ticket, optionId}`。確かめ直し、送る前の記録を書いてから1回だけ送る。照会は `GET /api/send/<操作の ID>?check=1`（同じ選択肢が付いていれば submitted、別の選択肢なら refused `resolved_by_other`）。
 - 送れるかの口 `GET /api/send/status` は `approval: {available, reason}` も返す。
-- 記録：承認の送る前の行は `action: "approval"`、itemId、revision、intent、選択肢の digest だけを持ち、選択肢の id・ラベルと承認の中身を書かない。
+- 記録：承認の送る前の行は `action: "approval"`、itemId、revision、intent、選択肢の digest だけを持ち、選択肢の id・ラベルと承認の中身を書かない。端末の承認の行は `mode: "keys"`、`route: "terminal"`、promptId、intent、digest、組の数（1）だけで、キーのバイト・道具の名前・要約を書かない。端末の承認の照会は、同じ `promptId` の許可の確認がまだ待っていれば `prompt_pending`、なければ `resolved_unverified`（どちらの答えで抜けたかは分からない）。
 
 ### スマホ（tailnet）
 
