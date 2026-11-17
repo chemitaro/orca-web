@@ -74,7 +74,7 @@ requirements: {
 		acceptance: [
 			"Claude の単一選択・その他の文・複数選択・複数問・preview の問いと、Codex の単一選択・メモ・複数問の答えで、組の列が Orca の関数と同じになる（Orca のテストの例と同じ値）",
 			"組の間が 1000ms で、前の組の結果を待ってから次を送る",
-			"試しのエージェント（端末の Claude）に小窓から答え、エージェントが答えを受け取って続け、カードが答え済みの閉じた形になる",
+			"端末の実機（試しの端末の Claude に小窓から答え、エージェントが受け取って続け、カードが答え済みの閉じた形になること、タブの agentStatus に interactivePrompt・toolName が出ること）は、本人の確かめとする（統括の判断 2026-11-18）。この Issue では、interactivePrompt・toolName が読めないときに1組も送らず prompt_unverified で止まること（失敗を成功と示さないこと）をテストで確かめ、残る危険として report.md と README に書く",
 		]
 	}
 	"R-03": {
@@ -182,9 +182,10 @@ decisions: [
 	"Codex の複数選択と preview の問い、Claude の preview の問いのその他の文は、答えないか出さない（Orca の列が先頭の選択だけを使う、メモの意味が選択と違うため。安全側）。タスク担当の判断",
 	"途中まで送った答えは、カードからも、サーバーからも送り直さない（依頼書の2）",
 	"記録に中身を残さない（依頼書の2。iss-00048 の答えの記録と同じ）",
+	"端末のエージェントへのキーの組の答えの実機の確かめ（R-02 の受け入れの3つめ、T-18 の端末の部分）は本人の確かめに残す。試しのエージェントを端末で立てる道（worker-start は本人の設定で構造化 Chat、orca terminal create はフックが止める）を本人が決めていないため。統括の判断（2026-11-18、orchestration の返事 msg_a98a464ea8fc 付近、案 C）。PR の前に本人が道を決めたら実機の確かめを足す",
 	"送るクライアントは今の送信と同じ `{id: 'orca-web', type: 'desktop'}` にする（type mobile は Orca のモバイルの入力の床を取るので使わない）",
 ]
 
 questions: [
-	"タブの agentStatus に interactivePrompt と toolName が `session.tabs.listAll` で出るかは、Orca のソースの型（AgentStatusEntry）にあるが、実機で質問を待つ端末のタブでは未確認。出なければ R-03 で prompt_unverified になり答えられない（安全側）。S-04 の実機の確かめで確かめ、出なければ統括に知らせて設計を直す",
+	"タブの agentStatus に interactivePrompt と toolName が `session.tabs.listAll` で出るかは、Orca のソースの型（AgentStatusEntry）にあるが、実機で質問を待つ端末のタブでは未確認。出なければ R-03 で prompt_unverified になり答えられない（安全側）。試しのエージェントを端末で立てる道が決まらないので、本人の確かめに残す（統括、2026-11-18）。出ないと分かったら後の Issue で設計を直す",
 ]

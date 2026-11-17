@@ -34,7 +34,10 @@ ID: "iss-00049"
   - 送信の記録（試しの `sends/sends.jsonl`）：before の行は `action: answer`、`mode: message`、callId、questionCount、digest だけで、『みかん』『りんご』の出現は 0。after は accepted（queuedState waiting）。
   - 幅 1280px と 390px、明暗の4通りで、カードのはみ出し 0、文書の横スクロールなし、選択肢と送るボタンの高さ 44px 以上。
 - 写し（Scope の `artifacts/`。試しのエージェントへの依頼の文と無害な質問だけで、業務の会話は写していない）：`live-async-{1280,390}-{light,dark}-before.png`、`live-async-answer-390-light-{before,selected,sent,done}.png`。画面の実装担当の偽の会話による端末の質問のカード（未回答、途中まで送った帯、届いたか分からない帯、答えずに閉じた形）の写しは `.workbench/implement/iss-00049/render/`。
-- 端末のエージェント（キーの列）の実機の確かめ：試しのエージェントを端末で立てる道（`worker-start` は本人の設定で構造化 Chat、`orca terminal create` はフックが止める）について、統括が本人に案を問い中（2026-11-18）。
+- sendEnabled 偽：画面の実装担当が、一時の orca-web（偽の会話、sendEnabled 偽）とヘッドレスの Chrome で、端末の質問のカードが読めて押せず理由が出ること、1280px・390px・明暗の8通りではみ出し 0 を確かめた（`.workbench/implement/iss-00049/render/`）。
+- 端末のエージェント（キーの列）の実機の確かめ：**本人の確かめに残す**（統括の判断、2026-11-18、案 C）。試しのエージェントを端末で立てる道（`worker-start` は本人の設定で構造化 Chat、`orca terminal create --command` はフックが『Run の外の起動』として止める）を本人が決めていないため。
+  - 実機で未確認の前提：`session.tabs.listAll` のタブの agentStatus に、質問を待つ間 `interactivePrompt` と `toolName` が出ること（Orca のソースの型 AgentStatusEntry にはある）。出なければ keys の答えはいつも `prompt_unverified` で1組も送らずに止まり、カードは「端末がこの質問を出しているか確かめられません」と示す（送ったと示さない）。これは `test/send/service.test.ts` の『interactivePrompt がない』『state が working』『interactivePrompt が消えた』の例（書き込みの RPC 0 回）と、`test/web/question-view.test.ts` の T-14 の例で確かめてある。README にも書いた。
+  - 本人の確かめの手順：(1) 端末で Claude Code（haiku など）を1つ立てる。(2) 試しの orca-web を `npm run trial -- --state-dir .workbench/trial-49 --orca-port 8796 --page-port 47940 --forbidden-port 47941` で起動し、`.workbench/trial-49/settings.json` の `sendEnabled` を真にする（常駐の 8791 は変えない）。(3) その Claude に無害な AskUserQuestion（選択肢2つ）を出させる。(4) `http://127.0.0.1:8796/embed/agent?id=<エージェントの id>` のカードで選び「答える」を押す。(5) 「答えを送りました」の後、Claude が答えを受け取って続け、カードが答え済みの閉じた形になることを見る。`prompt_unverified` と出たら、上の前提が成り立たない（設計を直す後の Issue が要る）。(6) 終えたら試しのエージェントと試しの orca-web を止める。
 
 ## 逸脱と判断
 

@@ -114,7 +114,7 @@ design: {
 		title: "文書と実機の確かめ"
 		text: """
 			README.md と AGENTS.md に、答え方（rpc・keys・message）、キーの組の門、確かめ、途中で止めること、二度と送らないこと、承認が後の Issue であることを書く。
-			実機：試しの orca-web（別のポート、専用の settings で sendEnabled を真）と `npm run trial` の試しの画面で、試しのエージェント（端末の Claude haiku。出来れば Codex も）に無害な質問を出させ、小窓から答え、エージェントが答えを受け取ったことを会話の状態で確かめる。単一選択と、出来れば複数問か複数選択も。タブの agentStatus に interactivePrompt と toolName が出ることを、値を出さずに鍵の有無で確かめる。sendEnabled 偽でカードが読めて押せないことも見る。Mac の幅と 390px、明暗の写しを Scope の artifacts に置く（会話の中身は写さない）。試しのエージェントは止める。
+			実機：端末のキーの組の実機の確かめは本人の確かめに残す（統括の判断 2026-11-18。試しのエージェントを端末で立てる道が決まらないため）。README と report.md に、interactivePrompt・toolName が listAll に出なければ keys の答えはいつも prompt_unverified で送らず止まる（安全側）という残る危険と、本人の確かめの手順を書く。タスク担当は、試しの orca-web（別のポート、専用の settings で sendEnabled を真）と `npm run trial` の試しの画面で、試しのエージェント（構造化 Chat の Codex）に無害な後の発言の質問を出させ、小窓から答え、エージェントが答えを受け取ったことを会話の状態で確かめる。sendEnabled 偽でカードが読めて押せないことも見る。Mac の幅と 390px、明暗の写しを Scope の artifacts に置く（会話の中身は写さない）。試しのエージェントは止める。
 			"""
 		satisfies: ["R-02", "R-06", "R-08"]
 	}

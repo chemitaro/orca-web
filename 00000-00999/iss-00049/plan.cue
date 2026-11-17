@@ -37,7 +37,7 @@ steps: {
 	}
 	"S-04": {
 		title:    "README.md と AGENTS.md、試しのエージェントでの実機の確かめと写し（D-08）"
-		text:     "タスク担当が行う。D-08 のとおり。確かめ：T-18、T-19。完了：report.md の Verification に実機の結論と写しがあり、`npm run lint`、`npm test`、`npm run build` が通る。試しのエージェントは止め、試しの画面は本人が見られるように動かしたまま報告する"
+		text:     "タスク担当が行う。D-08 のとおり（端末のキーの組の実機は本人の確かめに残す。統括の判断 2026-11-18）。確かめ：T-18、T-19。完了：report.md の Verification に実機の結論と写しと、本人の確かめの手順と残る危険があり、README に残る危険があり、`npm run lint`、`npm test`、`npm run build` が通る。試しのエージェントは止め、試しの画面は本人が見られるように動かしたまま報告する"
 		realizes: ["R-02", "R-06", "R-08"]
 		after:    ["S-03"]
 		status:   "todo"
@@ -63,7 +63,7 @@ tests: {
 	"T-15": {title: "buildChat：keys の質問が isError の tool-result で declined（答えずに閉じた形、結果の文）、そうでなければ answered。message の質問（端末）が、すぐ続く同じ callId の受付の tool-result では pending のままで、後の利用者の発言の引用で answered（答えはその文）、引用でない発言では pending", verifies: ["R-05", "R-07"]}
 	"T-16": {title: "question-dom.js が partial の帯と declined の閉じた形を textContent だけで描き、`<script>` や `<img onerror>` を含む文を文字のまま描く", verifies: ["R-04", "R-07"]}
 	"T-17": {title: "agent.css の帯の規則が `var(--ds-…, 既定)` を使い、折り返しの規則がある（CSS を読むテスト）", verifies: ["R-08"]}
-	"T-18": {title: "試しのエージェント（端末の Claude）に質問を出させ、小窓から答え、エージェントが答えを受け取って続けたことと、カードが答え済みの閉じた形になったことを確かめる。タブの agentStatus に interactivePrompt・toolName の鍵があることを確かめる。sendEnabled 偽でカードが読めて押せないことを見る（タスク担当、実機）", verifies: ["R-02", "R-06"]}
+	"T-18": {title: "試しのエージェント（構造化 Chat の Codex）の request_user_input_async に小窓から答え、エージェントが答えを受け取ったことと、カードが答え済みの閉じた形になったことを確かめる（タスク担当、実機）。端末の Claude へのキーの組の答えとタブの agentStatus の interactivePrompt・toolName の鍵の確かめは本人の確かめに残し、report.md に手順を書く。interactivePrompt・toolName がないとき1組も送らず prompt_unverified で止まることは T-08 のテストで確かめる", verifies: ["R-02", "R-05", "R-06"]}
 	"T-19": {title: "試しの画面で、Mac の幅と 390px、明暗の写しを撮り、カードが横にはみ出さないことを DOM で数える（タスク担当、実機）", verifies: ["R-08"]}
 }
 
@@ -77,7 +77,7 @@ verification: """
 	- record_paths：なし（記録の report.md は Git の外で、SpecDock が保存する。合格の後に Git の記録だけのコミットは作らない）
 	"""
 rollback: "settings.json の `sendEnabled` を偽にすれば、答えの口はすべて拒み、カードは読むだけになる。PR を戻せば、端末の質問は今の読むだけ（理由と「Orca で開く」）に戻る。"
-exit:     "CP-1 と最終品質ゲート（`3b7aece..HEAD`、または取り込み後の HEAD）が合格し、試しのエージェントでの答えの確かめと写しが report.md にあり、PR の CI が通って、統括がマージできる状態になっている。"
+exit:     "CP-1 と最終品質ゲート（`3b7aece..HEAD`、または取り込み後の HEAD）が合格し、試しのエージェント（構造化 Chat の後の発言の質問）での答えの確かめと写し、端末のキーの組の本人の確かめの手順と残る危険が report.md にあり、PR の CI が通って、統括がマージできる状態になっている。"
 
 execution: {
 	sessions: {
