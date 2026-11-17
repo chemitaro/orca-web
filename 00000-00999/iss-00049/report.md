@@ -28,3 +28,11 @@ ID: "iss-00049"
 - 仕様レビュー round-2 の P3（keys のその他の文の制御文字を画面でも拒む）：F-04 の意味を変えない読みとして、S-03 で画面の条件と理由の言葉（control_character）を足す（タスク担当の判断、2026-11-18）。
 
 ## Residual Risks / Follow-ups
+
+## 実装の記録
+
+- 基準（開始のコミット 3b7aece、`npm ci` の後）：`npm run lint` 成功、`npm test` 820 pass・0 fail、`npm run build` 成功。既存の失敗なし（`.workbench/implement/iss-00049/start.md`）。
+- S-01（コミット 4f9bff1）：会話の正規化に answerVia・preview と request_user_input_async の質問の部分（D-01）、`src/send/keys.ts`（D-02）、`src/send/question-state.ts` と `terminalPromptOf`（D-03）。テストを先に書いて失敗を確かめてから作った（T-01〜T-05）。
+  - `node --test test/transcript/*.test.ts test/send/*.test.ts`：174 pass・0 fail。`npm run lint`：成功。`npm test`：849 pass・0 fail。
+  - QuestionView に必ず付く preview を足したので、`test/send/answer.test.ts` の仮の問いに `preview: false` を足した（期待値は変えていない）。
+  - 途中の状態：画面（S-03 の前）は、端末の async の質問を、同じ callId の受付の tool-result で答え済みに見せる（D-07 で直す）。
