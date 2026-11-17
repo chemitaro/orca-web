@@ -25,8 +25,8 @@ design: {
 		text: """
 			`QuestionPart` に `answerVia: 'rpc' | 'keys' | 'message'` を、`QuestionView` に `preview: boolean` を足す（どちらも必ず付ける）。
 			- 構造化 Chat の journal の question：answerVia `rpc`、各問いの preview は偽（今は preview を出さない。形は今のまま）。
-			- 端末の tool-call の AskUserQuestion・request_user_input（今の判定のまま）：answerVia `keys`。問いの preview は、入力の選択肢のどれかが空でない文字の `preview` を持つとき真（Orca の parseCanonicalQuestionsInput の hasPreviews と同じ）。allowOther は preview が偽のとき真、真のとき偽。otherAllowsEmpty は偽。
-			- `request_user_input_async` の tool-call（名前の英数字だけを小文字にしたものが `requestuserinputasync`、state が failed でない。端末の件と、構造化 Chat の journal の tool-call の両方）：入力（物、または JSON の文字）を Orca の parseCodexAsyncQuestionsInput と同じ規則（`questions` の配列の各要素の `title` が文字なら問い、`options` の文字だけを選択肢）で読み、1問以上あれば `{type: 'question', source: 端末なら 'terminal'・構造化 Chat なら 'chat', answerVia: 'message', prompt: null, callId, questions, state: 'pending', answers: null}` にする。各問いは id が番号の文字、header は null、multiSelect は偽、allowOther は真、otherAllowsEmpty は偽、preview は偽。読めなければ今のままツールの呼び出し。構造化 Chat の journal の tool-call に output があれば、今のとおり tool-result の部分を続けて出す（同じ callId）。
+			- 端末の tool-call の AskUserQuestion・request_user_input（今の判定のまま）：answerVia `keys`。問いの preview は、問いが単一選択で、入力の選択肢のどれかが空白だけでない文字（/\\S/ に当たる）の `preview` を持つとき真（Orca の parseCanonicalQuestionsInput の `!multiSelect && askOptionsHavePreview` と同じ。複数選択の問いはいつも偽）。allowOther は preview が偽のとき真、真のとき偽。otherAllowsEmpty は偽。
+			- `request_user_input_async` の tool-call（名前の英数字だけを小文字にしたものが `requestuserinputasync`、state が failed でない。端末の件と、構造化 Chat の journal の tool-call の両方）：入力（物、または JSON の文字）を Orca の parseCodexAsyncQuestionsInput と同じ規則（`questions` の配列の各要素の `title` が文字なら問い、`options` の文字だけを選択肢）で読み、1問以上あれば `{type: 'question', source: 端末なら 'terminal'・構造化 Chat なら 'chat', answerVia: 'message', prompt: null, callId, questions, state: 'pending', answers: null}` にする。各問いは id が番号の文字、header は null、multiSelect は偽、allowOther は真、otherAllowsEmpty は偽、preview は偽。問いの文かラベルを上限で切った（truncated の）async の質問は、Orca と同じ文を作れないので、サービスは `not_sendable`（`prompt_unsupported`）で送らず、画面も押せない形にする。読めなければ今のままツールの呼び出し。構造化 Chat の journal の tool-call に output があれば、今のとおり tool-result の部分を続けて出す（同じ callId）。
 			- 上限と切り方は今のまま（問いの文 4,000 字など）。
 			会話の API の schema は `orca-web.transcript/v1` のまま。
 			"""
@@ -42,6 +42,7 @@ design: {
 			- `buildClaudeKeys(questions, selections)`：buildAskAnswerKeys と同じ。問いの `preview` を hasPreviews に使う。
 			- `buildCodexKeys(questions, selections)`：buildCodexAskAnswerKeys と同じ。
 			- `pasteBytes(text)`：buildNativeChatPasteBytes と同じ（ESC を ␛ に替え、改行を含むか UTF-8 で 512 バイトを超えるなら、改行を CR にして ESC [200~ と ESC [201~ で包む）。`groupBytes(group)` は raw をそのまま、text を pasteBytes にする。
+			- その他の文の検査（keys）：checkAnswers を通った答えのうち、other に Tab・LF・CR を含む C0、DEL、C1 があれば `invalid_answer`（`control_character`）。1行の文だけを送る（F-04）。
 			- `planKeys(agentType, questions, answers): {ok: true, groups: string[]} | {ok: false, reason}`：agentType が claude なら buildClaudeKeys、codex なら buildCodexKeys（codex で multiSelect か preview の問いがあれば `prompt_unsupported`）、ほかは `agent_keys_unknown`。Claude で選択肢の数＋1 が 9 を超える問い（数字が2桁になる）と、codex で選択肢の数が 9 を超える問いは `prompt_unsupported`。組が 0 か MAX_KEY_GROUPS を超えれば `invalid_answer`（F-05）。返す groups は groupBytes を当てたバイトの列。
 			- `formatAsyncAnswer(questions, answers)`：formatAskAnswer の replyAsMessage と同じ（答えた問いごとに `> ` と、改行の続きを空白1つにした問いの文、空行、選んだラベルとその他の文を `, ` で並べた答え。問いの間は空行）。
 			- `quoteOf(question)`：askAnswerQuote と同じ（`> ` と問いの文と空行）。
@@ -63,7 +64,7 @@ design: {
 	"D-04": {
 		title: "キーの組の門とアダプター（`src/orca/send-gates.ts`、`src/orca/send.ts`、`src/orca/capabilities.ts`）"
 		text: """
-			門 `SendRpc` の `terminal.send` に、今の形（agentPrompt）に加えて、キーの組の形だけを通す：鍵がちょうど `terminal`・`text`・`enter`・`requireWriteSettlement`・`client` で、terminal は `term_` で始まり、enter は偽、requireWriteSettlement は真、client は `{id: 'orca-web', type: 'desktop'}`、text は次のどれか：決めたキー（`1`〜`9`、CR、ESC [ C、ESC [ A、ESC [ B、Tab、`n`、DEL）、ESC・CR・LF を含まない 1〜512 バイトの文、または ESC [200~ で始まり ESC [201~ で終わり、間に ESC を含まない 70,000 バイト以下の文。envelope は付けない。
+			門 `SendRpc` の `terminal.send` に、今の形（agentPrompt）に加えて、キーの組の形だけを通す：鍵がちょうど `terminal`・`text`・`enter`・`requireWriteSettlement`・`client` で、terminal は `term_` で始まり、enter は偽、requireWriteSettlement は真、client は `{id: 'orca-web', type: 'desktop'}`、text は次のどれか：決めたキー（`1`〜`9`、CR、ESC [ C、ESC [ A、ESC [ B、Tab、`n`、DEL）、C0（Tab・CR・LF を含む）・DEL・C1 を含まない 1〜512 バイトの文、または ESC [200~ で始まり ESC [201~ で終わり、間に C0・DEL・C1 を含まない 1〜70,000 バイトの文。envelope は付けない。
 			アダプターに `sendKeyGroup(target: TerminalSendTarget, bytes): Promise<'accepted' | 'refused' | 'unknown'>` を足す：params は上の形、timeoutMs 10000。結果は Orca の readTerminalSendAcknowledgment と同じ（`send.writeSettlement.outcome` が refused なら refused、accepted で `send.accepted` が真なら accepted、writeSettlement がなく `send.accepted` が真偽ならその値、ほかは unknown）。RPC の失敗は、unavailable は refused、method_not_found・invalid_argument は refused、ほかは unknown。
 			`answerKeys(target, groups: string[], sleep: (ms) => Promise<void>): Promise<SendResult>`：1組目をすぐ送り、前の組が accepted のときだけ ANSWER_STEP_MS を待って次を送る。受けられない組で止め、結果は R-04 の分け方（全部 accepted は `input_accepted` と code `keys_sent`、1組目 refused は refused と code `not_sent`、1組目 unknown は unknown と code `unconfirmed`、受けた組の後で止まれば unknown と code `partial_sent`）。detail に `sentGroups`（accepted の組の数）と `totalGroups` を付ける（SendDetail に足す）。method_not_found なら detail.method に `terminal.send`。
 			能力 `answerKeys`（FeatureName に足す）：`runtime-id:consistent`、`feature:readTabs`、`feature:readTranscript` を要し、`rpc:terminal.send`・`rpc:terminal.agentStatus`・`rpc:terminal.inspectProcess` を defer にする（今の sendTerminal と同じ書き方）。answerVia message は今の sendTerminal・sendChat と `feature:readTranscript` を使う。
@@ -84,7 +85,7 @@ design: {
 			`answerConfirm` は票が call を持てば callId の流れにする（busy と処理中の印、票の取り出し、答えの digest の比べ、preflight と宛先の比べは今と同じ順）。続けて 2・3・4 を確かめ直し、作り直した groups（または文）で、送る前の記録を書き、送り始めた集まりに callId を足してから、keys は adapter.answerKeys を1回、message は今の adapter.sendTerminal か sendChat を1回呼び、後の記録を書く。票の種類を取り違えない（prompt の票は call の流れで、call の票は prompt の流れや今の confirm で受けない）。
 			記録：before の行に `action: 'answer'`、`mode`（`rpc`・`keys`・`message`。今の rpc の行は mode がなくても読む）、`callId`（keys・message）、`questionCount`、`digest`、`totalGroups`（keys）を書き、text・キー・ラベルを書かない。`SendJournal.hasAnswer(agentId, callId): Promise<boolean>`（記録の before の行を読む。読めなければ投げ、サービスは `record_unreadable` で送らない）を足す。after の行の detail に sentGroups・totalGroups が入る。
 			照会 `check`：before が answer で mode keys なら、readTranscript と findCallQuestion で、answered なら unknown（`resolved_unverified`）、failed なら refused（`cancelled`）、pending なら unknown（`prompt_pending`）、ないなら unknown（`question_not_found`）。送り直さない。mode message は今の checkTerminal・checkChat（操作の ID）。
-			status：応答に `answerKeys` と `answerMessage`（`{available, reason}`）を足す。answerKeys は route が terminal で能力 answerKeys があり、agentType が claude・codex で、端末の確かめ（permission を拒まない）が通れば available。answerMessage は今の送信の preflight が通り能力 readTranscript があれば available。読みの RPC は今の status より増やさない（端末の確かめの結果を permission の違いだけで使い回す）。
+			status：応答に `answerKeys` と `answerMessage`（`{available, reason}`）を足す。answerKeys は route が terminal で能力 answerKeys があり、agentType が claude・codex で、端末の確かめ（permission を拒まない）が通れば available。answerMessage は今の送信の preflight が通り能力 readTranscript があれば available。読みの RPC は今の status より増やさない（端末の確かめの結果を permission の違いだけで使い回す）。送信の preflight が permission で通らなくても、keys の確かめが通れば、status の `agentType` と `route` は keys の宛先の値を返す（画面が codex の判定に使う）。
 			"""
 		satisfies: ["R-02", "R-03", "R-04", "R-05", "R-06", "F-01", "F-02", "F-03", "F-04", "F-05"]
 	}
@@ -101,9 +102,10 @@ design: {
 		text: """
 			`answererFor(part, answerers)` を answerVia で選ぶ：rpc は今の chat、keys は `answerers.keys`、message は `answerers.message`（answerVia がない古い物は今の source の規則）。`terminalAnswerer` は残し、answerers の表で keys に `createCallAnswerer({agentId, writer, read?, mode: 'keys'})`、message に `createCallAnswerer({…, mode: 'message'})` を入れる。
 			`createCallAnswerer`：availability は status の `answerKeys`・`answerMessage`（enabled が偽なら send_disabled、項目がなければ unknown_shape、available が偽ならその reason）。mode keys で status.agentType が codex のとき、multiSelect か preview の問いがあれば `{ok: false, reason: prompt_unsupported の言葉, open: true}`。keys で答えられないときは `open: true`（「Orca で開く」を出す）。submit は `/api/answer/intent` に `{agent, callId, answers}` を送り、続けて confirm を1回（今の chat の流れと同じ）。確定の結果：DELIVERED（submitted・accepted・input_accepted）は done、refused は理由、mode keys の unknown（unconfirmed・partial_sent・応答の欠け）は `{kind: 'partial', operationId, note}`、mode message の unknown は今の unknown（照会できる）。check は今の chat と同じ。
-			流れ：`partial` の結果は phase `partial` にし、押し直し・閉じる・照会を受けない（送り直さない）。カードは「途中まで送りました。Orca で確かめてください」（sentGroups が 0 か分からなければ「届いたか分かりません。Orca で確かめてください」）と「Orca で開く」を出し、送るボタンを出さない。keys の done は「答えを送りました。エージェントの返事を待っています」。
+			流れ：意図か確定の拒みの理由が already_sent・question_answered・prompt_mismatch・prompt_unsupported・agent_keys_unknown なら、結果を `{kind: 'blocked', reason}` にし、phase `blocked`（押し直し・選択の変更を受けず、理由と「Orca で開く」を出し、送るボタンを出さない）にする。prompt_unverified ほかは今の refused（押し直せる）。`partial` の結果は phase `partial` にし、押し直し・閉じる・照会を受けない（送り直さない）。カードは「途中まで送りました。Orca で確かめてください」（sentGroups が 0 か分からなければ「届いたか分かりません。Orca で確かめてください」）と「Orca で開く」を出し、送るボタンを出さない。keys の done は「答えを送りました。エージェントの返事を待っています」。
 			理由の言葉の表に、already_sent（「この質問には一度答えを送りました。Orca で確かめてください」）、question_answered（「ほかの画面で答え済みです」）、prompt_unverified（「端末がこの質問を出しているか確かめられません」）、prompt_mismatch（「端末の質問が変わりました」）、prompt_unsupported（「この形の質問は、ここからは答えられません」）、agent_keys_unknown（「このエージェントの質問は、ここからは答えられません」）、chat_route、partial_sent、unconfirmed、keys_sent を足す。
-			答え済みの判定（`agent-view.js` の buildChat）：keys の質問は、同じ callId の tool-result が isError なら state を `declined` にし（閉じた形、題は「答えずに閉じられた質問」、要約は結果の文）、isError でなければ今のとおり answered。message の質問は、後の role user の件の text が、どれかの問いの引用（`> ` と、改行の続きを空白1つにした問いの文と空行）で始まるか空行の後に含めば answered にし、answerText はその文。`buildQuestionCard` は declined を閉じた形として扱う。
+			答え済みの判定（`agent-view.js` の buildChat）：同じ callId の tool-result と結びつけるのは answerVia keys の質問だけにする（message の質問の受付の tool-result では答え済みにしない。answerVia のない古い物は今の source の規則）。keys の質問は、同じ callId の tool-result が isError なら state を `declined` にし（閉じた形、題は「答えずに閉じられた質問」、要約は結果の文）、isError でなければ今のとおり answered。message の質問は、後の role user の件の text が、どれかの問いの引用（`> ` と、改行の続きを空白1つにした問いの文と空行）で始まるか空行の後に含めば answered にし、answerText はその文。`buildQuestionCard` は declined を閉じた形として扱う。
+			keys の未回答のカードには、送るボタンの近くに1行の注「Orca の画面で途中まで答えた質問は、Orca で続けてください」を出す（F-02）。truncated の message の質問は `{ok: false, reason: prompt_unsupported の言葉, open: true}`。
 			`question-dom.js` は partial の帯と「Orca で開く」（今の `createOpenControl`）を描く。`agent.css` は帯の見た目（`--ds-*` を先に、明暗、390px で折り返す）。
 			"""
 		satisfies: ["R-02", "R-04", "R-05", "R-06", "R-07", "R-08"]
@@ -125,6 +127,7 @@ compatibility: """
 
 risks: [
 	"タブの agentStatus に interactivePrompt と toolName が出ない Orca では、keys の答えはいつも prompt_unverified で送れない（安全側。S-04 で確かめる）",
+	"送る前に利用者が Orca の画面で同じ質問を途中まで進めていると（複数問の1問目だけ答えた、行を矢印で動かした、文を書きかけた）、ツールの結果も interactivePrompt も変わらないので確かめで見分けられず、列が先頭からの前提でずれて届きうる。Orca 自身のカードも同じ前提で送る。カードに注を出して知らせる（F-02）",
 	"組の間に利用者が Orca の画面でも操作すると、列が途中から食い違う。送る前の確かめは最初の組の前だけ（Orca と同じ）。途中の失敗は止めて知らせる",
 	"keys の答えは数秒（組の数×1秒）かかり、その間は SendService の busy でほかの送信を受けない",
 	"orca-web が desktop のクライアントとして送るので、Orca は答えたことを入力から推さない（observeQuestionAnswerSend）。状態の印は次のフックまで待つことがある。カードはツールの結果で閉じる",

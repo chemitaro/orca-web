@@ -54,7 +54,7 @@ requirements: {
 		title: "会話の API が、質問の答え方と、後の発言で答える質問を返す"
 		text: """
 			質問の部分に `answerVia` を足す：構造化 Chat の journal の question は `rpc`、端末のエージェントの AskUserQuestion・request_user_input の呼び出しは `keys`、`request_user_input_async` の呼び出し（端末と構造化 Chat のどちらでも）は `message`。
-			問いごとに `preview`（真偽。端末の問いで、入力の選択肢に preview の文字があるとき真。ほかは偽）を足す。
+			問いごとに `preview`（真偽。端末の問いで、単一選択で、入力の選択肢のどれかに空白だけでない preview の文字があるとき真。Orca の parseCanonicalQuestionsInput の hasPreviews と同じ。ほかは偽）を足す。
 			端末の `keys` の問いは、preview が偽なら `allowOther` を真（Claude の「Type something」、Codex のメモ）、真なら偽にする。`otherAllowsEmpty` は偽。
 			`message` の問いは、`{questions: [{title, options?: string[]}]}` を Orca の parseCodexAsyncQuestionsInput と同じ規則で読み、各問いは単一選択、`allowOther` は真、`preview` は偽。state は pending、answers は null（画面が後の発言と結びつける）。読めない呼び出しは今のままツールの呼び出し。構造化 Chat の呼び出しに付いたツールの結果の部分は、今のまま別の部分で返す。
 			"""
@@ -125,11 +125,12 @@ requirements: {
 		title: "答えられないときは、カードは読めるが押せず、理由を1行で示す"
 		text: """
 			sendEnabled が偽、Orca の能力がない、エージェントの種類がキーの列を知らない（claude と codex のほか）、Codex の複数選択か preview の問い、R-03 の確かめが外れた、のときは、選択肢と送るボタンを押せず、理由を1行で示し、端末の質問には「Orca で開く」を出す。
-			送れるかの口 `GET /api/send/status` は、今の `answer`（rpc）に加えて `answerKeys` と `answerMessage`（どちらも `{available, reason}`）を返す。画面は質問の answerVia で選んで使う。R-03 の質問ごとの確かめは送るときに行い、status では行わない。
+			送れるかの口 `GET /api/send/status` は、今の `answer`（rpc）に加えて `answerKeys` と `answerMessage`（どちらも `{available, reason}`）を返す。画面は質問の answerVia で選んで使う。R-03 の質問ごとの確かめは送るときに行い、status では行わない。その結果の拒みのうち、already_sent・question_answered・prompt_mismatch・prompt_unsupported・agent_keys_unknown のカードは、理由を示して押し直せない形（選択肢と送るボタンを押せない）にし、「Orca で開く」を出す。prompt_unverified と、ほかの一時の拒み（busy、unreachable など）は今のとおり押し直せる。
 			"""
 		acceptance: [
 			"sendEnabled 偽、エージェントの種類が違う、Codex の複数選択、で、カードが読めて押せず、理由が出る",
 			"status が answerKeys と answerMessage を返し、端末の Claude で answerKeys が available になる",
+			"意図が already_sent・question_answered・prompt_mismatch で拒まれたカードは、理由と「Orca で開く」を出し、押し直せない",
 		]
 	}
 	"R-07": {
@@ -153,13 +154,13 @@ failures: {
 		title: "組を送る途中で orca-web が止まったときは、記録の後の行がなく、照会は結果不明（no_after_record）とし、同じ callId に二度と送らない"
 	}
 	"F-02": {
-		title: "利用者が Orca の画面で先に答えた（ツールの結果がある、interactivePrompt が消えた・変わった）ときは、送らない"
+		title: "利用者が Orca の画面で先に答えた（ツールの結果がある、interactivePrompt が消えた・変わった）ときは、送らない。Orca の画面で同じ質問を途中まで進めた（複数問の1問目だけ答えた、行を動かした、文を書きかけた）ことは、ツールの結果も interactivePrompt も変わらないので見分けられない（Orca 自身の画面の答えと同じ前提。残る危険として risks に書き、カードの注に「Orca の画面で途中まで答えた質問は、Orca で続けてください」と出す）"
 	}
 	"F-03": {
 		title: "Orca の応答（`terminal.send` の受け取り、タブの agentStatus）が知らない形なら、送らないか（送る前）、結果不明として止める（送る途中）"
 	}
 	"F-04": {
-		title: "その他の文に制御文字があれば送らず、ESC を含む文は Orca と同じく ␛ に替えて、端末の制御として届かないようにする"
+		title: "その他の文に制御文字があれば送らない（keys は Tab と改行を含むすべての C0・DEL・C1 を拒み、message は今の送信と同じく Tab と改行だけを許す）。門も、キーの組の文に決めたキーのほかの制御文字を通さない。ESC は Orca と同じく ␛ に替える"
 	}
 	"F-05": {
 		title: "組の列の長さが上限（64組）を超える答えは送らない（invalid_answer）"
