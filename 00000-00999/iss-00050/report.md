@@ -30,6 +30,8 @@ ID: "iss-00050"
 
 - 最終品質ゲート（キャンペーン `.workbench/final-quality-gate/iss-00050-fqg/`、範囲 `3b7aece..1185813`）：attempt 1 で合格。合格のコミット `11858131434bb6b1817d6c53df6b8d5bd1fe092b`。主のレビュー（quality-gate-reviewer、Opus 5.5 / medium、観点 functional-correctness・requirements-closure・test-adequacy・security-baseline・reliability-recovery・e2e-user-flow）pass、P0/P1 0、P3 1。2人目 ChatGPT GPT-6 / Extra High（chatgpt-code-review-strict、GitHub の SHA の一致を確かめた）pass、P0/P1 0、P2 2。テスト lint 0・test 886/886・build 0。closure：`.workbench/final-quality-gate/iss-00050-fqg/closure.md`（写し `artifacts/closure.md`）。記録だけのコミットはない。PR の直前に `origin/main` を取り込み直す要はなかった（main に新しいコミットがない）。
 
+- PR：https://github.com/chemitaro/orca-web/pull/53（head 1185813 = 合格のコミット）。CI（GitHub Actions の check）合格。
+
 ## Verification
 
 ### 実機の確かめ（S-04、2026-11-18、タスク担当）
