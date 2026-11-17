@@ -147,3 +147,90 @@ test('読む許可は SendRpc の中だけで広げ、未許可の RPC を送ら
   }
   assert.equal(calls.length, count);
 });
+
+const answer = () => ({
+  envelope: {
+    sessionId: 'session-test',
+    clientOperationId: operationId,
+    expectedRuntimeFence: 2,
+    payloadFingerprint: 'b'.repeat(64),
+  },
+  itemId: 'item-test',
+  expectedRevision: 3,
+  answers: [
+    { questionId: 'q1', optionIds: ['a'] },
+    { questionId: 'q2', optionIds: [], other: '仮の文' },
+  ],
+});
+
+test('T-04 構造化 Chat の質問へは、決めた形の agentSession.respondToQuestion だけを通す', async () => {
+  const { rpc, calls } = setup();
+  const params = answer();
+  assert.ok((await rpc.call('agentSession.respondToQuestion', params, { timeoutMs: 15000 })).ok);
+  const many = {
+    ...answer(),
+    answers: [{ questionId: 'q', optionIds: Array.from({ length: 64 }, (_, i) => `o${i}`) }],
+  };
+  assert.ok((await rpc.call('agentSession.respondToQuestion', many)).ok);
+  const four = { ...answer(), answers: [1, 2, 3, 4].map((i) => ({ questionId: `q${i}`, optionIds: ['a'] })) };
+  assert.ok((await rpc.call('agentSession.respondToQuestion', four)).ok);
+  const big = { ...answer(), answers: [{ questionId: 'q', optionIds: [], other: 'a'.repeat(64 * 1024) }] };
+  assert.ok((await rpc.call('agentSession.respondToQuestion', big)).ok);
+  assert.deepEqual(calls[0], { method: 'agentSession.respondToQuestion', params, options: { timeoutMs: 15000 } });
+  assert.equal(calls.length, 4);
+});
+
+test('T-04 余分な鍵・optionId・空や5件以上の answers・65件以上の optionIds・64KiB を超える other・形の違う封筒を送らずに拒む', async () => {
+  const { rpc, calls } = setup();
+  const invalid: unknown[] = [null, {}, [], { ...answer(), optionId: 'a' }, { ...answer(), extra: true }];
+  for (const key of ['envelope', 'itemId', 'expectedRevision', 'answers']) {
+    const p: Record<string, unknown> = answer();
+    delete p[key];
+    invalid.push(p);
+  }
+  // 古い詰めた形（answers の代わりの optionId）
+  const { answers: _answers, ...legacy } = answer();
+  invalid.push({ ...legacy, optionId: 'a' });
+  for (const patch of [
+    { itemId: '' },
+    { itemId: 3 },
+    { expectedRevision: 0 },
+    { expectedRevision: 1.5 },
+    { expectedRevision: '3' },
+    { answers: [] },
+    { answers: 'x' },
+    { answers: [1, 2, 3, 4, 5].map((i) => ({ questionId: `q${i}`, optionIds: ['a'] })) },
+    { answers: [{ questionId: 'q', optionIds: Array.from({ length: 65 }, (_, i) => `o${i}`) }] },
+    { answers: [{ questionId: 'q', optionIds: [], other: 'a'.repeat(64 * 1024 + 1) }] },
+    { answers: [{ questionId: 'q', optionIds: [], other: 'あ'.repeat(21846) }] },
+    { answers: [{ questionId: 'q', optionIds: [], other: 1 }] },
+    { answers: [{ questionId: '', optionIds: ['a'] }] },
+    { answers: [{ questionId: 'q'.repeat(1025), optionIds: ['a'] }] },
+    { answers: [{ questionId: 'q', optionIds: [''] }] },
+    { answers: [{ questionId: 'q', optionIds: [1] }] },
+    { answers: [{ questionId: 'q', optionIds: 'a' }] },
+    { answers: [{ questionId: 'q', optionIds: ['a'], optionId: 'a' }] },
+    { answers: [{ questionId: 'q', optionIds: ['a'], extra: true }] },
+    { answers: [null] },
+  ])
+    invalid.push({ ...answer(), ...patch });
+  for (const patch of [
+    { sessionId: '' },
+    { clientOperationId: 'bad' },
+    { expectedRuntimeFence: 0 },
+    { payloadFingerprint: 'bad' },
+    { extra: true },
+  ]) {
+    invalid.push({ ...answer(), envelope: { ...answer().envelope, ...patch } });
+  }
+  for (const params of invalid)
+    await assert.rejects(rpc.call('agentSession.respondToQuestion', params), JSON.stringify(params)?.slice(0, 80));
+  // 承認の答えと取り消しは通さない
+  for (const method of ['agentSession.respondToApproval', 'agentSession.cancel']) {
+    await assert.rejects(rpc.call(method, answer()));
+  }
+  assert.equal(calls.length, 0);
+  // 今の terminal.send・agentSession.send の門は変わらない
+  assert.ok((await rpc.call('terminal.send', terminal(), options)).ok);
+  assert.ok((await rpc.call('agentSession.send', chat())).ok);
+});

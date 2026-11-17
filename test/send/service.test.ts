@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, open, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -24,6 +24,39 @@ import {
 } from './fixture.ts';
 
 const ok = (result: unknown, runtimeId: string | null = RUNTIME): RpcOutcome => ({ ok: true, result, runtimeId });
+// 質問の仮の項目。答えの中身（選択肢の id、ラベル、その他の文）が記録に入らないことを確かめるため、目立つ文字にする。
+const ITEM = 'item-question-test';
+const pendingResolution = { state: 'pending', selectedOptionId: null, resolvedBy: null, resolvedAt: null };
+function questionRow(resolution: Record<string, unknown>, revision = 3, itemId = ITEM) {
+  return {
+    itemId,
+    revision,
+    sequence: 9,
+    body: {
+      kind: 'question',
+      question: '外',
+      options: [],
+      questions: [
+        {
+          id: 'q-pick',
+          question: '仮の問い',
+          multiSelect: false,
+          options: [
+            { id: 'opt-secret-a', label: 'ラベル秘密A' },
+            { id: 'opt-secret-b', label: 'ラベル秘密B' },
+          ],
+        },
+        { id: 'q-free', question: '自由に', multiSelect: false, options: [], freeTextQuestionId: 'q-free' },
+      ],
+      resolution,
+    },
+  };
+}
+const PROMPT = { itemId: ITEM, revision: 3 };
+const ANSWERS = [
+  { questionId: 'q-pick', optionIds: ['opt-secret-a'] },
+  { questionId: 'q-free', optionIds: [], other: '秘密の文' },
+];
 async function fixture(t: import('node:test').TestContext, agentType: 'claude' | 'codex' = 'codex') {
   const dir = await mkdtemp(path.join(tmpdir(), 'orca-web-send-service-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
@@ -42,6 +75,7 @@ async function fixture(t: import('node:test').TestContext, agentType: 'claude' |
       openExistingTab: feature(),
       sendTerminal: feature(),
       sendChat: feature(),
+      answerChat: feature(),
     },
   };
   const snapshot = state({
@@ -64,7 +98,14 @@ async function fixture(t: import('node:test').TestContext, agentType: 'claude' |
     ],
     ['terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } })],
     ['terminal.inspectProcess', ok({ process: { foregroundProcess: agentType } })],
-    ['agentSession.history', ok({ ok: true, page: { sessionId: 'session-chat-test', fence: 4 } })],
+    [
+      'agentSession.history',
+      ok({ ok: true, page: { sessionId: 'session-chat-test', fence: 4, items: [questionRow(pendingResolution)] } }),
+    ],
+    [
+      'agentSession.respondToQuestion',
+      ok({ ok: true, value: { itemId: ITEM, revision: 4, resolution: { state: 'resolved' } } }),
+    ],
     [
       'terminal.send',
       ok({ send: { accepted: true, prompt: { provider: agentType, stages: ['input_accepted', 'turn_started'] } } }),
@@ -113,13 +154,20 @@ async function fixture(t: import('node:test').TestContext, agentType: 'claude' |
     calls,
     journal,
     tickets,
+    sendsDir: path.join(dir, 'sends'),
     setEnabled: (value: boolean) => {
       enabled = value;
     },
     advance: () => {
       now += 60000;
     },
-    sends: () => calls.filter((c) => ['terminal.send', 'agentSession.send'].includes(c.method)),
+    sends: () =>
+      calls.filter((c) => ['terminal.send', 'agentSession.send', 'agentSession.respondToQuestion'].includes(c.method)),
+    setHistory: (items: unknown[], extra: Record<string, unknown> = {}) =>
+      responses.set(
+        'agentSession.history',
+        ok({ ok: true, page: { sessionId: 'session-chat-test', fence: 4, items, ...extra } }),
+      ),
   };
 }
 
@@ -316,6 +364,7 @@ test('status は送信せず Chat の fence と利用可能性を確かめる', 
     reason: null,
     target: targetFingerprint(chatTarget()),
     agentType: 'claude',
+    answer: { available: true, reason: null },
   });
   assert.ok(f.calls.some((c) => c.method === 'agentSession.history'));
   f.responses.set('agentSession.history', ok({ ok: true, page: { sessionId: 'other', fence: 4 } }));
@@ -328,6 +377,7 @@ test('status は送信せず Chat の fence と利用可能性を確かめる', 
     reason: 'unknown_shape',
     target: null,
     agentType: null,
+    answer: { available: false, reason: 'unknown_shape' },
   });
   assert.equal(f.sends().length, 0);
 });
@@ -859,6 +909,7 @@ test('status は端末の指紋と種類を返し、preflight が通らなけれ
     reason: null,
     target: targetFingerprint(terminalTarget()),
     agentType: 'codex',
+    answer: { available: false, reason: 'terminal_route' },
   });
   f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: '/bin/zsh' } }));
   assert.deepEqual(await f.service.status(TERMINAL_AGENT), {
@@ -868,6 +919,7 @@ test('status は端末の指紋と種類を返し、preflight が通らなけれ
     reason: 'shell_foreground',
     target: null,
     agentType: null,
+    answer: { available: false, reason: 'terminal_route' },
   });
   assert.equal(f.sends().length, 0);
 });
@@ -1014,4 +1066,299 @@ test('まとめた構造化 Chat の古い id（ps の paneKey）の意図は送
     error: 'agent_not_found',
   });
   assert.equal(f.sends().length, 0);
+});
+
+// ---- 質問への答え（D-03、T-07〜T-09） ----
+
+const answers = () => structuredClone(ANSWERS);
+const answerCalls = (f: { calls: { method: string }[] }) =>
+  f.calls.filter((c) => c.method === 'agentSession.respondToQuestion');
+const writes = (f: { calls: { method: string }[] }) =>
+  f.calls.filter((c) => ['terminal.send', 'agentSession.send', 'agentSession.respondToQuestion'].includes(c.method));
+
+test('T-07 answerIntent は送れないときの理由を返し、どれも書き込みの RPC を送らない', async (t) => {
+  const f = await fixture(t);
+  const intent = (extra: Record<string, unknown> = {}) =>
+    f.service.answerIntent({ agent: CHAT_AGENT, prompt: PROMPT, answers: answers(), ...extra });
+  f.setEnabled(false);
+  assert.deepEqual(await intent(), { ok: false, error: 'send_disabled' });
+  f.setEnabled(true);
+  assert.deepEqual(await intent({ agent: TERMINAL_AGENT }), {
+    ok: false,
+    error: 'not_sendable',
+    reason: 'terminal_route',
+  });
+  assert.deepEqual(await intent({ target: '0'.repeat(32) }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'changed_since_shown',
+  });
+  f.setHistory([
+    questionRow({ state: 'resolved', selectedOptionId: null, resolvedBy: 'x', resolvedAt: 1, answers: [] }, 4),
+  ]);
+  assert.deepEqual(await intent(), { ok: false, error: 'target_changed', reason: 'question_changed' });
+  f.setHistory([questionRow(pendingResolution, 5)]);
+  assert.deepEqual(await intent(), { ok: false, error: 'target_changed', reason: 'question_changed' });
+  f.setHistory([questionRow(pendingResolution, 3, 'other-item')]);
+  assert.deepEqual(await intent(), { ok: false, error: 'target_changed', reason: 'question_gone' });
+  f.setHistory([questionRow({ ...pendingResolution, state: 'expired' })]);
+  assert.deepEqual(await intent(), { ok: false, error: 'unknown_shape' });
+  f.setHistory([questionRow(pendingResolution)]);
+  assert.deepEqual(await intent({ answers: [{ questionId: 'q-pick', optionIds: ['opt-secret-a'] }] }), {
+    ok: false,
+    error: 'invalid_answer',
+    reason: 'answer_count',
+  });
+  assert.deepEqual(await intent({ answers: [ANSWERS[0], { questionId: 'q-free', optionIds: [], other: 'a\u0000' }] }), {
+    ok: false,
+    error: 'invalid_answer',
+    reason: 'control_character',
+  });
+  f.cap.features.answerChat = {
+    available: false,
+    missing: ['capability:agent-session.question-answers.v1'],
+    satisfied: [],
+    deferred: [],
+  };
+  assert.deepEqual(await intent(), {
+    ok: false,
+    error: 'unsupported',
+    missing: ['capability:agent-session.question-answers.v1'],
+  });
+  assert.equal(writes(f).length, 0);
+});
+
+test('T-07 answerIntent は通れば票と digest を返し、送らず、記録も作らない', async (t) => {
+  const f = await fixture(t);
+  const status = await f.service.status(CHAT_AGENT);
+  assert.ok(status.target);
+  const intent = await f.service.answerIntent({
+    agent: CHAT_AGENT,
+    prompt: PROMPT,
+    answers: answers(),
+    target: status.target,
+  });
+  assert.ok(intent.ok);
+  assert.match(intent.digest, /^[0-9a-f]{64}$/);
+  assert.equal(intent.preview.route, 'chat');
+  assert.ok(intent.ticket && intent.operationId);
+  assert.equal('answers' in intent, false);
+  assert.equal(writes(f).length, 0);
+  assert.equal(await f.journal.read(intent.operationId), null);
+});
+
+test('T-08 answerConfirm は before の記録の後に respondToQuestion を1回だけ送り、同じ票の2回目は送らない', async (t) => {
+  const f = await fixture(t);
+  const intent = await f.service.answerIntent({ agent: CHAT_AGENT, prompt: PROMPT, answers: answers() });
+  assert.ok(intent.ok);
+  const order: string[] = [];
+  const appendBefore = f.deps.journal.appendBefore.bind(f.deps.journal);
+  f.deps.journal.appendBefore = async (input) => {
+    order.push('before');
+    return appendBefore(input);
+  };
+  const call = f.deps.rpc.call.bind(f.deps.rpc);
+  f.deps.rpc.call = (async (method: string, params: unknown, options?: unknown) => {
+    if (method === 'agentSession.respondToQuestion') order.push('send');
+    return call(method, params, options as never);
+  }) as typeof f.deps.rpc.call;
+  const confirmed = await f.service.answerConfirm({ ticket: intent.ticket, answers: answers() });
+  assert.deepEqual(confirmed, {
+    ok: true,
+    operationId: intent.operationId,
+    outcome: 'submitted',
+    detail: { code: 'resolved' },
+  });
+  assert.deepEqual(order, ['before', 'send']);
+  const sent = answerCalls(f);
+  assert.equal(sent.length, 1);
+  const params = (sent[0] as unknown as { params: Record<string, unknown> }).params;
+  assert.equal(params.itemId, ITEM);
+  assert.equal(params.expectedRevision, 3);
+  assert.deepEqual(params.answers, ANSWERS);
+  assert.equal((params.envelope as Record<string, unknown>).clientOperationId, intent.operationId);
+  assert.equal((params.envelope as Record<string, unknown>).expectedRuntimeFence, 4);
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: answers() }), {
+    ok: false,
+    error: 'ticket_invalid',
+    reason: 'unknown',
+  });
+  assert.equal(answerCalls(f).length, 1);
+});
+
+test('T-08 送っている間の2回目は busy で送らない', async (t) => {
+  const f = await fixture(t);
+  const a = await f.service.answerIntent({ agent: CHAT_AGENT, prompt: PROMPT, answers: answers() });
+  const b = await f.service.answerIntent({ agent: CHAT_AGENT, prompt: PROMPT, answers: answers() });
+  assert.ok(a.ok && b.ok);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const call = f.deps.rpc.call.bind(f.deps.rpc);
+  f.deps.rpc.call = (async (method: string, params: unknown, options?: unknown) => {
+    if (method === 'agentSession.respondToQuestion') {
+      entered.resolve();
+      await release.promise;
+    }
+    return call(method, params, options as never);
+  }) as typeof f.deps.rpc.call;
+  const first = f.service.answerConfirm({ ticket: a.ticket, answers: answers() });
+  await entered.promise;
+  assert.deepEqual(await f.service.answerConfirm({ ticket: b.ticket, answers: answers() }), {
+    ok: false,
+    error: 'busy',
+  });
+  assert.deepEqual(await f.service.check(a.operationId, { query: true }), {
+    ok: true,
+    operationId: a.operationId,
+    state: 'in_progress',
+  });
+  release.resolve();
+  assert.ok((await first).ok);
+  assert.equal(answerCalls(f).length, 1);
+});
+
+test('T-08 答えの digest 違い・確定の前に答え済み・revision 違い・before の記録の失敗では送らない', async (t) => {
+  const f = await fixture(t);
+  const issue = async () => {
+    f.setHistory([questionRow(pendingResolution)]);
+    const intent = await f.service.answerIntent({ agent: CHAT_AGENT, prompt: PROMPT, answers: answers() });
+    assert.ok(intent.ok);
+    return intent;
+  };
+  let intent = await issue();
+  assert.deepEqual(
+    await f.service.answerConfirm({
+      ticket: intent.ticket,
+      answers: [{ questionId: 'q-pick', optionIds: ['opt-secret-b'] }, ANSWERS[1]],
+    }),
+    { ok: false, error: 'target_changed', reason: 'answer_changed' },
+  );
+  intent = await issue();
+  f.setHistory([questionRow({ state: 'resolved', selectedOptionId: null, resolvedBy: 'x', resolvedAt: 1 }, 4)]);
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: answers() }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'question_changed',
+  });
+  intent = await issue();
+  f.setHistory([questionRow(pendingResolution, 4)]);
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: answers() }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'question_changed',
+  });
+  intent = await issue();
+  f.setHistory([]);
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: answers() }), {
+    ok: false,
+    error: 'target_changed',
+    reason: 'question_gone',
+  });
+  intent = await issue();
+  f.deps.journal.appendBefore = async () => {
+    throw new Error('disk full');
+  };
+  assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: answers() }), {
+    ok: false,
+    error: 'record_failed',
+  });
+  assert.equal(writes(f).length, 0);
+  const refused = await f.journal.read(intent.operationId);
+  assert.equal(refused?.refused?.reason, 'record_failed');
+});
+
+test('T-08 送信の票と答えの票を取り違えない', async (t) => {
+  const f = await fixture(t);
+  const sendIntent = await f.service.intent({ agent: CHAT_AGENT, text: 'hello' });
+  const answerIntent = await f.service.answerIntent({ agent: CHAT_AGENT, prompt: PROMPT, answers: answers() });
+  assert.ok(sendIntent.ok && answerIntent.ok);
+  assert.deepEqual(await f.service.answerConfirm({ ticket: sendIntent.ticket, answers: answers() }), {
+    ok: false,
+    error: 'ticket_invalid',
+    reason: 'wrong_kind',
+  });
+  assert.deepEqual(await f.service.confirm({ ticket: answerIntent.ticket, text: 'hello' }), {
+    ok: false,
+    error: 'ticket_invalid',
+    reason: 'wrong_kind',
+  });
+  assert.equal(writes(f).length, 0);
+});
+
+test('T-09 答えの記録の行に、選択肢の id・ラベル・その他の文が入らず、digest・問いの数・itemId・revision が入る', async (t) => {
+  const f = await fixture(t);
+  const raw = () => readFile(path.join(f.sendsDir, 'sends.jsonl'), 'utf8');
+  const ok1 = await f.service.answerIntent({ agent: CHAT_AGENT, prompt: PROMPT, answers: answers() });
+  assert.ok(ok1.ok);
+  assert.ok((await f.service.answerConfirm({ ticket: ok1.ticket, answers: answers() })).ok);
+  const refusedIntent = await f.service.answerIntent({ agent: CHAT_AGENT, prompt: PROMPT, answers: answers() });
+  assert.ok(refusedIntent.ok);
+  const changed = [
+    { questionId: 'q-pick', optionIds: ['opt-secret-b'] },
+    { questionId: 'q-free', optionIds: [], other: '秘密の別の文' },
+  ];
+  assert.ok(!(await f.service.answerConfirm({ ticket: refusedIntent.ticket, answers: changed })).ok);
+  const text = await raw();
+  for (const secret of ['opt-secret', 'ラベル秘密', '秘密の文', '秘密の別の文', '仮の問い']) {
+    assert.ok(!text.includes(secret), secret);
+  }
+  const rows = text
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const before = rows.find((r) => r.kind === 'before');
+  assert.equal(before.action, 'answer');
+  assert.deepEqual(before.prompt, PROMPT);
+  assert.equal(before.questionCount, 2);
+  assert.equal(before.digest, ok1.digest);
+  assert.equal('text' in before, false);
+  assert.ok(rows.some((r) => r.kind === 'after' && r.outcome === 'submitted'));
+  assert.ok(rows.some((r) => r.kind === 'refused'));
+  const record = await f.journal.read(ok1.operationId);
+  assert.equal(record?.before?.action, 'answer');
+  // 今の送信の記録の行は変わらない（text を持ち、action を持たない）
+  const send = await f.service.intent({ agent: CHAT_AGENT, text: 'hello' });
+  assert.ok(send.ok);
+  assert.ok((await f.service.confirm({ ticket: send.ticket, text: 'hello' })).ok);
+  const sendBefore = (await raw())
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+    .find((r) => r.kind === 'before' && r.operationId === send.operationId);
+  assert.equal(sendBefore.text, 'hello');
+  assert.equal('action' in sendBefore, false);
+});
+
+test('T-09 結果不明の答えは check で質問の今の状態を照会し、送り直さない', async (t) => {
+  const f = await fixture(t);
+  const intent = await f.service.answerIntent({ agent: CHAT_AGENT, prompt: PROMPT, answers: answers() });
+  assert.ok(intent.ok);
+  f.responses.set('agentSession.respondToQuestion', { ok: false, kind: 'timeout', message: 'private' });
+  const confirmed = await f.service.answerConfirm({ ticket: intent.ticket, answers: answers() });
+  assert.deepEqual(confirmed, {
+    ok: true,
+    operationId: intent.operationId,
+    outcome: 'unknown',
+    detail: { code: 'timeout' },
+  });
+  // 照会しない読みは記録だけ
+  const plain = await f.service.check(intent.operationId, { query: false });
+  assert.ok(plain.ok && plain.state === 'recorded' && plain.record.outcome === 'unknown');
+  // まだ pending なら unknown のまま
+  let checked = await f.service.check(intent.operationId, { query: true });
+  assert.ok(checked.ok && checked.state === 'recorded');
+  assert.equal(checked.record.outcome, 'unknown');
+  assert.equal(checked.record.checks.at(-1)?.detail.code, 'prompt_pending');
+  // Orca が同じ答えで答え済みにしていれば submitted
+  f.setHistory([
+    questionRow(
+      { state: 'resolved', selectedOptionId: null, resolvedBy: 'orca-web', resolvedAt: 2, answers: ANSWERS },
+      4,
+    ),
+  ]);
+  checked = await f.service.check(intent.operationId, { query: true });
+  assert.ok(checked.ok && checked.state === 'recorded');
+  assert.equal(checked.record.outcome, 'submitted');
+  assert.equal(checked.record.detail.code, 'resolved');
+  assert.equal(answerCalls(f).length, 1);
 });

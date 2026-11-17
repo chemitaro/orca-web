@@ -223,6 +223,7 @@ export function capabilities(options: { connected?: boolean; readTranscript?: bo
       readTranscript: feature(connected && (options.readTranscript ?? true)),
       sendTerminal: feature(false),
       sendChat: feature(false),
+      answerChat: feature(false),
     },
   };
 }

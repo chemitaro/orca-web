@@ -74,6 +74,7 @@ test('揃った録画から、機能ごとの期待する結果を返す', async
     readTranscript: true,
     sendTerminal: true,
     sendChat: false,
+    answerChat: false,
   });
   assert.deepEqual(report.features.openExistingTab.deferred, ['rpc:session.tabs.activate', 'rpc:worktree.activate']);
   assert.deepEqual(report.features.openExistingTab.missing, []);
@@ -300,4 +301,38 @@ test('送信の各 capability と読む機能の不足を分け、書く RPC は
   assert.ok(noTranscript.features.sendChat.missing.includes('feature:readTranscript'));
   const { report: inconsistent } = await probe(cliWith(), undefined, 'other-runtime');
   assert.ok(inconsistent.features.sendChat.missing.includes('runtime-id:consistent'));
+});
+
+test('答えの機能は structured と question-answers の capability と読む機能を要し、答える RPC は確かめない', async () => {
+  const caps = ['agent-session.structured.v1', 'agent-session.question-answers.v1'];
+  const cliWith = (missing?: string) =>
+    editCli((argv0, doc) => {
+      if (argv0 === 'status') ((doc.result as Json).runtime as Json).capabilities = caps.filter((c) => c !== missing);
+    });
+  const { report, rpc } = await probe(cliWith());
+  assert.ok(report.features.answerChat.available);
+  // 送信の send-recorded は要らない
+  assert.equal(report.features.sendChat.available, false);
+  assert.deepEqual(report.features.answerChat.deferred, ['rpc:agentSession.respondToQuestion']);
+  assert.deepEqual(rpc.calls.map((c) => c.method).sort(), ['nativeChat.readSession', 'session.tabs.listAll']);
+  for (const cap of caps) {
+    const { report: r } = await probe(cliWith(cap));
+    assert.deepEqual(r.features.answerChat.missing, [`capability:${cap}`]);
+  }
+  const { report: noTabs } = await probe(
+    cliWith(),
+    editRpc((method, frame) => {
+      if (method === 'session.tabs.listAll') frame.result = { wrong: [] };
+    }),
+  );
+  assert.ok(noTabs.features.answerChat.missing.includes('feature:readTabs'));
+  const { report: noTranscript } = await probe(
+    cliWith(),
+    editRpc((method, frame) => {
+      if (method === 'nativeChat.readSession') frame.error = { code: 'method_not_found' };
+    }),
+  );
+  assert.ok(noTranscript.features.answerChat.missing.includes('feature:readTranscript'));
+  const { report: inconsistent } = await probe(cliWith(), undefined, 'other-runtime');
+  assert.ok(inconsistent.features.answerChat.missing.includes('runtime-id:consistent'));
 });

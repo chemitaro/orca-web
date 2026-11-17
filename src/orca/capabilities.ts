@@ -4,7 +4,14 @@ import type { ReadOnlyOrcaCli } from './orca-cli.ts';
 import type { RpcTransport } from './rpc.ts';
 import type { LocateOutcome } from './runtime.ts';
 
-export type FeatureName = 'readState' | 'readTabs' | 'openExistingTab' | 'readTranscript' | 'sendTerminal' | 'sendChat';
+export type FeatureName =
+  | 'readState'
+  | 'readTabs'
+  | 'openExistingTab'
+  | 'readTranscript'
+  | 'sendTerminal'
+  | 'sendChat'
+  | 'answerChat';
 
 export interface FeatureReport {
   available: boolean;
@@ -218,6 +225,14 @@ export async function probeCapabilities(deps: ProbeDeps): Promise<CapabilityRepo
     .need('feature:readTabs', readTabsReport.available)
     .need('feature:readTranscript', readTranscript.report().available)
     .defer('rpc:agentSession.send', 'rpc:agentSession.sendRecorded');
+  // 構造化 Chat の質問への答え（agentSession.respondToQuestion の answers）。古い Orca は answers を受けない。
+  const answerChat = base()
+    .need('capability:agent-session.structured.v1', capabilities.has('agent-session.structured.v1'))
+    .need('capability:agent-session.question-answers.v1', capabilities.has('agent-session.question-answers.v1'))
+    .need('runtime-id:consistent', runtimeIdConsistent)
+    .need('feature:readTabs', readTabsReport.available)
+    .need('feature:readTranscript', readTranscript.report().available)
+    .defer('rpc:agentSession.respondToQuestion');
 
   return {
     checkedAt: now().toISOString(),
@@ -233,6 +248,7 @@ export async function probeCapabilities(deps: ProbeDeps): Promise<CapabilityRepo
       readTranscript: readTranscript.report(),
       sendTerminal: sendTerminal.report(),
       sendChat: sendChat.report(),
+      answerChat: answerChat.report(),
     },
   };
 }

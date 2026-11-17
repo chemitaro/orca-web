@@ -1,5 +1,6 @@
 // 本文の検査と、確認から確定までの短期の票。
 import { createHash, randomBytes } from 'node:crypto';
+import type { QuestionView } from '../transcript/normalize.ts';
 import type { SendTarget } from './model.ts';
 export type TextCheck =
   | { ok: true }
@@ -31,6 +32,9 @@ export interface TicketInput {
   target: SendTarget;
   digest: string;
   operationId: string;
+  /** 答えの票だけが持つ。答える質問の位置と、意図で確かめた問い（確定で digest を比べるため）。 */
+  prompt?: { itemId: string; revision: number };
+  questions?: QuestionView[];
 }
 export interface SendTicket extends TicketInput {
   expiresAt: number;
@@ -53,7 +57,13 @@ export class TicketStore {
     const ticket = Buffer.from(bytes).toString('base64url');
     if (this.#tickets.has(ticket)) throw new Error('duplicate ticket randomness');
     const expiresAt = this.#now() + 60000;
-    this.#tickets.set(ticket, { ...input, target: { ...input.target }, expiresAt });
+    this.#tickets.set(ticket, {
+      ...input,
+      target: { ...input.target },
+      ...(input.prompt ? { prompt: { ...input.prompt } } : {}),
+      ...(input.questions ? { questions: structuredClone(input.questions) } : {}),
+      expiresAt,
+    });
     if (this.#tickets.size > 32) {
       const oldest = this.#tickets.keys().next();
       if (!oldest.done) this.#tickets.delete(oldest.value);

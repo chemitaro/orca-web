@@ -1,4 +1,4 @@
-// 確認つきの送信だけを通す RPC の門。読む門の許可一覧は広げない。
+// 確認つきの送信と質問への答えだけを通す RPC の門。読む門の許可一覧は広げない。
 import { READ_METHODS, type RpcCallOptions, type RpcOutcome, type RpcTransport } from './rpc.ts';
 
 export const SEND_READ_METHODS: readonly string[] = [
@@ -37,19 +37,22 @@ function terminalSend(params: unknown, options?: RpcCallOptions): boolean {
   );
 }
 
+function isEnvelope(envelope: unknown): boolean {
+  return (
+    hasKeys(envelope, ['sessionId', 'clientOperationId', 'expectedRuntimeFence', 'payloadFingerprint']) &&
+    isText(envelope.sessionId) &&
+    isOperationId(envelope.clientOperationId) &&
+    Number.isInteger(envelope.expectedRuntimeFence) &&
+    (envelope.expectedRuntimeFence as number) > 0 &&
+    typeof envelope.payloadFingerprint === 'string' &&
+    /^[0-9a-f]{64}$/.test(envelope.payloadFingerprint)
+  );
+}
+
 function chatSend(params: unknown): boolean {
   if (!hasKeys(params, ['envelope', 'body'])) return false;
   const { envelope, body } = params;
-  if (
-    !hasKeys(envelope, ['sessionId', 'clientOperationId', 'expectedRuntimeFence', 'payloadFingerprint']) ||
-    !isText(envelope.sessionId) ||
-    !isOperationId(envelope.clientOperationId) ||
-    !Number.isInteger(envelope.expectedRuntimeFence) ||
-    (envelope.expectedRuntimeFence as number) <= 0 ||
-    typeof envelope.payloadFingerprint !== 'string' ||
-    !/^[0-9a-f]{64}$/.test(envelope.payloadFingerprint)
-  )
-    return false;
+  if (!isEnvelope(envelope)) return false;
   if (
     !hasKeys(body, ['kind', 'role', 'blocks']) ||
     body.kind !== 'message' ||
@@ -60,6 +63,43 @@ function chatSend(params: unknown): boolean {
     return false;
   const block = body.blocks[0];
   return hasKeys(block, ['type', 'text']) && block.type === 'text' && isText(block.text);
+}
+
+/** Orca の RespondToQuestionParams の上限（answers は1〜4件、optionIds は64件、id は1024字、other は64KiB）。 */
+const MAX_ANSWERS = 4;
+const MAX_ANSWER_OPTIONS = 64;
+const MAX_ANSWER_ID_CHARS = 1024;
+const MAX_ANSWER_OTHER_BYTES = 64 * 1024;
+
+const isAnswerId = (value: unknown): value is string => isText(value) && value.length <= MAX_ANSWER_ID_CHARS;
+
+function isAnswer(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const keys = Object.hasOwn(value, 'other') ? ['questionId', 'optionIds', 'other'] : ['questionId', 'optionIds'];
+  return (
+    hasKeys(value, keys) &&
+    isAnswerId(value.questionId) &&
+    Array.isArray(value.optionIds) &&
+    value.optionIds.length <= MAX_ANSWER_OPTIONS &&
+    value.optionIds.every(isAnswerId) &&
+    (!Object.hasOwn(value, 'other') ||
+      (typeof value.other === 'string' && Buffer.byteLength(value.other, 'utf8') <= MAX_ANSWER_OTHER_BYTES))
+  );
+}
+
+/** 質問への答え。古い詰めた形の optionId は通さない。 */
+function chatAnswer(params: unknown): boolean {
+  return (
+    hasKeys(params, ['envelope', 'itemId', 'expectedRevision', 'answers']) &&
+    isEnvelope(params.envelope) &&
+    isText(params.itemId) &&
+    Number.isSafeInteger(params.expectedRevision) &&
+    (params.expectedRevision as number) > 0 &&
+    Array.isArray(params.answers) &&
+    params.answers.length >= 1 &&
+    params.answers.length <= MAX_ANSWERS &&
+    params.answers.every(isAnswer)
+  );
 }
 
 export class SendRpc implements RpcTransport {
@@ -75,7 +115,9 @@ export class SendRpc implements RpcTransport {
         ? terminalSend(params, options)
         : method === 'agentSession.send'
           ? chatSend(params)
-          : READ_METHODS.includes(method) || SEND_READ_METHODS.includes(method))
+          : method === 'agentSession.respondToQuestion'
+            ? chatAnswer(params)
+            : READ_METHODS.includes(method) || SEND_READ_METHODS.includes(method))
     ) {
       return Promise.reject(new Error(`${method} is not allowed for sending`));
     }

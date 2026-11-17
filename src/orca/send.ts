@@ -1,6 +1,13 @@
 // Orca の送信結果を、到達を確かめられる範囲だけで分類する。
 import { createHash } from 'node:crypto';
+import { answerForm, digestAnswers, type QuestionAnswer } from '../send/answer.ts';
 import type { ChatSendTarget, TerminalSendTarget } from '../send/model.ts';
+import {
+  type JournalQuestionAnswer,
+  parseJournalQuestion,
+  type QuestionState,
+  type QuestionView,
+} from '../transcript/normalize.ts';
 import type { RpcOutcome } from './rpc.ts';
 
 export type SendOutcome = 'refused' | 'unknown' | 'accepted' | 'submitted' | 'input_accepted';
@@ -113,7 +120,7 @@ export function classifyChat(outcome: RpcOutcome): SendResult {
   return classified;
 }
 // Orca v1.4.258 agent-session-mutation-envelope.ts の canonicalize と同じ規則。
-function canonicalize(value: unknown): string {
+export function canonicalize(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value ?? null);
   if (Array.isArray(value)) return `[${value.map(canonicalize).join(',')}]`;
   const entries = Object.entries(value)
@@ -126,9 +133,53 @@ export function chatFingerprint(sessionId: string, body: unknown): string {
     .update(canonicalize({ method: 'agentSession.send', sessionId, fields: { body } }))
     .digest('hex');
 }
+const ANSWER_METHOD = 'agentSession.respondToQuestion';
+/** 質問への答えの結果。Orca の AgentSessionPromptResult の resolution.state で分ける。 */
+function answerReceipt(result: unknown): SendResult {
+  const reply = object(result);
+  if (reply.ok === false) {
+    const code = object(reply.refusal).code;
+    return typeof code === 'string' ? { outcome: 'refused', detail: { code } } : unknown();
+  }
+  if (reply.ok !== true) return unknown();
+  const state = object(object(reply.value).resolution).state;
+  if (state === 'resolved') return { outcome: 'submitted', detail: { code: 'resolved' } };
+  if (state === 'cancelled') return { outcome: 'refused', detail: { code: 'cancelled' } };
+  if (state === 'pending') return { outcome: 'unknown', detail: { code: 'prompt_pending' } };
+  return unknown();
+}
+export function classifyAnswer(outcome: RpcOutcome): SendResult {
+  if (!outcome.ok) return failure(outcome, ANSWER_METHOD);
+  const classified = answerReceipt(outcome.result);
+  if (object(outcome.result).replayed === true) classified.detail.replayed = true;
+  return classified;
+}
+/** Orca の respondToStructuredAgentSessionPrompt が作る指紋（method は `agentSession.respondTo:question`）。 */
+export function answerFingerprint(
+  sessionId: string,
+  fields: { itemId: string; expectedRevision: number; answers: readonly QuestionAnswer[] },
+): string {
+  return createHash('sha256')
+    .update(canonicalize({ method: 'agentSession.respondTo:question', sessionId, fields }))
+    .digest('hex');
+}
+/** 送る前と照会で読む質問の今の状態。answers は Orca が書いた生の答え（解けなければ null）。 */
+export interface QuestionRead {
+  fence: number;
+  revision: number;
+  state: QuestionState;
+  questions: QuestionView[];
+  answers: JournalQuestionAnswer[] | null;
+}
 export interface SendReadFailure {
   ok: false;
-  error: 'unreachable' | 'unsupported' | 'terminal_gone' | 'unknown_shape' | 'foreground_unknown';
+  error:
+    | 'unreachable'
+    | 'unsupported'
+    | 'terminal_gone'
+    | 'unknown_shape'
+    | 'foreground_unknown'
+    | 'question_not_found';
   method?: string;
 }
 export type SendRead<T> = ({ ok: true } & T) | SendReadFailure;
@@ -140,6 +191,33 @@ function readFailure(outcome: Extract<RpcOutcome, { ok: false }>, method: string
   return { ok: false, error: 'unknown_shape' };
 }
 export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').SendRpc }) {
+  /** 末尾の 200 件から itemId の質問を読む。 */
+  async function readQuestion(sessionId: string, itemId: string): Promise<SendRead<QuestionRead>> {
+    const result = await rpc.call('agentSession.history', { sessionId, direction: 'tail', limit: 200 });
+    if (!result.ok) return readFailure(result, 'agentSession.history');
+    const reply = object(result.result);
+    const page = object(reply.page);
+    if (
+      reply.ok !== true ||
+      page.sessionId !== sessionId ||
+      !Number.isInteger(page.fence) ||
+      (page.fence as number) <= 0 ||
+      !Array.isArray(page.items)
+    )
+      return { ok: false, error: 'unknown_shape' };
+    const found = page.items.findLast((row) => object(row).itemId === itemId);
+    if (found === undefined) return { ok: false, error: 'question_not_found' };
+    const parsed = parseJournalQuestion(found);
+    if (parsed === null) return { ok: false, error: 'unknown_shape' };
+    return {
+      ok: true,
+      fence: page.fence as number,
+      revision: parsed.prompt.revision,
+      state: parsed.state,
+      questions: parsed.questions,
+      answers: parsed.answers,
+    };
+  }
   return {
     async checkChat(target: ChatSendTarget, operationId: string): Promise<SendRead<SendResult>> {
       const result = await rpc.call('agentSession.sendRecorded', {
@@ -233,6 +311,50 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
           { timeoutMs: 15000 },
         ),
       );
+    },
+    async answerChat(
+      target: ChatSendTarget,
+      prompt: { itemId: string; revision: number },
+      answers: readonly QuestionAnswer[],
+      operationId: string,
+      fence: number,
+    ): Promise<SendResult> {
+      const fields = { itemId: prompt.itemId, expectedRevision: prompt.revision, answers: [...answers] };
+      return classifyAnswer(
+        await rpc.call(
+          ANSWER_METHOD,
+          {
+            envelope: {
+              sessionId: target.sessionId,
+              clientOperationId: operationId,
+              expectedRuntimeFence: fence,
+              payloadFingerprint: answerFingerprint(target.sessionId, fields),
+            },
+            ...fields,
+          },
+          { timeoutMs: 15000 },
+        ),
+      );
+    },
+    readQuestion,
+    /** 結果不明の答えの照会。今の質問の状態だけを読み、送り直さない。 */
+    async checkAnswer(
+      target: ChatSendTarget,
+      prompt: { itemId: string; revision: number },
+      digest: string,
+      _operationId: string,
+    ): Promise<SendRead<SendResult>> {
+      const read = await readQuestion(target.sessionId, prompt.itemId);
+      if (!read.ok)
+        return read.error === 'question_not_found'
+          ? { ok: true, outcome: 'unknown', detail: { code: 'question_not_found' } }
+          : read;
+      if (read.state === 'cancelled') return { ok: true, outcome: 'refused', detail: { code: 'cancelled' } };
+      if (read.state === 'pending') return { ok: true, outcome: 'unknown', detail: { code: 'prompt_pending' } };
+      if (read.answers === null) return { ok: true, outcome: 'unknown', detail: { code: 'resolved_unverified' } };
+      return digestAnswers(answerForm(read.questions, read.answers)) === digest
+        ? { ok: true, outcome: 'submitted', detail: { code: 'resolved' } }
+        : { ok: true, outcome: 'refused', detail: { code: 'resolved_by_other' } };
     },
     async readChatFence(sessionId: string): Promise<SendRead<{ fence: number }>> {
       const result = await rpc.call('agentSession.history', { sessionId, direction: 'tail', limit: 1 });
