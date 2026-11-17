@@ -37,7 +37,7 @@ design: {
 			  allowOther: boolean; otherAllowsEmpty: boolean }
 			```
 			構造化 Chat（normalizeJournalItems の kind 'question'）：Orca の agentSessionPromptQuestions と同じ規則で問いを作る（`questions` があればそれ、なければ項目を1問にして id は `freeTextQuestionId ?? 'q1'`、multiSelect は偽）。`allowOther` は問いの `freeTextQuestionId` があるとき、`otherAllowsEmpty` は `freeTextInput.allowEmpty === true`。`prompt` は項目の `itemId` と `revision`（正の整数でなければ形の誤り）。`answers` は resolution の `answers`（形を確かめる）、なければ `selectedOptionId` を Orca の legacyAgentSessionQuestionAnswers と同じ規則で解く（選択肢の id、`question-group:` の JSON、`<id>:<文>` の自由入力）。答え済みの文とラベルも上限で切る。
-			端末（normalizeNativeMessages の tool-call の block）：名前の英数字だけを小文字にしたものが `askuserquestion`・`requestuserinput`、または名前が `request_user_input_async` で、`state` が 'failed' でない呼び出し。入力（物、または JSON の文字）を Orca の parseCanonicalQuestionsInput（`question` か `title`、`header`、`multiSelect`（なければ `multiple`・`multi`）、`options` はラベルの文字か `{label, description}`）と同じ規則で読む。選択肢の id は `String(番号)`、問いの id は `String(番号)`、allowOther は偽（端末は答えないので画面の印に使わない）。1問も読めなければ今のままツールの呼び出しにする。state は 'pending'、answers は null。
+			端末（normalizeNativeMessages の tool-call の block）：名前の英数字だけを小文字にしたものが `askuserquestion`・`requestuserinput` で（`request_user_input_async` は含めない。結果がすぐ返る受付で、答えではないため）、`state` が 'failed' でない呼び出し。入力（物、または JSON の文字）を Orca の parseCanonicalQuestionsInput（`question` か `title`、`header`、`multiSelect`（なければ `multiple`・`multi`）、`options` はラベルの文字か `{label, description}`）と同じ規則で読む。選択肢の id は `String(番号)`、問いの id は `String(番号)`、allowOther は偽（端末は答えないので画面の印に使わない）。1問も読めなければ今のままツールの呼び出しにする。state は 'pending'、answers は null。
 			上限：問いの文 4,000 字、見出し・ラベル 500 字、説明 2,000 字、その他の文 4,000 字。切ったら部分に `truncated: true`。message の shortened も今と同じく truncated にする。
 			知らない形（questions が配列でない、選択肢に id がない、resolution の state が3つのどれでもない）は今のまま `{type: 'unsupported', what: 'question'}` にする（F-03）。
 			approval・diff・status・plan は変えない。
@@ -50,8 +50,8 @@ design: {
 			門 `SendRpc` に、決めた形の `agentSession.respondToQuestion` だけを足す：鍵がちょうど `envelope`、`itemId`、`expectedRevision`、`answers`。envelope は今の chatSend と同じ4つの鍵と検査。`itemId` は空でない文字、`expectedRevision` は正の整数、`answers` は1〜4件で、各件は鍵が `questionId`・`optionIds`（と任意の `other`）だけ、questionId は空でない 1024 字以下、optionIds は 64 件以下の空でない文字、other は文字で 64KiB 以下。`optionId`（古い詰めた形）は通さない。
 			アダプターに `answerChat(target: ChatSendTarget, prompt: {itemId, revision}, answers, operationId, fence): Promise<SendResult>` を足す。params は `{envelope: {sessionId, clientOperationId: operationId, expectedRuntimeFence: fence, payloadFingerprint}, itemId, expectedRevision: revision, answers}`、指紋は `sha256(canonicalize({method: 'agentSession.respondTo:question', sessionId, fields: {itemId, expectedRevision, answers}}))`（今の canonicalize を使う）。timeoutMs 15000。
 			結果の分け方 `classifyAnswer(outcome)`：RPC の失敗は今の failure と同じ（method_not_found・invalid_argument は refused、unavailable は refused not_sent、ほかは unknown）。`{ok: false, refusal: {code}}` は refused とその code（`agent_session_already_resolved` など）。`{ok: true, value: {resolution: {state}}}` の state が resolved なら submitted（detail.code 'resolved'）、cancelled なら refused（code 'cancelled'）、pending なら unknown。`replayed: true` は今と同じく detail に写す。ほかの形は unknown（unknown_shape）。
-			読み `readQuestion(sessionId, itemId): Promise<SendRead<{fence, revision, state, questions}>>`：`agentSession.history`（tail、limit 200）を1回読み、page.fence と、itemId の項目を D-01 と同じ規則で読む（normalize.ts の関数を使う）。項目がなければ `{ok: false, error: 'question_not_found'}`（SendReadFailure の error に足す）。
-			照会 `checkAnswer(target, prompt, operationId)`：readQuestion で今の状態を読み、answered なら submitted（code 'resolved'）、cancelled なら refused（code 'cancelled'）、pending で revision が同じなら unknown（code 'prompt_pending'）、項目がなければ unknown（code 'question_not_found'）。送り直さない。
+			読み `readQuestion(sessionId, itemId): Promise<SendRead<{fence, revision, state, questions}>>`：`agentSession.history`（tail、limit 200）を1回読み、page.fence と、itemId の項目を D-01 と同じ規則で読む（normalize.ts の関数を使う）。項目がなければ `{ok: false, error: 'question_not_found'}`（SendReadFailure の error に足す）、項目はあるが D-01 の規則で読めない（unsupported になる）か history の形が違えば `{ok: false, error: 'unknown_shape'}`。answerIntent と answerConfirm は unknown_shape をそのまま返し（今の送信と同じ HTTP の状態）、送らない。
+			照会 `checkAnswer(target, prompt, digest, operationId)`：readQuestion で今の状態を読み、answered で resolution の answers（D-01 で解いたもの）の digest（D-03 と同じ求め方）が記録の digest と同じなら submitted（code 'resolved'）、違えば refused（code 'resolved_by_other'。Orca は revision の比較で後の答えを拒むので、自分の答えは付いていない）、answered で答えが解けなければ unknown（code 'resolved_unverified'）、cancelled なら refused（code 'cancelled'）、pending で revision が同じなら unknown（code 'prompt_pending'）、項目がなければ unknown（code 'question_not_found'）。送り直さない。
 			能力 `answerChat`（FeatureName に足す）：`capability:agent-session.structured.v1`、`capability:agent-session.question-answers.v1`、`runtime-id:consistent`、`feature:readTabs`、`feature:readTranscript` を要し、`rpc:agentSession.respondToQuestion` を defer にする。
 			"""
 		satisfies: ["R-03", "R-04", "F-01", "F-02", "F-03"]
@@ -59,7 +59,7 @@ design: {
 	"D-03": {
 		title: "答えの送信のサービス（`src/send/service.ts`、`src/send/ticket.ts`、`src/send/journal.ts`）"
 		text: """
-			答えの検査 `checkAnswers(questions: QuestionView[], answers: unknown): AnswerCheck`（`src/send/answer.ts` を足す。純な関数）：形（配列、各件の鍵と型）と、Orca の isValidAgentSessionQuestionAnswers と同じ条件（全部の問いに1件ずつ、id の重なりなし、出された選択肢だけ、other は allowOther の問いだけ、otherAllowsEmpty でなければ空白だけの other は答えに数えない、単一選択はちょうど1つ、複数選択は1つ以上）を確かめる。other は今の checkText と同じ制御文字の検査（タブと改行は許す）と 64KiB の上限。答えを決めた形（鍵の順を決めた物、other は空なら付けない）にして返す。digest は `sha256(canonicalize(answers))`。
+			答えの検査 `checkAnswers(questions: QuestionView[], answers: unknown): AnswerCheck`（`src/send/answer.ts` を足す。純な関数）：形（配列、各件の鍵と型）と、Orca の isValidAgentSessionQuestionAnswers と同じ条件（全部の問いに1件ずつ、id の重なりなし、出された選択肢だけ、other は allowOther の問いだけ、other の鍵があり otherAllowsEmpty か空白でない文のときだけ答えに数える（Orca と同じ）、単一選択はちょうど1つ、複数選択は1つ以上）を確かめる。other は今の checkText と同じ制御文字の検査（タブと改行は許す）と 64KiB の上限。答えを決めた形（鍵の順を決めた物。other は答えに数えたときだけ付け、文は変えない）にして返す。digest は `sha256(canonicalize(answers))`。
 			票 `TicketInput` に任意の `prompt: {itemId, revision}` を足す（答えの票だけが持つ）。答えの票で今の confirm は受けない（ticket_invalid）、送信の票で answerConfirm は受けない。
 			`SendService.answerIntent({agent, target?, prompt, answers})`：sendEnabled（偽なら send_disabled）、今の preflight（route が chat でなければ `{error: 'not_sendable', reason: 'terminal_route'}`、能力 answerChat がなければ unsupported と missing）、指紋の比べ（今の intent と同じ）、readQuestion（state が pending でないか revision が違えば `{error: 'target_changed', reason: 'question_changed'}`、なければ `question_changed` と同じ扱いで reason 'question_gone'）、checkAnswers（誤りは `{error: 'invalid_answer', reason}`、HTTP 400）の順。通れば票を出し、`{ticket, expiresAt, operationId, preview, digest}` を返す。
 			`SendService.answerConfirm({ticket, answers})`：今の confirm と同じ順（busy、sendEnabled、票の取り出しと処理中の印を同じ同期の処理で、答えの digest の比べ、preflight と宛先の比べ）に加えて、readQuestion で同じ itemId が pending で revision が票と同じことと、答えがその問いに対して checkAnswers を通ることを確かめ、送る前の記録を書いてから answerChat を1回だけ呼び、後の記録を書く。拒みは今の #refuse で記録する。
@@ -82,13 +82,14 @@ design: {
 		title: "質問のカードの部品（`web/embed/question-view.js`、`question-dom.js`）と、答える手段の差し替え"
 		text: """
 			`question-view.js`（純な関数）：
-			- `initialSelection(part)`：各問いに `{optionIds: [], other: ''}`。
-			- `toggleOption(selection, part, questionIndex, optionId)`：単一選択はその1つにして other を空に、複数選択は入れ外し。`setOther(selection, part, questionIndex, text)`：単一選択で文があれば optionIds を空に。
+			- `initialSelection(part)`：各問いに `{optionIds: [], other: null}`（null はその他を選んでいない）。
+			- `toggleOption(selection, part, questionIndex, optionId)`：単一選択はその1つにして other を null に、複数選択は入れ外し。`toggleOther(selection, part, questionIndex)`：その他の欄を選ぶ（other を '' に）か外す（null に）。単一選択で選ぶと optionIds を空に。`setOther(selection, part, questionIndex, text)`：選んだその他の文を変える。
+			- `buildAnswers` は、other が null でない問いにだけ other を付ける（otherAllowsEmpty の問いは '' も答え、そうでなければ空白だけの文は付けない）。
 			- `buildAnswers(part, selection)`：サーバーの checkAnswers と同じ条件で `{ok: true, answers}` か `{ok: false}`（送るボタンを押せるかに使う）。
 			- `buildQuestionCard(part, {selection, flow, availability, result})`：描く物 `{key, closed, state, title, questions: [{id, header, question, multiSelect, options: [{id, label, description, selected, disabled}], other: {shown, value, disabled} }], answerSummary: string[], notice, reason, button: {shown, disabled, busy, label}, open: boolean}`。state が answered・cancelled なら closed（answerSummary に、問いごとに選んだラベルとその他の文を「、」で並べた文。端末は結びついたツールの結果の文）。
 			- 答える手段（answerer）の契約：`{ availability(part, status): {ok: true} | {ok: false, reason: string, open?: true}, submit(part, answers): Promise<FlowResult> }`。この Issue は `createChatAnswerer({agentId, writer})`（構造化 Chat：意図と確定を続けて送る）と、端末の `terminalAnswerer`（いつも `{ok: false, reason: '端末のエージェントの質問は、いまは Orca で答えてください', open: true}`）を作り、`answererFor(part)` が source で選ぶ。iss-00049 は terminalAnswerer を差し替えるだけでよい。
 			- 送る流れ（カードごと）：`idle → sending → done | refused | unknown`。sending の間の押しは捨てる。done は「答えました」、refused は理由（already_resolved は「ほかの画面で答え済みです」、question_changed は「質問が変わりました」）、unknown は「届いたか分かりません。自動では送り直しません」と「確かめる」（`GET /api/send/{操作の ID}?check=1`）と「閉じる」。自動で送り直さない。理由の言葉の表は1か所に置く（send_disabled は「送信が無効です（設定の sendEnabled が偽）」）。
-			`question-dom.js`：textContent と createElement だけで描く。カードは `section.question-card`、選択肢は `button.question-option`（`aria-pressed`、単一選択は role radio の印でなく文字の印でよい）、その他は `input`（または textarea）、送るボタン、閉じた形は `details`（summary に問いと答え）。押しは data 属性（`data-question`、`data-option`、`data-action`）で親が受ける。open の操作は `createOpenControl` を使う（新しく作らない）。
+			`question-dom.js`：textContent と createElement だけで描く。カードは `section.question-card`、選択肢は `button.question-option`（`aria-pressed`、単一選択は role radio の印でなく文字の印でよい）、その他は `input`（または textarea）、送るボタン、閉じた形は `details`（summary に問いと答え）。押しは data 属性（`data-question`、`data-option`、`data-action`）で親が受ける。open の操作は `createOpenControl` を使う（新しく作らない）。端末の質問のカードの「Orca で開く」は、見出しの置き場と違い、390px 以下でも出す（カードでは答える唯一の道なので）。
 			`agent-view.js` の buildChat：question の部分を `{kind: 'question', key, at, part}` の行にし、端末の question は同じ callId の tool-result を結びつけて `state: 'answered'`、`answerText`（結果の文）にする（結果が先か後かによらない）。`agent-dom.js` の renderChatRow は question の行を question-dom.js に任せる。`agent-frame.js` はカードの選択と流れの状態をカードの key ごとに持ち、5 秒の描き直しや追記でも保つ。送れるかは今の `/api/send/status` の読みの結果（enabled と answer）を使う。
 			`agent.css`：カードの見た目（`--ds-*` を先に、明暗）。選択肢は縦に並ぶ全幅、min-height 44px、長い語は折り返す（overflow-wrap: anywhere）。
 			`src/server/app.ts` の STATIC_FILES に2つのファイルを足す。
@@ -107,7 +108,7 @@ design: {
 
 compatibility: """
 	会話の文書の schema は `orca-web.transcript/v1` のまま、部分の種類が1つ増える。知らない部分を描けない古い画面はないので（画面は同じサーバーが配る）、互換の問題はない。
-	送信の記録は before の行に action が付くものが増える。今の行の形は変えない。戻した版は action のある行を読まない（parseRow が text のない before を捨てる）ので、照会は not_sent ではなく record の欠けとして扱われうる。戻すときは答えの記録の照会を使わない。
+	送信の記録は before の行に action が付くものが増える。今の行の形は変えない。戻した版は action のある before の行を読まない（parseRow が text のない before を捨てる）ので、after の行のない答えの操作（送る途中で落ちたもの）は、戻した版の照会で not_sent と誤って示されうる。戻すときは答えの操作の照会を信じず、Orca の画面で質問の状態を見る。
 	"""
 
 risks: [

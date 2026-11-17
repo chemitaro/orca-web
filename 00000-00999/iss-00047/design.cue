@@ -18,9 +18,10 @@ design: {
 		text: """
 			`OpenService.open(request, origin)`：`origin` は D-03 の `OpenDevice`（`'host' | 'client'`）。`navigation = origin === 'client' ? 'clients' : 'host'`。
 			`#send(worktreeId, target, navigation)`：
-			1. いつも `worktree.activate {worktree: "id:<id>", navigation}` を送る（timeoutMs は今の書き込みの時間切れ）。`classifyRpc` で ok でなければ、そのまま失敗を返し 2 を送らない（route は今の選んだ先の route）。
+			1. いつも `worktree.activate {worktree: "id:<id>", navigation}` を送る（timeoutMs は今の書き込みの時間切れ）。`classifyRpc` で ok でなければ、そのまま失敗を返し 2 を送らない（route は `worktree-activate`）。
 			2. `target.route` が `terminal-switch` で navigation が `host` なら、今どおり `terminal switch --terminal <handle>`。`terminal-switch` で `clients` なら `session.tabs.activate {worktree, tabId: target.tabId, leafId: <paneKey の leaf>, navigation, intent: "user"}`（`terminal switch` の RPC は navigation に `clients` を取らない）。`tab-activate` なら今の params で navigation だけを差す。`worktree-activate` なら 2 はない。
 			3. 2 が ok でなければ、その失敗に `worktreeShown: true` を足して返す。
+			結果の `route` は、最後に送った書き込みの経路にする：2 が `terminal switch` なら `terminal-switch`、`session.tabs.activate` なら（クライアントの端末のタブも）`tab-activate`、2 がなければ `worktree-activate`。`reason` は選び方の理由のまま。
 			`OpenTarget` の `terminal-switch` に `leafId` を足す（`open-target.ts` の `routeFor`）。選び方は変えない。
 			Orca の窓は、別の worktree の agent-session のタブへの `ui:focusEditorTab` を、`userInitiated` なしでは捨てる（要件の背景）。1 で worktree を先に表示すると、2 は今の worktree のタブの選択になり、捨てられない。1 の表示は窓の中で非同期（`fetchWorktrees` の後）なので、2 が先に届けば捨てられうる。そのときも worktree は表示され、窓が覚えているタブが出る（多くは `last-tab` と同じ）。
 			"""
@@ -62,7 +63,7 @@ design: {
 		text: """
 			`OpenSuccess` に `device: 'host' | 'client'`、`screen: 'unverified'`、`raised?: boolean` を足す。`status: 'opened'` と今の項目は残す（読む側を壊さない）。`OpenFailure` に `worktreeShown?: true` を足す。`OpenErrorCode` に `device_not_connected`、`device_unknown` を足し、`app.ts` の `OPEN_ERROR_STATUS` に 409 と 503 を足す。
 			`app.ts` の `handleOpen`：`options.open(request, req.socket.remoteAddress)` を呼ぶ。`main.ts` は `resolveOpenDevice` を呼んでから `OpenService.open(request, device)` を呼ぶ形の関数を渡す（`wiring.ts` に `openFrom(request, address)` を置く）。見分けに失敗したら Orca に何も送らない。
-			`open-control-view.js` の `openResult`：成功は device が `client` なら『この端末の Orca に切り替えを送りました』、ほかは『Orca に切り替えを送りました』。`mayCreateInitialTerminal` のときは今の注記を後ろに足す。失敗で `worktreeShown` なら『worktree は表示しましたが、タブを選べませんでした』を先に出す。`OPEN_MESSAGES` に `device_not_connected`：『この端末の Orca はホストにつながっていません』、`device_unknown`：『押した端末を確かめられません』。
+			`open-control-view.js` の `openResult`：成功は device が `client` なら『この端末の Orca に切り替えを送りました』、ほかは『Orca に切り替えを送りました』。`mayCreateInitialTerminal` のときは今の注記を後ろに足す。失敗で `worktreeShown` なら『worktree は表示しましたが、タブを選べませんでした』を先に出す。`OPEN_MESSAGES` に `device_not_connected`：『この端末から Orca のホストへの接続が見つかりません』、`device_unknown`：『押した端末を確かめられません』。
 			"""
 		satisfies: ["R-05"]
 	}

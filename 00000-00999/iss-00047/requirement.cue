@@ -63,7 +63,7 @@ requirements: {
 			"""
 		acceptance: [
 			"要求の元が接続中の端末のアドレスのとき、`worktree.activate` と `session.tabs.activate` を `navigation: \"clients\"` で送り、`terminal switch` を呼ばない（テスト）",
-			"実機（本人に頼む）：クライアントの PC のブラウザーで押すと、クライアントの Orca の選択が変わり、ホストの選択は変わらない",
+			"実機（本人に頼む）：クライアントの PC のブラウザーで押すと、クライアントの Orca の選択が変わり、ホストの選択は変わらない。結果を report.md に残す。PR の時点で得られなければ、この条件を未了として統括に報告し、統括の受け入れで閉じる（統括、2026-11-18 の流れ：クライアントの PC が要る場面は統括を通して本人に頼む）",
 		]
 	}
 	"R-03": {
@@ -113,7 +113,7 @@ failures: {
 constraints: [
 	"Orca の画面を読む RPC がないので、切り替わったかは orca-web で確かめない（R-05 で出す）",
 	"`clients` は接続中のすべての端末（iPhone のアプリも）を動かす",
-	"ランタイムに relay で接続する端末は、アドレスで見分けられない（device_not_connected になる）",
+	"ランタイムに relay で接続する端末と、orca-web を開いたアドレス（tailnet の IPv4）と違うアドレス（同じ Wi-Fi の LAN、tailnet の IPv6 など）で接続する端末は、アドレスで見分けられない（device_not_connected になる。言葉は『見つからない』とし、つながっていないとは言い切らない）",
 	"本人の環境に特化した決まり（固定の IP や名前）を入れない",
 ]
 

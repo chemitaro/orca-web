@@ -38,6 +38,7 @@ excludes: [
 	"端末のエージェントの質問への答え（キーの列）。iss-00049 で行う",
 	"承認（approval）の表示と答え。今のまま「表示できない（許可の確認）」。iss-00050 で行う",
 	"選択肢の preview（見比べる等幅の塊）の表示",
+	"Codex の request_user_input_async（答えを後の発言で返す質問）のカード。iss-00049 の案にする",
 	"質問の取り消し（`agentSession.cancel` の prompt）",
 	"今の送信（`/api/send/intent`・`confirm`、`terminal.send`・`agentSession.send`）の意味の変更",
 	"SpecDock 側の組み込み（spec-dock の epic-00471・00526）",
@@ -48,7 +49,7 @@ requirements: {
 		title: "会話の API が、質問を、問い・選択肢・答えの状態の分かる部分として返す"
 		text: """
 			構造化 Chat の journal の `question` は、`{type: 'question', source: 'chat', prompt: {itemId, revision}, callId: null, questions, state, answers}` にする。`state` は resolution の `pending`→`pending`、`resolved`→`answered`、`cancelled`→`cancelled`。`answers` は resolution の answers、なければ selectedOptionId を Orca と同じ規則で解いたもの、解けなければ null。
-			端末のエージェントの質問のツールの呼び出し（名前は Orca の isAskUserQuestionTool と同じ判定か request_user_input_async、失敗した呼び出しは除く）で、入力から1つ以上の問いを読めたものは `{type: 'question', source: 'terminal', prompt: null, callId, questions, state: 'pending', answers: null}` にする（選択肢の id は 0 から数えた番号の文字）。読めなければ今のままツールの呼び出しにする。同じ callId のツールの結果はこれまでどおり別の部分で返し、画面が結びつけて答え済みにする。
+			端末のエージェントの質問のツールの呼び出し（名前は Orca の isAskUserQuestionTool と同じ判定、失敗した呼び出しは除く。Codex の request_user_input_async は、ツールの結果がすぐ返り答えは後の利用者の発言で来るので、今のままツールの呼び出しにする）で、入力から1つ以上の問いを読めたものは `{type: 'question', source: 'terminal', prompt: null, callId, questions, state: 'pending', answers: null}` にする（選択肢の id は 0 から数えた番号の文字）。読めなければ今のままツールの呼び出しにする。同じ callId のツールの結果はこれまでどおり別の部分で返し、画面が結びつけて答え済みにする。
 			各問いは `{id, header, question, multiSelect, options: [{id, label, description}], allowOther, otherAllowsEmpty}`。文字は上限で切り、切ったら `truncated: true` を付ける。preview は出さない。承認は今のまま unsupported（approval）。
 			"""
 		acceptance: [

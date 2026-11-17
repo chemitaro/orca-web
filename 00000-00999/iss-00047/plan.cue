@@ -17,7 +17,7 @@ steps: {
 tests: {
 	"T-01": {title: "OpenService：host で agent-session のタブ → worktree.activate、session.tabs.activate の順、どちらも navigation host。端末（ready・handle）→ worktree.activate、terminal switch。タブなし → worktree.activate だけ", verifies: ["R-01"]}
 	"T-02": {title: "OpenService：client → worktree.activate と session.tabs.activate を navigation clients で送り、端末のタブも tabId・leafId で session.tabs.activate、terminal switch を呼ばない", verifies: ["R-02"]}
-	"T-03": {title: "OpenService：1 が rpc の失敗・時間切れ（unconfirmed）なら 2 を送らずその誤り。2 の失敗は ok:false と worktreeShown:true。成功は device・screen:unverified を持つ", verifies: ["R-05"]}
+	"T-03": {title: "OpenService：1 が rpc の失敗・時間切れ（unconfirmed）なら 2 を送らずその誤り。2 の失敗は ok:false と worktreeShown:true。成功は device・screen:unverified を持つ。route は最後に送った書き込みの経路（1 の失敗は worktree-activate、クライアントの端末のタブは tab-activate）", verifies: ["R-05"]}
 	"T-04": {title: "open-device：normalizeAddress（::ffff:、zone、大文字）、classifyOrigin（loopback、ホストの口、remote、undefined）、resolveOpenDevice（host は peers を呼ばない、peers の失敗は device_unknown、集合にあれば client、なければ device_not_connected）", verifies: ["R-03", "F-01"]}
 	"T-05": {title: "RuntimePeers：lsof の -F n の出力（v4、[v6]、複数、LISTEN の行がない）を解く、終了コード 1 で空は空の集合、ほかの失敗・時間切れは ok:false、websocket がない runtime は空の集合、authToken を読まない・出さない。引数の配列と絶対パス", verifies: ["R-03"]}
 	"T-06": {title: "前面に出す：host の成功で1回だけ raise を呼び raised を入れる、raise が false でも ok、client と失敗では呼ばない。raiseOrca は /usr/bin/open -b com.stablyai.orca を引数の配列で呼び、終了コードで true・false。門は host と clients を通し all・caller・なしを拒む。app の handleOpen は req.socket.remoteAddress を渡し、新しい誤りの HTTP の状態が 409・503", verifies: ["R-04", "F-02"]}
@@ -25,7 +25,7 @@ tests: {
 	"T-08": {title: "runOpen：done で device client のときだけ raiseClient を1回呼ぶ、host・失敗では呼ばない、raiseClient が投げても結果は done のまま", verifies: ["R-04"]}
 	"T-09": {title: "README.md と AGENTS.md に、端末の決め方・clients の制約・relay・前面・sandbox の印・screen unverified・新しいモジュールがあり、『navigation: \"host\" だけ』の古い記述がない（rg）", verifies: ["R-02", "R-04"]}
 	"T-11": {title: "open-button.js の iframe の sandbox が allow-scripts allow-same-origin allow-top-navigation-to-custom-protocols", verifies: ["R-04"]}
-	"T-10": {title: "実機：ホストで開いた前と後の左の一覧・タブの帯の写しと、元へ戻したことが report.md にある。クライアントの確かめの結果（本人）か、未実施の理由がある", verifies: ["R-01", "R-02"]}
+	"T-10": {title: "実機：ホストで開いた前と後の左の一覧・タブの帯の写しと、元へ戻したことが report.md にある。クライアントの確かめの結果（本人）がある。得られなければ R-02 の実機の条件を未了として統括に報告した記録がある", verifies: ["R-01", "R-02"]}
 }
 
 verification: """
@@ -38,7 +38,7 @@ verification: """
 
 rollback: "PR を戻す（開く口は前の1回だけ送る形に戻り、ホストで agent-session のタブの worktree へは切り替わらない不具合に戻る）。"
 
-exit: "PR を開き、CI が通り、統括に PR と合格のコミットと closure.md を報告した状態。"
+exit: "PR を開き、CI が通り、統括に PR と合格のコミットと closure.md と、R-02 の実機の確かめの結果（または未了）を報告した状態。"
 
 execution: {
 	sessions: {
