@@ -3,6 +3,8 @@
 import { appIcon, LINK_ICONS, renderAgentMarks } from './agent-marks.js';
 import { detailMarkWorktree, MISSING_LABELS } from './agent-view.js';
 import { formatElapsed } from './elapsed.js';
+import { renderQuestionCard } from './question-dom.js';
+import { buildQuestionCard } from './question-view.js';
 
 /** title に入れる全体の時刻。 */
 const fullTime = (iso) => {
@@ -56,7 +58,11 @@ export function renderDetail(doc, detail) {
   return list;
 }
 
-/** 会話の1行。open は開いていた折り畳みの key の集合。 */
+/**
+ * 会話の1行。open は開いていた折り畳みの key の集合。
+ * 質問の行は question-dom.js に任せる。options.question は行からカードの描く物を作る関数（選択・流れ・送れるかを持つ呼び手が渡す。
+ * 渡さなければ読むだけの形）、options.onOpenControl はカードが「Orca で開く」の部品を作ったときに呼ぶ。
+ */
 export function renderChatRow(doc, row, options = {}) {
   const now = options.now ?? Date.now();
   const open = options.open ?? new Set();
@@ -72,6 +78,13 @@ export function renderChatRow(doc, row, options = {}) {
     if (row.output !== null) details.append(make(doc, 'div', '結果', 'label'), make(doc, 'pre', row.output));
     if (row.truncated) details.append(make(doc, 'div', '（長いので切りました）', 'cut'));
     item.append(details);
+  } else if (row.kind === 'question') {
+    const view = options.question
+      ? options.question(row)
+      : buildQuestionCard(row.part, { key: row.key, answerText: row.answerText });
+    const card = renderQuestionCard(doc, view, { open: open.has(row.key) });
+    item.append(card.root);
+    if (card.openControl) options.onOpenControl?.(row, card.openControl);
   } else {
     const body = make(doc, 'div', row.text, row.kind === 'bubble' ? 'bubble' : row.kind);
     item.append(body);

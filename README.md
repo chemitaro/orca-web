@@ -157,7 +157,7 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 - 上に題名と「Orca で開く」（埋め込みのボタンと同じ Orca のロゴと `Open` の部品。md）、その下に詳細（worktree、種類、状態、モデルと推論とその意味、親と子、PR と CI）。詳細は幅によらず畳んで始め、押すと開く。詳細の見出しには、稼働の印の部品（`agent-marks.js`）でこのエージェントの状態と種類の印を出す（経過は出さない）。下に会話。幅 390px 以下では Orca で開くを出さない。
 - 詳細の中のリンク（親、子、PR）は、どれも新しいタブで開く（`target="_blank"`、`rel="noopener noreferrer"`、新しいタブの小さな印と title「新しいタブで開く」）。iframe の中で別のエージェントの詳細に移らないので、置いた画面が選んだ相手と iframe の中の相手が食い違わない。新しいタブでは iframe でない単独の詳細として開く。
 - 見た目は SpecDock のダッシュボードのデザインシステムに合わせる（`--ds-*`・`--sd-*` を先に使い、なければ SpecDock の app.css と同じ値。明暗の両方と `?theme=`）。会話の時刻は `elapsed.js` の短い形（now・5m・3h・2d）で、元の時刻は `title` にある。
-- 会話は、指示と返答の吹き出し、折り畳んだツール、Orca の知らせの行。思考は出さない。画像や未知の部分は「表示できない」と示す。読めないときは、空の会話ではなく理由を示す。
+- 会話は、指示と返答の吹き出し、折り畳んだツール、Orca の知らせの行、質問のカード（次の節）。思考は出さない。画像、許可の確認（承認）、未知の部分は「表示できない」と示す。読めないときは、空の会話ではなく理由を示す。
 - 会話の下に入力欄と送るボタンがある（次の節）。送信が止まっている、送る経路が確かめられない、宛先が送れない状態のときは、欄を止めて理由を1行で示す。
 - 置ける画面は `ORCA_WEB_READ_ORIGINS` のオリジンだけ（`frame-ancestors`）。
 
@@ -183,6 +183,24 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 - 届いたら入力欄が空になり「送りました（<結果>）」と出る。要確認の知らせがあれば1行ずつ出る。
 - 結果不明は自動で送り直さない。画面は「届いたか分かりません」の帯を出し、帯の間は Enter でも送るボタンでも送らない。帯の「確かめる」（`GET /api/send/<操作の ID>?check=1`）が、端末は `orchestration.requestShow`、構造化 Chat は `agentSession.sendRecorded` で、読むだけの照会をする。記録のない ID は、確定が処理中なら `in_progress`、そうでなければ票を取り消してから `not_sent`（送っていない。後から確定が届いても送らない）。記録のファイルを読めず、この起動のメモリーでも答えられないときは 503 `record_unreadable`（送っていないとは示さない）。照会の結果を記録に書けなかったときは `checkWarning: "check_record_failed"`。帯の「閉じる」は本文を残して書けるように戻す（送り直すかは利用者が決める）。
 - 記録：送るたびに、送る前（操作の ID、宛先、本文、時刻、世代）と送った後（結果）を `ORCA_WEB_SENDS_DIR` の `sends.jsonl` に1行ずつ追記する。送る前の記録を書けなければ送らない。記録は自動では消えない。要らなくなったら、サーバーを止めてからファイルを消す。
+
+### 質問に答える
+
+エージェントが選択肢で問う質問（Claude Code の AskUserQuestion、Codex の request_user_input）を、会話の中のカードで出す。
+
+- カード：見出し、問い、選択肢（ラベルと説明）、複数選べるかの印、その他の自由入力の欄、「答える」。複数問は1枚に並ぶ。答え済みは選んだ答えを示して閉じ、取り消された質問は「取り消されました」と示して閉じる。選択肢は縦に並ぶ全幅のボタンで、狭い枠や 390px でも押せる。
+- 構造化 Chat（Orca のチャットのタブ）の質問は、カードから答えられる。Orca のチャットの画面と同じ RPC `agentSession.respondToQuestion`（項目の itemId と revision の比較つき）で1回だけ送る。単一選択は1つ（その他の文を選ぶと選択を外す）、複数選択は1つ以上、全部の問いに答えがあるときだけ「答える」が押せる。
+- 端末のエージェントの質問は、読めるが答えるボタンは出さない。「端末のエージェントの質問は、いまは Orca で答えてください」と「Orca で開く」を出す（390px 以下でも）。端末への答えは後の Issue（iss-00049）。Codex の `request_user_input_async`（答えを後の発言で返す質問）はツールの行のまま。承認（approval）もまだ扱わない（iss-00050）。
+- 答えられないとき（`sendEnabled` が偽、Orca が答えの能力 `agent-session.question-answers.v1` を持たない、宛先が送れない状態）は、カードは読めるが押せず、理由を1行で示す。
+- 答える手段は差し替えられる（`web/embed/question-view.js` の answerer。構造化 Chat の手段と、答えない端末の手段）。
+
+答えの API（送信と同じ守り：同じオリジンの JSON と短期のトークン、CORS なし、`sendEnabled`）：
+
+- `POST /api/answer/intent`：`{agent, prompt: {itemId, revision}, answers: [{questionId, optionIds, other?}], target?}`。宛先を解き、Orca の会話を読み直して、質問が同じ revision で未回答なこと、答えが問いに合うこと（Orca と同じ条件）を確かめ、使い捨ての票を返す。答え済み・revision 違いは 409 `target_changed`（`question_changed`・`question_gone`）、答えの誤りは 400 `invalid_answer`、端末の宛先は 409 `not_sendable`（`terminal_route`）。
+- `POST /api/answer/confirm`：`{ticket, answers}`。宛先、質問、答えの digest を確かめ直し、送る前の記録を書いてから1回だけ送る。結果は送信と同じ5つ（Orca が答えを付けたら submitted、`agent_session_already_resolved` などで拒めば refused）。
+- 照会は送信と同じ `GET /api/send/<操作の ID>?check=1`。質問の今の状態を読み、記録の答えと同じ答えが付いていれば submitted、別の答えなら refused（`resolved_by_other`）、まだ未回答なら unknown（`prompt_pending`）。自動で送り直さない。
+- 送れるかの口 `GET /api/send/status` は `answer: {available, reason}` も返す。
+- 記録：答えの送る前の行は `action: "answer"`、itemId、revision、問いの数、答えの digest だけを持ち、答えの中身（選んだ id、ラベル、その他の文）を書かない。
 
 ### スマホ（tailnet）
 

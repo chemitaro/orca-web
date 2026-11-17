@@ -144,11 +144,22 @@ const unsupportedText = (what) => `表示できない（${UNSUPPORTED_LABELS[wha
  * 正規化した件から、描く行を作る。
  * 行：{ kind: 'bubble', key, role, at, text, truncated } | { kind: 'tool', key, at, name, input, output, isError, truncated }
  *    | { kind: 'unsupported', key, role, at, text } | { kind: 'notice', key, at, text }
+ *    | { kind: 'question', key, at, part, answerText }
  * ツールの結果は、同じ callId の呼び出しの行に入れる（なければ単独の行）。
+ * 端末の質問（source terminal）は、同じ callId のツールの結果を答えとして結びつけ、part の state を answered に、
+ * answerText を結果の文にする（結果が先でも後でも。結びつけた結果は単独の行にしない）。
  */
 export function buildChat(messages) {
   const rows = [];
   const toolsByCall = new Map();
+  /** 端末の質問の行（callId ごと）。 */
+  const questionsByCall = new Map();
+  /** まだ持ち主のない結果の行（callId ごと）。後に来た端末の質問が引き取る。 */
+  const orphanResults = new Map();
+  const answerQuestion = (row, output) => {
+    row.part = { ...row.part, state: 'answered' };
+    row.answerText = output;
+  };
   for (const m of messages) {
     // 思考は出さない（正規化で落とすが、画面でも描かない）。
     if (m.role === 'reasoning') continue;
@@ -197,14 +208,33 @@ export function buildChat(messages) {
         };
         rows.push(row);
         if (part.callId) toolsByCall.set(part.callId, row);
+      } else if (part.type === 'question') {
+        const row = { kind: 'question', key, at: m.at, part, answerText: null };
+        const callId = part.source === 'terminal' ? part.callId : null;
+        if (callId) {
+          const orphan = orphanResults.get(callId);
+          if (orphan) {
+            rows.splice(rows.indexOf(orphan), 1);
+            orphanResults.delete(callId);
+            answerQuestion(row, orphan.output);
+          } else {
+            questionsByCall.set(callId, row);
+          }
+        }
+        rows.push(row);
       } else if (part.type === 'tool-result') {
+        const question = part.callId ? questionsByCall.get(part.callId) : undefined;
+        if (question && question.answerText === null) {
+          answerQuestion(question, part.output);
+          return;
+        }
         const owner = part.callId ? toolsByCall.get(part.callId) : undefined;
         if (owner && owner.output === null) {
           owner.output = part.output;
           owner.isError = part.isError;
           owner.truncated ||= part.truncated === true;
         } else {
-          rows.push({
+          const orphan = {
             kind: 'tool',
             key,
             at: m.at,
@@ -213,7 +243,9 @@ export function buildChat(messages) {
             output: part.output,
             isError: part.isError,
             truncated: part.truncated === true,
-          });
+          };
+          rows.push(orphan);
+          if (part.callId && !owner && !orphanResults.has(part.callId)) orphanResults.set(part.callId, orphan);
         }
       } else {
         rows.push({ kind: 'unsupported', key, role: m.role, at: m.at, text: unsupportedText(part.what) });

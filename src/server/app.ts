@@ -28,7 +28,9 @@ export interface StateSource {
 }
 
 export interface AppOptions {
-  send?: Pick<SendService, 'status' | 'intent' | 'confirm' | 'check'>;
+  /** 送信のサービス。答えの口（answerIntent・answerConfirm）がなければ、答えの道は unreachable を返す。 */
+  send?: Pick<SendService, 'status' | 'intent' | 'confirm' | 'check'> &
+    Partial<Pick<SendService, 'answerIntent' | 'answerConfirm'>>;
   /** 守りの拒否件数だけを出す。本文・票・操作IDは含めない。 */
   sendGuard?: { now?: () => number; log?: (counts: Record<string, number>) => void };
   poller?: StateSource;
@@ -57,6 +59,7 @@ export interface AppOptions {
 
 const SEND_ERROR_STATUS: Record<SendFailure['error'], number> = {
   invalid_text: 400,
+  invalid_answer: 400,
   send_disabled: 403,
   agent_not_found: 404,
   not_sendable: 409,
@@ -153,6 +156,8 @@ const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?:
     '/embed/agent-dom.js': { file: 'embed/agent-dom.js', type: 'text/javascript; charset=utf-8' },
     '/embed/send-view.js': { file: 'embed/send-view.js', type: 'text/javascript; charset=utf-8' },
     '/embed/send-dom.js': { file: 'embed/send-dom.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/question-view.js': { file: 'embed/question-view.js', type: 'text/javascript; charset=utf-8' },
+    '/embed/question-dom.js': { file: 'embed/question-dom.js', type: 'text/javascript; charset=utf-8' },
     '/embed/agent-marks.js': { file: 'embed/agent-marks.js', type: 'text/javascript; charset=utf-8', cors: 'read' },
     '/embed/agent-marks-view.js': {
       file: 'embed/agent-marks-view.js',
@@ -217,6 +222,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const isBoundedText = (value: unknown, max: number): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max;
+
+const MAX_ITEM_ID_CHARS = 1024;
+const MAX_TICKET_CHARS = 128 * 1024;
+const ANSWER_INTENT = '/api/answer/intent';
+const ANSWER_CONFIRM = '/api/answer/confirm';
+
+/** 答えの意図 `{agent, prompt: {itemId, revision}, answers, target?}`。答えの中身はサービスが確かめる。 */
+function parseAnswerIntent(
+  body: unknown,
+): { agent: string; prompt: { itemId: string; revision: number }; answers: unknown[]; target?: string } | null {
+  if (!isRecord(body) || Object.keys(body).some((k) => !['agent', 'prompt', 'answers', 'target'].includes(k)))
+    return null;
+  const prompt = body.prompt;
+  if (
+    !isBoundedText(body.agent, MAX_AGENT_CHARS) ||
+    !isRecord(prompt) ||
+    Object.keys(prompt).length !== 2 ||
+    !isBoundedText(prompt.itemId, MAX_ITEM_ID_CHARS) ||
+    !Number.isSafeInteger(prompt.revision) ||
+    (prompt.revision as number) <= 0 ||
+    !Array.isArray(body.answers) ||
+    ('target' in body && (typeof body.target !== 'string' || !/^[a-f0-9]{32}$/.test(body.target)))
+  )
+    return null;
+  return {
+    agent: body.agent,
+    prompt: { itemId: prompt.itemId, revision: prompt.revision as number },
+    answers: body.answers,
+    ...('target' in body ? { target: body.target as string } : {}),
+  };
+}
+
+/** 答えの確定 `{ticket, answers}`。 */
+function parseAnswerConfirm(body: unknown): { ticket: string; answers: unknown[] } | null {
+  if (!isRecord(body) || Object.keys(body).some((k) => k !== 'ticket' && k !== 'answers')) return null;
+  if (!isBoundedText(body.ticket, MAX_TICKET_CHARS) || !Array.isArray(body.answers)) return null;
+  return { ticket: body.ticket, answers: body.answers };
+}
 
 /** `{ worktree, agent? }` だけを受ける。 */
 function parseOpenRequest(text: string): OpenRequest | null {
@@ -343,7 +386,8 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
   async function handleSend(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const service = options.send;
     const pathname = url.pathname;
-    const writing = pathname === '/api/send/intent' || pathname === '/api/send/confirm';
+    const answering = pathname === ANSWER_INTENT || pathname === ANSWER_CONFIRM;
+    const writing = answering || pathname === '/api/send/intent' || pathname === '/api/send/confirm';
     const reject = (status: number, error: string): void => {
       sendError(res, status, error);
       if (![401, 403, 405, 413, 415].includes(status)) return;
@@ -381,6 +425,20 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
         body = JSON.parse(raw);
       } catch {
         return sendError(res, 400, 'invalid_request');
+      }
+      if (answering) {
+        const answerIntent = service.answerIntent?.bind(service);
+        const answerConfirm = service.answerConfirm?.bind(service);
+        if (!answerIntent || !answerConfirm) return sendError(res, 503, 'unreachable');
+        const intent = pathname === ANSWER_INTENT ? parseAnswerIntent(body) : null;
+        const confirm = pathname === ANSWER_CONFIRM ? parseAnswerConfirm(body) : null;
+        if (!intent && !confirm) return sendError(res, 400, 'invalid_request');
+        const answer = intent
+          ? await answerIntent(intent)
+          : await answerConfirm(confirm as { ticket: string; answers: unknown[] });
+        if (!answer.ok) return sendJson(res, SEND_ERROR_STATUS[answer.error], answer);
+        const { ok: _ok, ...result } = answer;
+        return sendJson(res, 200, result);
       }
       const key = pathname === '/api/send/intent' ? 'agent' : 'ticket';
       if (
@@ -509,7 +567,8 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
       sendRejection(res, host);
       return;
     }
-    if (pathname.startsWith('/api/send/')) return handleSend(req, res, url);
+    if (pathname.startsWith('/api/send/') || pathname === ANSWER_INTENT || pathname === ANSWER_CONFIRM)
+      return handleSend(req, res, url);
     if (pathname.startsWith('/api/')) {
       if (pathname === '/api/health') {
         if (method !== 'GET') sendError(res, 405, 'method_not_allowed');

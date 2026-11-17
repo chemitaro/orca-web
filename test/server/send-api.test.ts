@@ -85,6 +85,7 @@ test('送信の4つの道はサービスの結果をD-09の形にして返し、
             reason: null,
             target: 'a'.repeat(32),
             agentType: 'codex',
+            answer: { available: false, reason: 'terminal_route' },
           };
         },
         async intent(value) {
@@ -126,6 +127,7 @@ test('送信の4つの道はサービスの結果をD-09の形にして返し、
         reason: null,
         target: 'a'.repeat(32),
         agentType: 'codex',
+        answer: { available: false, reason: 'terminal_route' },
       });
       const intent = await send('/api/send/intent', 'POST', JSON.stringify({ agent: 'agent', text: 'test' }));
       assert.equal(intent.status, 200);
@@ -154,7 +156,15 @@ test('守りはHost→方法→Content-Type→Origin→トークン→大きさ�
   const service: NonNullable<AppOptions['send']> = {
     async status() {
       calls++;
-      return { enabled: false, available: false, route: null, reason: 'send_disabled', target: null, agentType: null };
+      return {
+        enabled: false,
+        available: false,
+        route: null,
+        reason: 'send_disabled',
+        target: null,
+        agentType: null,
+        answer: { available: false, reason: 'send_disabled' },
+      };
     },
     async intent() {
       calls++;
@@ -216,7 +226,15 @@ test('サービスの誤りはD-09のHTTP状態とreason/missingを返し、GET�
   let failure: import('../../src/send/service.ts').SendFailure = { ok: false, error: 'busy' };
   const service: NonNullable<AppOptions['send']> = {
     async status() {
-      return { enabled: false, available: false, route: null, reason: 'unreachable', target: null, agentType: null };
+      return {
+        enabled: false,
+        available: false,
+        route: null,
+        reason: 'unreachable',
+        target: null,
+        agentType: null,
+        answer: { available: false, reason: 'send_disabled' },
+      };
     },
     async intent() {
       return failure;
@@ -318,7 +336,15 @@ test('意図だけが32文字の小文字16進の target を受けてサービ�
     {
       send: {
         async status() {
-          return { enabled: true, available: false, route: null, reason: 'unreachable', target: null, agentType: null };
+          return {
+            enabled: true,
+            available: false,
+            route: null,
+            reason: 'unreachable',
+            target: null,
+            agentType: null,
+            answer: { available: false, reason: 'send_disabled' },
+          };
         },
         async intent(value) {
           calls.push(value);
@@ -382,5 +408,152 @@ test('照会の record_unreadable は503で返し not_sent を示さない', asy
       assert.deepEqual(response.body, { ok: false, error: 'record_unreadable' });
       assert.equal(response.cors, undefined);
     }
+  });
+});
+
+// ---- 質問への答えの口（D-04、T-10） ----
+
+function answerService(calls: unknown[]): NonNullable<AppOptions['send']> {
+  const preview = {
+    repoName: null,
+    worktreePath: null,
+    branch: null,
+    agentType: 'claude',
+    title: null,
+    state: null,
+    route: 'chat' as const,
+    sessionShortId: 'short',
+  };
+  return {
+    async status(agent) {
+      calls.push(['status', agent]);
+      return {
+        enabled: true,
+        available: true,
+        route: 'chat',
+        reason: null,
+        target: 'a'.repeat(32),
+        agentType: 'claude',
+        answer: { available: true, reason: null },
+      };
+    },
+    async intent() {
+      calls.push(['intent']);
+      return { ok: false, error: 'send_disabled' };
+    },
+    async confirm() {
+      calls.push(['confirm']);
+      return { ok: false, error: 'send_disabled' };
+    },
+    async check(operationId) {
+      calls.push(['check', operationId]);
+      return { ok: true, operationId, state: 'not_sent' };
+    },
+    async answerIntent(value) {
+      calls.push(['answerIntent', value]);
+      return { ok: true, ticket: 'ticket', expiresAt: 1, operationId: id, preview, digest: 'd'.repeat(64) };
+    },
+    async answerConfirm(value) {
+      calls.push(['answerConfirm', value]);
+      return { ok: true, operationId: id, outcome: 'submitted', detail: { code: 'resolved' } };
+    },
+  };
+}
+
+const answerBody = {
+  agent: 'chat:x',
+  prompt: { itemId: 'item', revision: 3 },
+  answers: [{ questionId: 'q', optionIds: ['a'] }],
+};
+
+test('T-10 答えの意図と確定は物の鍵を確かめてサービスに渡し、ok を除いて返し、CORS を付けない', async () => {
+  const calls: unknown[] = [];
+  await withApp({ send: answerService(calls) }, async (send) => {
+    const intent = await send('/api/answer/intent', 'POST', JSON.stringify({ ...answerBody, target: 'b'.repeat(32) }));
+    assert.equal(intent.status, 200);
+    assert.equal(intent.cors, undefined);
+    assert.equal('ok' in intent.body, false);
+    assert.equal(intent.body.ticket, 'ticket');
+    const confirm = await send(
+      '/api/answer/confirm',
+      'POST',
+      JSON.stringify({ ticket: 'ticket', answers: answerBody.answers }),
+    );
+    assert.equal(confirm.status, 200);
+    assert.equal(confirm.cors, undefined);
+    assert.deepEqual(confirm.body, { operationId: id, outcome: 'submitted', detail: { code: 'resolved' } });
+    const status = await send('/api/send/status?agent=chat:x');
+    assert.deepEqual(status.body.answer, { available: true, reason: null });
+    assert.equal(status.cors, undefined);
+  });
+  assert.deepEqual(calls, [
+    ['answerIntent', { ...answerBody, target: 'b'.repeat(32) }],
+    ['answerConfirm', { ticket: 'ticket', answers: answerBody.answers }],
+    ['status', 'chat:x'],
+  ]);
+});
+
+test('T-10 答えの口は、同じオリジンの JSON とトークンのない書き込み・余分な鍵・形の誤りを、サービスを呼ばずに拒む', async () => {
+  const calls: unknown[] = [];
+  await withApp({ send: answerService(calls) }, async (send) => {
+    for (const path of ['/api/answer/intent', '/api/answer/confirm']) {
+      const good = path.endsWith('intent') ? answerBody : { ticket: 't', answers: answerBody.answers };
+      for (const [method, body, headers, status, error] of [
+        ['POST', JSON.stringify(good), { host: 'evil' }, 421, 'misdirected_host'],
+        ['GET', undefined, {}, 405, 'method_not_allowed'],
+        ['PUT', JSON.stringify(good), {}, 405, 'method_not_allowed'],
+        ['POST', JSON.stringify(good), { 'content-type': 'text/plain' }, 415, 'unsupported_media_type'],
+        ['POST', JSON.stringify(good), { origin: 'http://evil.example' }, 403, 'origin_rejected'],
+        ['POST', JSON.stringify(good), { 'x-orca-web-token': 'bad' }, 401, 'token_invalid'],
+        ['POST', 'x'.repeat(131073), {}, 413, 'payload_too_large'],
+        ['POST', '{', {}, 400, 'invalid_request'],
+        ['POST', JSON.stringify({ ...good, extra: true }), {}, 400, 'invalid_request'],
+        ['POST', JSON.stringify({ ...good, text: 'x' }), {}, 400, 'invalid_request'],
+        ['POST', JSON.stringify({ ...good, answers: 'x' }), {}, 400, 'invalid_request'],
+      ] as const) {
+        const result = await send(path, method, body, headers);
+        assert.equal(result.status, status, `${path} ${method} ${error}`);
+        assert.equal(result.body.error, error);
+        assert.equal(result.cors, undefined);
+      }
+    }
+    for (const bad of [
+      { ...answerBody, agent: '' },
+      { ...answerBody, agent: 1 },
+      { ...answerBody, prompt: { itemId: 'item' } },
+      { ...answerBody, prompt: { itemId: '', revision: 3 } },
+      { ...answerBody, prompt: { itemId: 'x'.repeat(1025), revision: 3 } },
+      { ...answerBody, prompt: { itemId: 'item', revision: 0 } },
+      { ...answerBody, prompt: { itemId: 'item', revision: 1.5 } },
+      { ...answerBody, prompt: { itemId: 'item', revision: 3, extra: 1 } },
+      { ...answerBody, target: 'short' },
+      { agent: 'chat:x', prompt: answerBody.prompt },
+    ]) {
+      const result = await send('/api/answer/intent', 'POST', JSON.stringify(bad));
+      assert.equal(result.status, 400, JSON.stringify(bad));
+    }
+    for (const bad of [{ ticket: '', answers: [] }, { ticket: 't' }, { answers: [] }]) {
+      assert.equal((await send('/api/answer/confirm', 'POST', JSON.stringify(bad))).status, 400);
+    }
+  });
+  assert.deepEqual(calls, []);
+});
+
+test('T-10 答えの誤りは invalid_answer を 400 で返し、答えの口のないサービスは 503 にする', async () => {
+  const calls: unknown[] = [];
+  const service = answerService(calls);
+  service.answerIntent = async () => ({ ok: false, error: 'invalid_answer', reason: 'no_choice' });
+  service.answerConfirm = async () => ({ ok: false, error: 'target_changed', reason: 'question_changed' });
+  await withApp({ send: service }, async (send) => {
+    const intent = await send('/api/answer/intent', 'POST', JSON.stringify(answerBody));
+    assert.equal(intent.status, 400);
+    assert.deepEqual(intent.body, { ok: false, error: 'invalid_answer', reason: 'no_choice' });
+    const confirm = await send('/api/answer/confirm', 'POST', JSON.stringify({ ticket: 't', answers: [] }));
+    assert.equal(confirm.status, 409);
+    assert.deepEqual(confirm.body, { ok: false, error: 'target_changed', reason: 'question_changed' });
+  });
+  const { answerIntent: _i, answerConfirm: _c, ...old } = answerService([]);
+  await withApp({ send: old }, async (send) => {
+    assert.equal((await send('/api/answer/intent', 'POST', JSON.stringify(answerBody))).status, 503);
   });
 });

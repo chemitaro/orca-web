@@ -35,6 +35,7 @@ function report(open = feature(true)): CapabilityReport {
       readTranscript: feature(true),
       sendTerminal: feature(false),
       sendChat: feature(false),
+      answerChat: feature(false),
     },
   };
 }

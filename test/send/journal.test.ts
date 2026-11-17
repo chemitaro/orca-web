@@ -295,3 +295,38 @@ test('ENOENT 以外で読めなくても当該 ID のメモリーの結果だけ
   await assert.rejects(journal.read('absent'), { code: 'EISDIR' });
   await assert.rejects(new SendJournal(dir).read('op'), { code: 'EISDIR' });
 });
+
+test('T-09 答えの before は text を持たずに読め、action・prompt・questionCount が欠けた行は捨てる', async (t) => {
+  const dir = await directory(t);
+  const { chatTarget } = await import('./fixture.ts');
+  const journal = new SendJournal(dir);
+  const answer = {
+    operationId: 'answer-op',
+    action: 'answer' as const,
+    route: 'chat' as const,
+    target: { ...chatTarget(), repoName: null, worktreePath: null, branch: null, title: null },
+    prompt: { itemId: 'item', revision: 3 },
+    questionCount: 2,
+    digest: 'd'.repeat(64),
+    generation: { runtimeId: 'runtime-test' },
+  };
+  await journal.appendBefore(answer);
+  const record = await new SendJournal(dir).read('answer-op');
+  assert.equal(record?.before?.action, 'answer');
+  assert.deepEqual(record?.before && 'prompt' in record.before ? record.before.prompt : null, answer.prompt);
+  assert.equal(record?.outcome, 'unknown');
+  const row = JSON.parse((await readFile(path.join(dir, 'sends.jsonl'), 'utf8')).trim());
+  assert.equal('text' in row, false);
+  for (const [id, broken] of [
+    ['no-prompt', { prompt: undefined }],
+    ['no-count', { questionCount: 'x' }],
+    ['terminal', { route: 'terminal' }],
+    ['other-action', { action: 'other' }],
+  ] as const) {
+    await appendFile(
+      path.join(dir, 'sends.jsonl'),
+      `${JSON.stringify({ ...answer, ...broken, operationId: id, schema: 'orca-web.send-record/v1', kind: 'before', at: new Date().toISOString() })}\n`,
+    );
+    assert.equal(await new SendJournal(dir).read(id), null, id);
+  }
+});

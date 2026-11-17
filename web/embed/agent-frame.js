@@ -1,13 +1,17 @@
 // エージェントの詳細とチャットの画面。詳細は /api/state を5秒ごとに読み、会話は /api/transcript/events（SSE）で受ける。
 // 詳細はいつも畳んで始め、利用者の開け閉めをそのまま残す（描き直しでも details を作り直さない）。見出しには稼働の印を1つ出す（D-08）。
 // 会話の下に送る欄（D-05）を置く。流れと状態は send-view.js、描くのは send-dom.js。送れないときは欄を止めて理由を示す。
-// 文字はすべて textContent で入れる（会話の本文、ツールの出力、題名、送る本文は信頼しないデータ）。
+// 会話の質問はカード（D-05、iss-00048）で描く。選択と流れは question-view.js の板がカードの key ごとに持ち、描き直しでも保つ。
+// 答える手段は answerer の表（構造化 Chat は意図と確定、端末は答えずに「Orca で開く」）で選ぶ。送れるかは送る欄と同じ
+// /api/send/status の読み（enabled と answer）を使う。
+// 文字はすべて textContent で入れる（会話の本文、ツールの出力、題名、送る本文、質問と選択肢は信頼しないデータ）。
 
 import { createWriter } from '../write.js';
 import { refreshTimes, renderChatRow, renderDetail, renderDetailMark } from './agent-dom.js';
 import { watchWorktreeSummary } from './agent-marks.js';
 import { buildChat, buildDetail, errorLabel, initialChat, olderResult, reduceChat } from './agent-view.js';
-import { createOpenControl, runOpen } from './open-control.js';
+import { createOpenBoard, createOpenControl, runOpen } from './open-control.js';
+import { buildQuestionCard, createChatAnswerer, createQuestionBoard, terminalAnswerer } from './question-view.js';
 import { renderSendPanel } from './send-dom.js';
 import { buildSendView, composerKeyAction, createSendFlow } from './send-view.js';
 
@@ -49,7 +53,125 @@ let chat = initialChat();
 /** 開いている折り畳みの key。描き直しても開いたままにする。 */
 const openTools = new Set();
 
+/** 送れるかの最後の読み（GET /api/send/status の本体）。読めなければ 'failed'、まだなら null。質問のカードが使う。 */
+let sendStatus = null;
+/** 送る欄と質問のカードが共有する読み。送れるかの読みの結果を覚えて、変われば質問のカードを描き直す。 */
+async function read(url) {
+  const isStatus = url.startsWith('/api/send/status');
+  try {
+    const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+    const result = { status: res.status, body: await res.json().catch(() => ({})) };
+    if (isStatus) noteStatus(result.status === 200 ? result.body : 'failed');
+    return result;
+  } catch (error) {
+    if (isStatus) noteStatus('failed');
+    throw error;
+  }
+}
+const statusShape = (status) =>
+  status && typeof status === 'object' ? JSON.stringify([status.enabled, status.answer]) : String(status);
+function noteStatus(status) {
+  const changed = statusShape(status) !== statusShape(sendStatus);
+  sendStatus = status;
+  if (changed) for (const key of questionRows.keys()) renderQuestionRow(key);
+}
+
+/** 今の会話の質問の行（key ごと）。 */
+let questionRows = new Map();
+const questionBoard = createQuestionBoard({
+  answerers: { chat: createChatAnswerer({ agentId, writer, read }), terminal: terminalAnswerer },
+  onChange: (key) => renderQuestionRow(key),
+});
+/** 端末の質問のカードの「Orca で開く」の状態（カードを描き直しても、最後の状態を戻す）。 */
+const openBoard = createOpenBoard();
+
+function questionView(row) {
+  const answerer = questionBoard.answerer(row.part);
+  return buildQuestionCard(row.part, {
+    key: row.key,
+    selection: questionBoard.selection(row.key, row.part),
+    flow: questionBoard.flow(row.key),
+    availability: answerer.availability(row.part, sendStatus),
+    answerText: row.answerText,
+  });
+}
+
+function mountOpen(row, control) {
+  openBoard.mount(row.key, control);
+  if (!detail?.open && control.state !== 'busy') control.setState('missing', 'エージェントの状態を読んでいます');
+  control.button.addEventListener('click', () => {
+    const body = detail?.open;
+    if (!body) return;
+    void openBoard.open(row.key, control, () => writer.send('/api/open', 'POST', body));
+  });
+}
+
+const rowOptions = (now) => ({ open: openTools, now, question: questionView, onOpenControl: mountOpen });
+
+/** 変換中（IME）は描き直さない。終わってから描き直す。 */
+let composing = false;
+let deferred = false;
+els.log.addEventListener('compositionstart', () => {
+  composing = true;
+});
+els.log.addEventListener('compositionend', () => {
+  composing = false;
+  if (deferred) {
+    deferred = false;
+    renderChat({ stickToEnd: false });
+  }
+});
+
+/** 描き直しの前に、カードの中のフォーカスを覚える（その他の欄の入力の位置も）。 */
+function focusNote() {
+  const active = document.activeElement;
+  const card = active?.closest?.('section.question-card');
+  if (!card || !els.log.contains(card)) return null;
+  return {
+    key: card.dataset.key,
+    action: active.dataset.action ?? null,
+    question: active.dataset.question ?? null,
+    option: active.dataset.option ?? null,
+    start: typeof active.selectionStart === 'number' ? active.selectionStart : null,
+    end: typeof active.selectionEnd === 'number' ? active.selectionEnd : null,
+  };
+}
+
+function restoreFocus(note) {
+  if (!note?.action) return;
+  for (const node of els.log.querySelectorAll('[data-action]')) {
+    const card = node.closest('section.question-card');
+    if (card?.dataset.key !== note.key) continue;
+    if (node.dataset.action !== note.action) continue;
+    if ((node.dataset.question ?? null) !== note.question || (node.dataset.option ?? null) !== note.option) continue;
+    node.focus();
+    if (note.start !== null && typeof node.setSelectionRange === 'function')
+      node.setSelectionRange(note.start, note.end ?? note.start);
+    return;
+  }
+}
+
+/** 質問の行を1つだけ描き直す（選択や流れが変わったとき）。 */
+function renderQuestionRow(key) {
+  const row = questionRows.get(key);
+  if (!row) return;
+  if (composing) {
+    deferred = true;
+    return;
+  }
+  const current = [...els.log.children].find((li) => li.dataset.key === key);
+  if (!current) return;
+  const note = focusNote();
+  current.replaceWith(renderChatRow(document, row, rowOptions(Date.now())));
+  restoreFocus(note);
+}
+
 function renderChat({ stickToEnd }) {
+  if (composing) {
+    deferred = true;
+    return;
+  }
+  const note = focusNote();
   const nearEnd = els.scroller.scrollHeight - els.scroller.scrollTop - els.scroller.clientHeight < 48;
   els.log.replaceChildren();
   if (chat.status === 'connecting') {
@@ -64,9 +186,49 @@ function renderChat({ stickToEnd }) {
   els.session.textContent = chat.short ? `セッション ${chat.short}` : '';
   els.older.hidden = !(chat.status === 'ok' && chat.hasMore && chat.before);
   const now = Date.now();
-  for (const row of buildChat(chat.messages)) els.log.append(renderChatRow(document, row, { open: openTools, now }));
+  const rows = buildChat(chat.messages);
+  questionRows = new Map(rows.filter((row) => row.kind === 'question').map((row) => [row.key, row]));
+  questionBoard.prune(new Set(questionRows.keys()));
+  for (const row of rows) els.log.append(renderChatRow(document, row, rowOptions(now)));
+  restoreFocus(note);
   if (stickToEnd || nearEnd) els.scroller.scrollTop = els.scroller.scrollHeight;
 }
+
+// 質問のカードの押しは、描き直すたびに作り直すので、まとめて受ける。重なった押しは question-view.js の板が捨てる。
+els.log.addEventListener('click', (event) => {
+  const button = /** @type {HTMLElement | null} */ (event.target)?.closest?.('button[data-action]');
+  const card = button?.closest('section.question-card');
+  if (!button || !card || /** @type {HTMLButtonElement} */ (button).disabled) return;
+  const key = card.dataset.key ?? '';
+  const row = questionRows.get(key);
+  if (!row) return;
+  const index = Number(button.dataset.question);
+  const name = button.dataset.action;
+  if (name === 'option') questionBoard.toggleOption(key, row.part, index, button.dataset.option);
+  else if (name === 'other') {
+    if (questionBoard.toggleOther(key, row.part, index)) {
+      const field = [...els.log.querySelectorAll('textarea[data-action="other-text"]')].find(
+        (node) => node.closest('section.question-card')?.dataset.key === key && node.dataset.question === String(index),
+      );
+      field?.focus();
+    }
+  } else if (name === 'submit') void questionBoard.submit(key, row.part, sendStatus);
+  else if (name === 'query') void questionBoard.query(key, row.part);
+  else if (name === 'dismiss') questionBoard.dismiss(key);
+});
+
+// その他の文。描き直さず（入力中の欄と変換を壊さない）、送るボタンの押せるかだけを写す。
+els.log.addEventListener('input', (event) => {
+  const field = /** @type {HTMLTextAreaElement | null} */ (event.target);
+  if (field?.dataset?.action !== 'other-text') return;
+  const card = field.closest('section.question-card');
+  const key = card?.dataset.key ?? '';
+  const row = questionRows.get(key);
+  if (!card || !row) return;
+  questionBoard.setOther(key, row.part, Number(field.dataset.question), field.value);
+  const submit = /** @type {HTMLButtonElement | null} */ (card.querySelector('button[data-action="submit"]'));
+  if (submit) submit.disabled = questionView(row).button.disabled;
+});
 
 els.log.addEventListener(
   'toggle',
@@ -133,8 +295,11 @@ function syncOpenTarget() {
 }
 
 function renderDetailArea(state) {
+  const hadOpen = Boolean(detail?.open);
   detail = buildDetail(state, agentId);
   syncOpenTarget();
+  // 端末の質問のカードの「Orca で開く」は、開く先が分かるようになったら押せるように描き直す。
+  if (hadOpen !== Boolean(detail?.open)) for (const key of questionRows.keys()) renderQuestionRow(key);
   els.detail.replaceChildren();
   if (!detail) {
     els.title.textContent = 'エージェントが見つかりません';
@@ -175,7 +340,7 @@ openControl.button.addEventListener('click', () => {
   void runOpen(openControl, () => writer.send('/api/open', 'POST', body)).then(syncOpenTarget);
 });
 
-const sendFlow = createSendFlow({ agentId, writer, onChange: () => renderSend() });
+const sendFlow = createSendFlow({ agentId, writer, read, onChange: () => renderSend() });
 
 // タッチが主の端末では Enter で改行し、送るボタンで送る（D-04）。変われば描き直す。
 const touch = window.matchMedia('(hover: none) and (pointer: coarse)');

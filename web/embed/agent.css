@@ -418,6 +418,263 @@ pre {
   overflow-y: auto;
 }
 
+/* 質問のカード（iss-00048 D-05）。会話の行（li.row.question）の中の section.question-card に当て、行には線や背景を置かない。
+   選択肢は縦に並ぶ全幅のボタンで、押せる高さは 44px 以上。長い語は折り返し、幅 390px でも横にはみ出さない。
+   端末の質問の「Orca で開く」（.question-foot の中）は、答える唯一の道なので 390px 以下でも隠さない。 */
+li.row.question {
+  align-items: stretch;
+}
+
+.question-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--chat-border-strong);
+  border-radius: var(--ds-radius-l, 8px);
+  background: var(--chat-bg);
+  overflow-wrap: anywhere;
+}
+
+.question-card.closed {
+  border-color: var(--chat-border);
+  background: var(--chat-surface);
+  padding: 6px 10px;
+}
+
+.question-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+}
+
+.question-badge {
+  color: var(--chat-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.question-count,
+.question-multi,
+.question-header {
+  color: var(--chat-muted);
+  font-size: 12px;
+}
+
+.question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.question {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.question-header,
+.question-multi {
+  margin: 0;
+}
+
+.question-text {
+  margin: 0;
+  font-weight: 700;
+  white-space: pre-wrap;
+}
+
+.question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.question-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 10px;
+  text-align: left;
+  white-space: normal;
+  color: var(--chat-text);
+  background: var(--chat-bg);
+  border: 1px solid var(--chat-border);
+  border-radius: var(--ds-radius, 6px);
+}
+
+.question-option[aria-pressed="true"] {
+  border-color: var(--chat-accent);
+  background: var(--chat-user-bg);
+}
+
+.question-option-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border: 1px solid var(--chat-border-strong);
+  border-radius: var(--ds-radius-s, 4px);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.question-option[aria-pressed="true"] .question-option-mark {
+  color: var(--chat-on-accent);
+  background: var(--chat-accent);
+  border-color: var(--chat-accent);
+}
+
+.question-option-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.question-option-label {
+  font-weight: 600;
+}
+
+.question-option-desc {
+  color: var(--chat-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.question-other-text {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 10px;
+  resize: vertical;
+  font: inherit;
+  color: var(--chat-text);
+  background: var(--chat-bg);
+  border: 1px solid var(--chat-border-strong);
+  border-radius: var(--ds-radius, 6px);
+}
+
+.question-other-text::placeholder {
+  color: var(--chat-muted);
+}
+
+.question-reason,
+.question-notice {
+  margin: 0;
+  color: var(--chat-muted);
+  font-size: 12px;
+}
+
+.question-notice[data-kind="error"] {
+  color: var(--chat-danger);
+}
+
+.question-unknown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--chat-danger-line);
+  border-radius: var(--ds-radius, 6px);
+  background: var(--chat-danger-bg);
+  color: var(--chat-danger-ink);
+  font-size: 13px;
+}
+
+.question-unknown-text {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+}
+
+.question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.question-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.question-submit {
+  min-height: 44px;
+  padding: 6px 18px;
+  color: var(--chat-on-accent);
+  background: var(--chat-accent);
+  border: 1px solid var(--chat-accent);
+  border-radius: var(--ds-radius, 6px);
+  font-weight: 700;
+}
+
+.question-submit:disabled {
+  opacity: 0.35;
+}
+
+.question-closed > .question-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.question-summary::-webkit-details-marker {
+  display: none;
+}
+
+.question-summary::before {
+  content: "▸";
+  color: var(--chat-muted);
+  font-size: 11px;
+}
+
+.question-closed[open] > .question-summary::before {
+  content: "▾";
+}
+
+.question-summary-text {
+  flex: 1 1 10em;
+  min-width: 0;
+  color: var(--chat-muted);
+  font-size: 13px;
+}
+
+.question-answers {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  white-space: pre-wrap;
+}
+
+.question-closed > .question-list {
+  margin-top: 8px;
+}
+
 /* 送る欄（D-05）。知らせの欄の下に、角の丸い入力の箱（入力欄と送るボタン）。幅 390px でも横にはみ出さない。 */
 #send {
   flex: none;

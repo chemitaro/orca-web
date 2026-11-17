@@ -35,6 +35,7 @@ export function report(
       readTranscript: feature(false),
       sendTerminal: feature(false),
       sendChat: feature(false),
+      answerChat: feature(false),
     },
   };
 }

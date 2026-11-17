@@ -10,14 +10,27 @@ interface RowBase {
   operationId: string;
   at: string;
 }
-export interface BeforeInput {
+interface BeforeBase {
   operationId: string;
   route: SendTarget['route'];
   target: SendTarget & Pick<SendPreview, 'repoName' | 'worktreePath' | 'branch' | 'title'>;
-  text: string;
   digest: string;
   generation: { runtimeId: string; incarnationId?: string };
 }
+/** 今の送信の before。本文 text を持つ。 */
+export interface SendBeforeInput extends BeforeBase {
+  text: string;
+  action?: never;
+}
+/** 質問への答えの before。答えの中身は書かず、digest と問いの数と質問の位置だけを持つ。 */
+export interface AnswerBeforeInput extends BeforeBase {
+  action: 'answer';
+  route: 'chat';
+  prompt: { itemId: string; revision: number };
+  questionCount: number;
+  text?: never;
+}
+export type BeforeInput = SendBeforeInput | AnswerBeforeInput;
 export type BeforeRecord = RowBase & BeforeInput & { kind: 'before' };
 export type ResultInput = SendResult & { operationId: string };
 export type ResultRecord = RowBase & SendResult & { kind: 'after' | 'check' };
@@ -41,6 +54,17 @@ export type RefusedRecord = RowBase & RefusedInput & { kind: 'refused' };
 type JournalRow = BeforeRecord | ResultRecord | RefusedRecord;
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+function isAnswerBefore(row: Record<string, unknown>): boolean {
+  const prompt = row.prompt;
+  return (
+    row.action === 'answer' &&
+    row.route === 'chat' &&
+    object(prompt) &&
+    typeof prompt.itemId === 'string' &&
+    Number.isInteger(prompt.revision) &&
+    Number.isInteger(row.questionCount)
+  );
+}
 function parseRow(line: string): JournalRow | null {
   try {
     const row: unknown = JSON.parse(line);
@@ -56,9 +80,9 @@ function parseRow(line: string): JournalRow | null {
       row.kind === 'before' &&
       object(row.target) &&
       object(row.generation) &&
-      typeof row.text === 'string' &&
       typeof row.digest === 'string' &&
-      (row.route === 'terminal' || row.route === 'chat')
+      (row.route === 'terminal' || row.route === 'chat') &&
+      (row.action === undefined ? typeof row.text === 'string' : isAnswerBefore(row))
     )
       return row as unknown as BeforeRecord;
     if (
