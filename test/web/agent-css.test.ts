@@ -436,3 +436,9 @@ test('iss-00061 T-08：見出しは本文より少し大きい程度で、user-s
   assert.deepEqual(sizes, ['1.2em', '1.12em', '1.05em']);
   assert.doesNotMatch(css, /user-select\s*:\s*none/);
 });
+
+test('iss-00061：.md の中の ul の印は段ごとに disc・circle・square（会話の行の入れ子に左右されない）', () => {
+  assert.equal(only('.md ul', (m) => m === null).get('list-style-type'), 'disc');
+  assert.equal(only('.md ul ul', (m) => m === null).get('list-style-type'), 'circle');
+  assert.equal(only('.md ul ul ul', (m) => m === null).get('list-style-type'), 'square');
+});

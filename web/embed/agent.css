@@ -1082,6 +1082,20 @@ li.row > .bubble.md {
   padding-left: 1.4em;
 }
 
+/* 会話の行は ol#log > li.row の中にあるので、ブラウザーの既定は .md の一番上の ul も入れ子として数える。
+   印は .md の中の段で決める（引用の中も同じ）。 */
+.md ul {
+  list-style-type: disc;
+}
+
+.md ul ul {
+  list-style-type: circle;
+}
+
+.md ul ul ul {
+  list-style-type: square;
+}
+
 .md li > p {
   margin: 0.2em 0;
 }
