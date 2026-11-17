@@ -20,6 +20,8 @@ ID: "iss-00048"
   - round-2：合格（P2 1件：照会の digest に表示用に切った答えを使う誤り）。直した。
   - round-3：合格、指摘なし。
 
+- 区切りのレビュー CP-1（code-reviewer、Opus 5.5 / medium、standards と spec の両方）：範囲 `27b01fe..8567b3b`、合格（P0〜P3 すべて0、`.workbench/code-review/iss-00048-cp1/round-1.json`）。手順の実装担当の報告で lint 0、test 767/767、build 0 を、タスク担当が同じコミットで再び確かめた。
+
 ## Verification
 
 ## 逸脱と判断
