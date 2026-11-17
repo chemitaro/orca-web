@@ -26,6 +26,8 @@ ID: "iss-00054"
 
 - 区切りのレビュー CP-1（code-reviewer、Opus 5.5 / medium、standards と spec の両方）：範囲 `253a1a6..a7a27a2`、round-1 で合格、指摘なし（`.workbench/code-review/iss-00054-cp1/round-1.json`）。実装担当の報告の lint 0・test 1040/1040・build 0 を、タスク担当が同じコミットで確かめた。
 
+- 最終品質ゲート：キャンペーン `.workbench/final-quality-gate/iss-00054-fqg/`（範囲 `253a1a6..c454a99`、origin/main（iss-00055、eca4756）を取り込んだ後のコミット）の attempt 1 で合格。合格のコミット `c454a9925a8a8a793c3770508a8ace0f048f0691`。主（quality-gate-reviewer、Opus 5.5 / medium、観点 functional-correctness・requirements-closure・test-adequacy・security-baseline・reliability-recovery・e2e-user-flow）pass、P0/P1 0、P2 1。2人目 ChatGPT GPT-6 / Extra High（chatgpt-code-review-strict、GitHub の SHA の一致を確かめた）pass、P0/P1 0、P2 2。テスト lint 0・test 1070/1070・build 0。closure：`.workbench/final-quality-gate/iss-00054-fqg/closure.md`（写し `artifacts/closure.md`）。記録だけのコミットはない。
+
 ## Verification
 
 ### 描画と試しの画面（S-02・S-03、2026-11-18）
@@ -53,3 +55,8 @@ ID: "iss-00054"
 - 仕様レビュー round-2 の P2（タスク担当の判断、2026-11-18）：R-04・T-06 の「agentStatus が物でない（prompt_unverified）」は、意図と確定では preflight の resolveTarget が not_sendable（no_session）で先に止める。テストは意図・確定では no_session を、prompt_unverified は「待っているのに interactivePrompt がない」場合と、純な関数（T-01）・アダプターの送る直前の読み（T-05）で確かめる。
 
 ## Residual Risks / Follow-ups
+
+- 最終品質ゲートの P2（主と ChatGPT の同じ根、直していない）：端末の承認の手段 createTerminalApprover が、取り込んだ iss-00055 の sendIntentConfirm を使わず、確定の 500 internal_error を押し直せる refused と示し（送ったかもしれないのに）、応答のない接続で「送っています」のまま止まる。二重の送信にはならない（記録の already_sent で止まり、「Orca で開く」はいつも出る）。次の提案：createTerminalApprover を sendIntentConfirm（時間切れ、確定の 5xx の結果不明）に載せ替える小さな直し。
+- 端末の実機の確かめは本人の確かめに残した（Verification の手順）。タブの一覧に interactivePrompt が出なければ、端末の承認のカードは出ない（安全側）。
+- 送る直前の読みと書き込みの間に許可の確認が変わると、`1` が別の確認を許しうる・Escape が動き出したターンを止めうる（design.cue の risks）。
+- iss-00050 の残りの P2-a・P2-b と、iss-00049 の残りの P2・P3 は直していない。
