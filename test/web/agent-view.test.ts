@@ -78,6 +78,22 @@ test('safeHref は https の URL だけを返す', () => {
 
 const msg = (id: string, role: string, parts: unknown[], at: string | null = null) => ({ id, role, at, parts });
 
+test('buildChat は role assistant の bubble にだけ markdown 真を付け、user と tool の bubble は偽（iss-00063 R-02）', () => {
+  const rows = buildChat([
+    msg('u', 'user', [{ type: 'text', text: '**x**' }]),
+    msg('a', 'assistant', [{ type: 'text', text: '**x**' }]),
+    msg('t', 'tool', [{ type: 'text', text: '**x**' }]),
+  ]);
+  assert.deepEqual(
+    rows.map((r: { kind: string; role: string; markdown: boolean }) => [r.kind, r.role, r.markdown]),
+    [
+      ['bubble', 'user', false],
+      ['bubble', 'assistant', true],
+      ['bubble', 'assistant', false],
+    ],
+  );
+});
+
 test('buildChat は吹き出し、callId で組にしたツール、表示できない印、system の知らせの行を作る', () => {
   const rows = buildChat([
     msg('m1', 'user', [{ type: 'text', text: '指示' }]),

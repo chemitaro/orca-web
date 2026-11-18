@@ -406,6 +406,35 @@ test('T-06：user の bubble・notice・unsupported・ツールの行は今の�
   assert.ok(!tool.all().some((n) => n.tagName === 'H2' || n.tagName === 'STRONG'));
 });
 
+test('iss-00063 T-03：role tool の件の本文は div.bubble の文字で描き、strong を作らず options.markdown を呼ばない', () => {
+  const rows = buildChat([
+    { id: 't1', role: 'tool', at: null, parts: [{ type: 'text', text: '**x**' }] },
+    { id: 'a1', role: 'assistant', at: null, parts: [{ type: 'text', text: '**x**' }] },
+  ]);
+  let calls = 0;
+  const tool = renderChatRow(fakeDocument, rows[0], {
+    markdown: () => {
+      calls++;
+      throw new Error('not for tool');
+    },
+  }) as unknown as FakeElement;
+  assert.equal(bodyOf(tool).tagName, 'DIV');
+  assert.equal(bodyOf(tool).className, 'bubble');
+  assert.equal(bodyOf(tool).textContent, '**x**');
+  assert.ok(!tool.all().some((n) => n.tagName === 'STRONG'));
+  assert.equal(calls, 0);
+  const assistant = bodyOf(renderChatRow(fakeDocument, rows[1]) as unknown as FakeElement);
+  assert.equal(assistant.className, 'bubble md');
+  assert.ok(assistant.all().some((n) => n.tagName === 'STRONG'));
+});
+
+test('iss-00063 T-03：markdown の印のない手で作った assistant の bubble は文字で描く', () => {
+  const row = { kind: 'bubble', key: 'k', role: 'assistant', at: null, text: '**a**', truncated: false };
+  const body = bodyOf(renderChatRow(fakeDocument, row) as unknown as FakeElement);
+  assert.equal(body.className, 'bubble');
+  assert.equal(body.textContent, '**a**');
+});
+
 test('T-06：質問と承認のカードは options.markdown を使わず今のまま描く', () => {
   const rows = buildChat([
     {
@@ -476,7 +505,7 @@ test('T-06：parse か render が例外を出したら、その行は今の文�
 
 test('T-06：切った本文の注記と時刻は、Markdown の本文でも今のまま付く', () => {
   const at = '2026-11-13T00:00:00.000Z';
-  const row = { kind: 'bubble', key: 'k', role: 'assistant', at, text: '**a**', truncated: true };
+  const row = { kind: 'bubble', key: 'k', role: 'assistant', at, text: '**a**', truncated: true, markdown: true };
   const li = renderChatRow(fakeDocument, row, { now: Date.parse(at) + 5 * MIN }) as unknown as FakeElement;
   assert.deepEqual(
     li.children.map((n) => n.className || n.tagName),

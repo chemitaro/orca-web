@@ -157,7 +157,7 @@ const unsupportedText = (what) => `表示できない（${UNSUPPORTED_LABELS[wha
 
 /**
  * 正規化した件から、描く行を作る。
- * 行：{ kind: 'bubble', key, role, at, text, truncated } | { kind: 'tool', key, at, name, input, output, isError, truncated }
+ * 行：{ kind: 'bubble', key, role, at, text, truncated, markdown } | { kind: 'tool', key, at, name, input, output, isError, truncated }
  *    | { kind: 'unsupported', key, role, at, text } | { kind: 'notice', key, at, text }
  *    | { kind: 'question', key, at, part, answerText } | { kind: 'approval', key, at, part }
  * ツールの結果は、同じ callId の呼び出しの行に入れる（なければ単独の行）。
@@ -209,6 +209,8 @@ export function buildChat(messages) {
               at: m.at,
               text,
               truncated,
+              // Markdown で描くのは元の role が assistant の件だけ（role tool の本文は文字のまま）。
+              markdown: m.role === 'assistant',
             },
       );
       texts = [];

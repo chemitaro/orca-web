@@ -102,7 +102,7 @@ export function renderDetail(doc, detail) {
  * 渡さなければ読むだけの形）、options.onOpenControl はカードが「Orca で開く」の部品を作ったときに呼ぶ。
  * 承認の行は approval-dom.js に任せる。options.approval は question と同じく、行からカードの描く物を作る関数。
  * 承認の「詳しく」の開け閉めは open の `<key>:detail` で持つ。
- * options.markdown は assistant の本文の要素を返す関数（agent-frame.js の写し）。渡さなければその場で解いて描く。
+ * options.markdown は assistant の本文の要素を返す関数（agent-frame.js の写し）。markdown 真の bubble の行だけで呼ぶ。渡さなければその場で解いて描く。
  */
 export function renderChatRow(doc, row, options = {}) {
   const now = options.now ?? Date.now();
@@ -132,9 +132,9 @@ export function renderChatRow(doc, row, options = {}) {
     item.append(card.root);
     if (card.openControl) options.onOpenControl?.(row, card.openControl);
   } else {
-    // assistant の発言だけを Markdown で描く。本人の発言、notice、unsupported は今のまま文字（R-01）。
+    // assistant の発言だけを Markdown で描く。本人の発言、道具の出力（role tool）、notice、unsupported は今のまま文字。
     const body =
-      row.kind === 'bubble' && row.role === 'assistant'
+      row.kind === 'bubble' && row.role === 'assistant' && row.markdown === true
         ? options.markdown
           ? options.markdown(row)
           : renderMarkdownBody(doc, row.text)

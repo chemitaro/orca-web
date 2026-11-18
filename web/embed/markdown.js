@@ -359,10 +359,12 @@ function parseList(lines, i, depth, ctx, blocks) {
 function parseTable(lines, i, table, ctx, blocks) {
   const width = table.align.length;
   // 見出しの列の数に合わせる。足りないセルは解かずに空にし、多いセルは落とす。
+  // セルの \| は行内を解く前に | にする（cmark-gfm の unescape_pipes と同じ。行内のコードの中でも |）。
   const fit = (cells) => {
     ctx.cells -= width;
     const out = [];
-    for (let k = 0; k < width; k++) out.push(k < cells.length ? parseInline(cells[k] ?? '') : []);
+    for (let k = 0; k < width; k++)
+      out.push(k < cells.length ? parseInline((cells[k] ?? '').replaceAll('\\|', '|')) : []);
     return out;
   };
   const head = fit(table.headCells);
