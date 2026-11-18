@@ -14,7 +14,7 @@ steps: {
 		title:    "表のセルの `\\|` と、道具の出力を文字のままにする直し（D-01、D-02）"
 		text:     "対象：`web/embed/markdown.js`（parseTable の fit だけ）、`web/embed/agent-view.js`（buildChat の bubble の行と型の注記）、`web/embed/agent-dom.js`（renderChatRow の分かれ目と注記）と、`test/web/markdown.test.ts`、`test/web/agent-view.test.ts`、`test/web/agent-dom.test.ts`。ほかのファイル（CSS、agent-frame.js、markdown-dom.js、src/）は変えない。確かめ：T-01〜T-03。完了：T-01〜T-03 のテストがあり、`npm run lint`、`npm test`、`npm run build` が通る。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-01", "R-02", "F-01", "F-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -22,7 +22,7 @@ steps: {
 		text:     "タスク担当が行う。README.md の Markdown の説明に『道具の出力は文字のまま』と『表のセルの `\\|` は `|`』を足す（AGENTS.md は役割の説明が変わらなければ変えない）。試しの orca-web（`npm run trial`、別の port と専用の settings。sendEnabled は偽のまま）の小窓で、試しのエージェント（業務中のエージェントは使わない）に `\\|` を含む表を書かせ、Mac の幅と 390px の写しを撮り、試しのエージェントを止める。確かめ：T-04。完了：report.md の Verification に写しの場所があり、`npm run lint`、`npm test`、`npm run build` が通る"
 		realizes: ["R-01", "R-02"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }

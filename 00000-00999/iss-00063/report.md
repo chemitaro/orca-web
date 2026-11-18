@@ -23,6 +23,7 @@ ID: "iss-00063"
 
 - 最終品質ゲート：キャンペーン `.workbench/final-quality-gate/iss-00063-fqg/`（範囲 `5d1353f..f7cbee3`）の attempt 1 で合格。合格のコミット `f7cbee32bf8e25a1677b613a20de9675a2bae945`。主（quality-gate-reviewer、Opus / medium、観点 functional-correctness・requirements-closure・test-adequacy・security-baseline）pass、指摘 0。2人目 ChatGPT GPT-6 / Extra High（chatgpt-code-review-strict、GitHub の SHA の一致を確かめた）pass、指摘 0。テスト lint 0・test 1121/1121・build 0。closure：`.workbench/final-quality-gate/iss-00063-fqg/closure.md`（写し `artifacts/closure.md`）。記録だけのコミットはない。PR の直前に origin/main を確かめ、5d1353f のまま（取り込みは要らなかった）。
 - 区切りのレビュー：なし（計画のとおり）。
+- PR #64（head f7cbee3 = 合格のコミット）：CI 合格（observer exit 0、run 44204181211 success、MERGEABLE・CLEAN）。マージは統括が行う。
 
 ## Verification
 
