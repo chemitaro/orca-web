@@ -232,7 +232,7 @@ test('試しの画面は部品の JS と CSS を試しの orca-web から読み�
   assert.match(forbidden, /probeImport\([^)]*`\$\{base\}\/embed\/agent-marks\.js`\)/);
 });
 
-test('T-23：状態の見本は手で作った working・monitoring・done の3つで、実機の値と混ざらない（開く先も詳細もない）', () => {
+test('T-23：状態の見本は手で作った working・monitoring・done・antigravity・gemini の5つで、実機の値と混ざらない（開く先も詳細もない）', () => {
   const sample = stateSamples(NOW);
   assert.equal(sample.id, 'sample:states');
   assert.equal(sample.path, null);
@@ -242,9 +242,21 @@ test('T-23：状態の見本は手で作った working・monitoring・done の3�
       ['sample:working', 'working', null],
       ['sample:monitoring', 'working', 'monitoring'],
       ['sample:done', 'done', null],
+      ['sample:antigravity', 'waiting', null],
+      ['sample:gemini', 'working', null],
     ],
   );
   for (const a of sample.agents) assert.equal(a.detail, null);
+  const icons = Object.fromEntries(
+    buildMarks(sample, { now: NOW, max: 10 }).marks.map((m) => [m.id, [m.icon, m.elapsed]]),
+  );
+  assert.deepEqual(icons, {
+    'sample:working': ['claude', '12m'],
+    'sample:monitoring': ['claude', '5m'],
+    'sample:done': ['codex', '3h'],
+    'sample:antigravity': ['antigravity', '30m'],
+    'sample:gemini': ['gemini', '2m'],
+  });
   const marks = buildMarks(sample, { now: NOW, max: 10 }).marks;
   assert.deepEqual(
     marks.map((m) => [m.mark, m.workingMode, m.elapsed]),
@@ -252,6 +264,8 @@ test('T-23：状態の見本は手で作った working・monitoring・done の3�
       ['working', null, '12m'],
       ['working', 'monitoring', '5m'],
       ['done', null, '3h'],
+      ['waiting', null, '30m'],
+      ['working', null, '2m'],
     ],
   );
   assert.match(marks[1]?.label ?? '', /バックグラウンドタスクを監視中/);
