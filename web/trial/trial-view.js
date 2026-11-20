@@ -82,7 +82,7 @@ export function detailUrl(base, detail, theme) {
 }
 
 /**
- * 「状態の見本」の worktree。手で作った working・monitoring・done の3つで、実機の値と混ぜない。
+ * 「状態の見本」の worktree。手で作った working・monitoring・done と、Antigravity・Gemini の種類の見本の5つで、実機の値と混ぜない。
  * 詳細とパスを持たない（見本から詳細や「Orca で開く」に進まない）。
  * @param {number} now
  */
@@ -106,6 +106,8 @@ export function stateSamples(now) {
       sample('working', 'working', null, 'claude', 12),
       sample('monitoring', 'working', 'monitoring', 'claude', 5),
       sample('done', 'done', null, 'codex', 180),
+      sample('antigravity', 'waiting', null, 'antigravity', 30),
+      sample('gemini', 'working', null, 'gemini', 2),
     ],
   };
 }

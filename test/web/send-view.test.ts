@@ -539,8 +539,13 @@ test('T-11：placeholder は端末の種類と agentType で作り、理由を�
   assert.equal(buildSendView(compose('', FP_A), { touchPrimary: true }).editor.placeholder, 'Claude に送る');
   const codex = reduceSend(initialSend(), statusOk(FP_A, 'codex'));
   assert.equal(buildSendView(codex).editor.placeholder, 'Codex に送る（Enter で送信、Shift+Enter で改行）');
-  const other = reduceSend(initialSend(), statusOk(FP_A, 'gemini'));
-  assert.equal(buildSendView(other, { touchPrimary: true }).editor.placeholder, 'gemini に送る');
+  const antigravity = reduceSend(initialSend(), statusOk(FP_A, 'antigravity'));
+  assert.equal(buildSendView(antigravity).editor.placeholder, 'Antigravity に送る（Enter で送信、Shift+Enter で改行）');
+  const gemini = reduceSend(initialSend(), statusOk(FP_A, 'gemini'));
+  assert.equal(buildSendView(gemini, { touchPrimary: true }).editor.placeholder, 'Gemini に送る');
+  const other = reduceSend(initialSend(), statusOk(FP_A, 'opencode'));
+  assert.equal(buildSendView(other).editor.placeholder, 'opencode に送る（Enter で送信、Shift+Enter で改行）');
+  assert.equal(buildSendView(other, { touchPrimary: true }).editor.placeholder, 'opencode に送る');
   assert.equal(
     buildSendView(initialSend()).editor.placeholder,
     'エージェントに送る（Enter で送信、Shift+Enter で改行）',
