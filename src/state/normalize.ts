@@ -447,6 +447,7 @@ export function normalizeState(input: NormalizeInput): StateDocument {
     if (!tab.id) return null;
     const matched = structuredPs(worktreeId, tab);
     const ps = matched?.agent;
+    const worker = structuredWorker(tab);
     const state = first([
       [tab.chatState, 'tabs', 'chatStatus.state'],
       ...(ps ? [[ps.state, 'worktreePs', 'agents.state'] as const] : []),
@@ -482,9 +483,13 @@ export function normalizeState(input: NormalizeInput): StateDocument {
         ? first([[ps.parentPaneKey, 'worktreePs', 'agents.parentPaneKey']])
         : missingFact(null, null, 'no-source'),
       terminal: missingFact(null, null, 'no-source'),
-      worker: structuredWorker(tab),
-      model: noSource(),
-      effort: noSource(),
+      worker,
+      model: worker
+        ? readingFact(launchReadings(worker.dispatchId, 'model'), launchMissing(worker.dispatchId, 'model'))
+        : noSource(),
+      effort: worker
+        ? readingFact(launchReadings(worker.dispatchId, 'effort'), launchMissing(worker.dispatchId, 'effort'))
+        : noSource(),
     };
   };
 
