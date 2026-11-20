@@ -1,0 +1,58 @@
+{
+  "schema": "specdock.todo/v1",
+  "id": "t-twnk",
+  "title": "orca-web の「Orca で開く」を、クライアントの PC と Safari で確かめる（iss-00047 の残り）",
+  "kind": "checklist",
+  "status": "open",
+  "created_at": "2026-11-20T02:40:03Z",
+  "updated_at": "2026-11-20T02:40:03Z",
+  "origin": {
+    "by": "agent",
+    "role": "統括"
+  },
+  "body": "iss-00047（PR #51、2026-11-17 マージ）は完了にした。Issue の中で確かめられなかった2点を、常駐の orca-web で本人が確かめる。おかしければ統括に伝える（新しい Issue にする）。",
+  "options": [],
+  "recommendation": null,
+  "reply_to": "spec-dock の main のチェックアウトの統括（Claude Code の会話）",
+  "effort": "10m",
+  "due": "2026-11-20T06:40:03Z",
+  "snooze_until": null,
+  "scopes": {
+    "related": [
+      "iss-00047"
+    ],
+    "blocks": []
+  },
+  "links": [],
+  "tags": [],
+  "subtasks": [
+    {
+      "id": "t-twnk.1",
+      "title": "クライアントの PC（ホストの Orca に接続中）で SpecDock の『Orca で開く』を押すと、そのクライアントの Orca が切り替わり、ホストの画面は動かない",
+      "status": "open",
+      "created_at": "2026-11-20T02:40:03Z",
+      "updated_at": "2026-11-20T02:40:03Z",
+      "resolution": null
+    },
+    {
+      "id": "t-twnk.2",
+      "title": "Safari で SpecDock の詳細の欄の『Orca で開く』を押すと、orca:// で Orca が前面に出る",
+      "status": "open",
+      "created_at": "2026-11-20T02:40:03Z",
+      "updated_at": "2026-11-20T02:40:03Z",
+      "resolution": null
+    }
+  ],
+  "resolution": null,
+  "history": [
+    {
+      "at": "2026-11-20T02:40:03Z",
+      "by": "agent",
+      "role": "統括",
+      "action": "added",
+      "target": null,
+      "note": null,
+      "fields": []
+    }
+  ]
+}
