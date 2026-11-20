@@ -28,7 +28,8 @@ ID: "iss-00066"
   - [390 明](artifacts/20261120t014116z-01--samples-390-light.png)、[390 暗](artifacts/20261120t014116z--samples-390-dark.png)
 
 - 最終品質ゲート（campaign iss-00066-fqg、Git の外の `.workbench/final-quality-gate/iss-00066-fqg/closure.md`）：1回目で合格。合格のコミット c4b9f34902dd3189ed05610f09a34217575cd655（範囲 58275ea..c4b9f34）。quality-gate-reviewer（Opus 5.5 / medium）pass・指摘 0、ChatGPT（GPT-6 Extra High、chatgpt-code-review-strict）pass・指摘 0（Antigravity の PNG との厳密な照合はコネクタの都合で未実施と記録）、lint・test 1123・build 通過。記録のコミットなし。
-- PR：https://github.com/chemitaro/orca-web/pull/70（Refs #66）
+- origin/main 9ad58fa（iss-00068）を取り込み（2d2cf64）、新しいキャンペーン iss-00066-fqg2 で最終品質ゲートをやり直して1回目で合格：合格のコミット 2d2cf6432fc8a0bfdbbbba5c5cd22ea37a81a5a4（範囲 58275ea..2d2cf64）、`.workbench/final-quality-gate/iss-00066-fqg2/closure.md`。quality-gate-reviewer pass・指摘 0、ChatGPT（GPT-6 Extra High）pass・指摘 0、lint・test 1128・build 通過。記録のコミットなし。
+- PR：https://github.com/chemitaro/orca-web/pull/70（Refs #66）、先端 2d2cf64。CI（GitHub Actions）は 2d2cf64 で PASS（watch-pr-checks、OBSERVED_CI_PASS）
 
 ## Outcome（追記）
 
