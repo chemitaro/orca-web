@@ -15,7 +15,7 @@ steps: {
 		title:    "前面の照合の表と、Antigravity の送信・答えの固定のテスト（D-01、D-02、D-03）"
 		text:     "対象：`src/orca/send.ts`（`readForeground` の照合を表にする。D-01）と、`test/orca/send.test.ts`、`test/send/service.test.ts`（または `test/send/terminal-approval-service.test.ts`）、`test/send/keys.test.ts`、`test/transcript/normalize.test.ts`、`test/web/question-view.test.ts`。ほかの `src/`・`web/` のファイルは変えない（D-02・D-03 はテストだけ。テストで今のコードの不足が見つかったら、直さずにタスク担当に問う）。fixture は仮名（セッション、itemId の UUID、ラベル）で、実物の値を写さない。確かめ：T-01〜T-06。完了：`npm run lint`、`npm test`、`npm run build` が通り、T-01〜T-06 のテストがあり、今のテストの振る舞いの主張を変えずに通す。実装担当 impl の最後の手順。止まって HEAD を報告する。区切りのレビュー：あり（cp1、`58275ea..HEAD`）"
 		realizes: ["R-01", "R-02", "F-01", "F-02", "F-03"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -23,7 +23,7 @@ steps: {
 		text:     "タスク担当が行う。README.md の送信・質問・端末の許可の確認の節に Antigravity の扱いを書く（D-04）。PR の直前に origin/main を取り込み直す。試しの orca-web（別のポート、専用の settings）と統括の試しの送り先だけで、D-05 の確かめを行い、report.md に記録する（会話の中身、id、パス、アカウントを書かない）。確かめ：T-07。完了：report.md の Verification に結論があり、`npm run lint`、`npm test`、`npm run build` が通る"
 		realizes: ["R-01", "R-02", "F-02"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }

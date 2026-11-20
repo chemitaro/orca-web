@@ -62,3 +62,17 @@ ID: "iss-00067"
 - 結果：`.workbench/spec-review/iss-00067/round-1.json`（Claude spec-reviewer Opus 5.5 / high。validate exit 0、P0/P1 0、P2 1）。応答は同じ場所の `review-response.md`
 - P2/P3 の残り：P2 1（Gemini CLI の未確認を D-05・S-02・T-07 の記録の項目に書いていない。この report.md の Verification に書いた）
 - ChatGPT の2人目（chatgpt-spec-review-strict、GPT-6 / Extra High、選択の証拠 verified）：findings 0、review_status fail。欠陥の指摘ではなく、Strict の束縛で `spec-dock/canonical` のブランチにないコードを読めなかったため。仕様の文書だけを見た2人目で、コードとの照合は Claude だけなので、2人のレビューとは呼ばない
+
+### 区切りのレビュー cp1（code-review、2026-11-20）：合格
+
+- 範囲 `58275ea..cb648d1`（S-01）、Claude code-reviewer（Opus 5.5 / medium、axis both）。validate exit 0、P0〜P3 なし
+- 結果：`.workbench/code-review/iss-00067-cp1/round-1.json`、`round-1.check.json`
+- タスク担当の実行でも lint・test（1,131 合格）・build が exit 0
+
+### 最終品質ゲート（final-quality-gate、2026-11-20）：合格
+
+- 合格のコミット：`c9b217310ef5d7eeff40436c800641a35d520703`（キャンペーン `iss-00067-fqg2`、base `58275ea`、attempt 01）
+- closure：`.workbench/final-quality-gate/iss-00067-fqg2/closure.md`
+- レビュー（quality-gate-reviewer、Opus 5.5 / high）：pass、P0〜P3 なし。2人目（chatgpt-code-review-strict、GPT-6 / Extra High、選択の証拠 verified）：pass、findings 0。テスト：lint・test（1,138 合格）・build がすべて exit 0
+- 前のキャンペーン `iss-00067-fqg1`（9194661）は3つのレーンとも合格したが、main の iss-00066 の取り込みでやり直した。その P3 1件（README の字下げ）は c9b2173 で直した
+- 記録だけのコミット：なし（record_paths は空）
