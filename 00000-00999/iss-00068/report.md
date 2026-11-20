@@ -22,6 +22,7 @@ ID: "iss-00068"
 
 - 最終品質ゲート：キャンペーン `.workbench/final-quality-gate/iss-00068-fqg/`（範囲 `58275ea..d8d44f2`）の attempt 1 で合格。合格のコミット `d8d44f20b6f6a251fbc21f34c14153b1a31273df`。主（quality-gate-reviewer、Opus / medium、観点 functional-correctness・requirements-closure・test-adequacy・compatibility-regression）pass、指摘 0。2人目 ChatGPT GPT-6 / Extra High（chatgpt-code-review-strict、GitHub の SHA の一致を確かめた）pass、指摘 0。テスト lint 0・test 1126/1126・build 0。closure：`.workbench/final-quality-gate/iss-00068-fqg/closure.md`（写し `artifacts/closure.md`）。記録だけのコミットはない。PR の直前に origin/main を確かめ、58275ea のまま。
 - 区切りのレビュー：なし（計画のとおり）。
+- PR #69（https://github.com/chemitaro/orca-web/pull/69、head d8d44f2 = 合格のコミット）：CI 合格（observer exit 0、run 44656093048 success、MERGEABLE、merge_readiness READY）。マージは統括が行う。
 
 ## Verification
 
