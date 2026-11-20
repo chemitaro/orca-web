@@ -20,4 +20,21 @@ ID: "iss-00068"
 
 ## Verification
 
+- S-01（実装担当 Codex GPT-6.2 Sol / medium、ctx_25c3547c310b、launch.effective codex / gpt-6.2-sol / medium、コミット d8d44f2）：`normalize.ts` の `chatTab` で、結んだ worker の起動の記録から model・effort を作る。テストを5件足し、`structured-worker.test.ts` の T-02 の期待（結ばれた chat-tab が no-source）を新しい振る舞いに直した。基準（58275ea）は lint・test 1121・build 合格、変更後は test 1126 合格・失敗 0。
+- 実物で確かめた事実（2026-11-20、Orca 1.4.263、agy 1.5.12）：
+  - Antigravity のエージェントは構造化 Chat（タブの type `agent-session`、`agent: "antigravity"`）として動く。タブの項目は type・id・title・sessionId・agent・isActive・chatStatus だけで、model・effort・agentStatus・providerSession はない。`orca worktree ps` の行にもない。
+  - worker として起動したものは `worker-show --full` の `startOptions.launch.requested`・`effective` に `{agent: antigravity, model: gemini-3.8-flash-low, effort: low}` が出る（タスク担当の試しの worker と統括の試しの送り先の両方）。
+  - `agentSession.history` の利用者の送信の `options` に、画面で選んだ推論の深さ（`effort: medium`）が出ることがある。モデルは出ない（状態のポーリングは会話を読まないので使わない）。
+  - `agy models` の id は推論の深さを含む形（`gemini-3.8-flash-low` など）。Gemini CLI はこの PC にない。
+- S-02（タスク担当、T-04）：試しの orca-web（port 8798、専用の settings、sendEnabled は偽のまま）を d8d44f2 で起動し、`/api/state` を読んだ。統括の試しの送り先（ctx_972dbcac8726、Antigravity）の chat-tab：`model` gemini-3.8-flash-low、`effort` low、どちらも source workerLaunch、field `startOptions.launch.effective.*`、meaning launch-resolved、readings 2。worker の構造化 Chat の Claude・Codex の chat-tab にも起動の値が出た（例 codex gpt-6.2-sol / medium）。worker のない chat-tab（Antigravity 2件を含む）は no-source のまま。端末のタブ 43件の model・effort は、常駐の orca-web（8791、58275ea 相当）と完全に一致した。試しの orca-web は止めた。送り先には何も送っていない。
+
+## 逸脱と判断
+
+- 範囲の広がり（統括の了承、2026-11-20）：種類によらない形にしたので、Epic の R-04（Antigravity・Gemini）を超えて、worker の構造化 Chat の Claude・Codex などの chat-tab にも起動の記録の model・effort が出る。端末のタブの読み取りは変えていない。
+- 統括の条件2（Claude の chat-tab で providerSession.effort と起動の記録の両方があるときの順）：chat-tab ではタブの agentStatus を読まず、起動の記録だけを出どころにする（F-02）。テスト T-01 で、agentStatus を与えても起動の記録の値と出どころになることを確かめた。
+
 ## Residual Risks / Follow-ups
+
+- worker でない Antigravity の Chat（利用者が開いたもの）は、Orca がタブにモデルを出さないので no-source のまま。Orca がタブに出すようになれば、別の Issue で読む。
+- 試しの orca-web の起動直後の数回は、起動の記録を回ごとに上限の数だけ読むため、まだ読んでいない worker が source-failed と出て、次の回で値に変わった（今のポーリングの振る舞いで、端末のタブも同じ）。
+- Antigravity のモデルの id は推論の深さを含むので、model と effort に同じ深さが重ねて見える（id は解かない）。

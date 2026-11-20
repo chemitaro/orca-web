@@ -14,7 +14,7 @@ steps: {
 		title:    "chat-tab の model・effort を、結んだ worker の起動の記録から作る（D-01）"
 		text:     "対象：`src/state/normalize.ts` の `chatTab` だけと、`test/state/structured-worker.test.ts`（T-02 の no-source の期待を新しい振る舞いに直し、T-01〜T-03 のテストを足す。新しいテストのファイルを足してもよい）。端末のタブ、`workers` の行、`launchReadings`・`launchMissing`・`readingFact`、ポーリング、型、`web/`、README は変えない。確かめ：T-01〜T-03。完了：T-01〜T-03 のテストがあり、端末のタブの今のテストの期待を変えずに `npm run lint`、`npm test`、`npm run build` が通る。終えたら clean なコミットで止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-01", "R-02", "R-03", "F-01", "F-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -22,7 +22,7 @@ steps: {
 		text:     "タスク担当が行う。試しの orca-web（`npm run trial -- --state-dir .workbench/trial-68 --orca-port <空いた port> ...`、専用の settings、sendEnabled は偽のまま。常駐の 8791 は変えない）の `/api/state` で、統括の試しの送り先（ctx_972dbcac8726、Antigravity、gemini-3.8-flash-low / low）の chat-tab の model・effort の値・出どころ・meaning を読み、report.md の Verification に件数と値だけを書く（会話の中身、パス、IP は書かない）。送り先には何も送らない。確かめ：T-04。完了：report.md に実物の値があり、試しの orca-web を止めた"
 		realizes: ["R-01"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "owner"
 	}
 }
