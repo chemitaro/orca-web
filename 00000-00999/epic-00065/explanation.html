@@ -4,56 +4,50 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>説明資料</title>
+<title>Antigravity と Gemini への対応</title>
 <link rel="stylesheet" href="../../../design-system/ds.css">
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: この Scope の説明資料（題名を書き換えます）
-lead: この資料で理解できることを、初めて読む人にも分かるように1〜2文で書きます。
+title: Antigravity と Gemini のエージェントへの対応（orca-web）
+lead: Orca に Antigravity CLI が入りました。この資料では、orca-web の印・送信・状態のどこを、どの順で直すかが分かります。
 category: 説明資料
 audience: 本日チームに加わった新メンバー
-status: 下書き
+status: 計画
 ---
-
-<!-- spec-dock:explanation-skeleton -->
-<!-- 雛形から書き換えたら、上の印の行を消します。印が残っていると、検査は「雛形のまま」と判定します。 -->
 
 ## この資料で分かること
 
 :::summary
-- 読み終えたときに理解できていることを、1文ずつ書きます。
-- 背景、仕組み、失敗時の動き、確認方法のうち、特に伝えたい点を選びます。
-- 短い Scope なら、1〜2項目でかまいません。
+- 印のアイコンと名前は `web/embed/agent-marks-icons.js` の表の1か所で決まり、SpecDock もこの表を読みます。
+- Antigravity と Gemini は種類（道具）ごとに別のアイコンにします。モデルごとにはしません。
+- 送信と質問への回答は、実物の Antigravity で確かめてから作ります（strict）。
 :::
 
 ## 背景と目的
 
-なぜこの Scope に取り組むのか、どの問題を解決するのかを具体的に説明します。
+Orca は Antigravity のエージェントを `antigravity`、Gemini CLI を `gemini` という種類で報告します。今の表には Claude と Codex しかなく、それ以外は中立の丸になります。送信の照合と質問に答えるキーも、Claude と Codex だけです。
 
 ## 全体の構成
 
-構成要素の役割と関係を説明します。図は、理解を大きく助ける場合だけ入れます。
-
 ```plantuml id=overview
 @startuml
-title 全体の構成
-top to bottom direction
-actor "利用者" as User
-component "説明対象の仕組み" as System
-database "データ" as Data
-User -> System : 操作する
-System -> Data : 読み書きする
-System --> User : 結果を返す
+title orca-web の3つの Issue
+component "iss-00066 アイコンと名前" as O1
+component "iss-00067 送信の照合と回答（strict）" as O2
+component "iss-00068 モデルと推論の深さ" as O3
+component "SpecDock iss-00674 種類の名前" as S2
+O1 --> S2 : 名前の表を読む
 @enduml
 ```
 
+3つの Issue は書く範囲が重ならないので、並べて進めます。iss-00066 は SpecDock の iss-00674 が待つので、先に入れます。
+
 ## 確認方法
 
-読者が手元で確かめられる手順を書きます。
-
 ```sh
-spec-dock active show --json
+spec-dock scope show epic-00065 --json
+npm test
 ```
 </script>
 <script src="../../../design-system/ds.js"></script>

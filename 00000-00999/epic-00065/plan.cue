@@ -1,33 +1,48 @@
 package spec
 
 // 計画（Epic）。型 specdock/v1。
-// Epic の計画は、子の Scope への切り分けを持つ。実装の手順とテストは子の Scope が持つので、
-// steps と tests は書かない。
 
-// 目標（任意）。
-// goal: "..."
+goal: "Antigravity と Gemini のエージェントが、orca-web の印・送信・チャット・状態で、Claude・Codex と同じ扱いで見えて操作できる。"
 
-// 子の Scope への切り分け。子の ID（iss-00001 など）をキーにする。covers（子に任せる要件・失敗の条件の番号）が必須。
-// すべての要件を、いずれかの子に任せる。standard 以上では、それが「確かめるテストがある」にも当たり、
-// strict 以上では、すべての失敗の条件を任せ、どの子にも、任せる番号を書く。
-// 子の題名は GitHub に、子の保証レベルは子の requirement.cue にあるので、ここには書かない。
 slices: {
-	// "iss-00001": {
-	// 	covers: ["R-01", "F-01"]
-	// 	text:   "この Issue に任せること"
-	// 	after: ["iss-00002"]
-	// 	session: "coord"
-	// }
+	"iss-00066": {
+		covers: ["R-01", "F-01"]
+		text: """
+			種類の表（D-01）：`web/embed/agent-marks-icons.js`、`web/embed/send-view.js`、`web/trial/` の見本、`test/web/` のテスト、README の部品の契約。
+			SpecDock の iss-00674 がこの名前を読むので、先に入れる。マージの後、統括が常駐の orca-web を立て直す。
+			"""
+		session: "owner"
+	}
+	"iss-00067": {
+		covers: ["R-02", "R-03", "F-02"]
+		text: """
+			送信の照合と回答（D-02）：`src/orca/send.ts`、`src/send/{service,keys}.ts`、`web/embed/question-view.js`、`test/orca/`・`test/send/`・`test/web/` のテスト。実物の確かめは、統括が用意する試しの送り先で行う。
+			"""
+		session: "owner"
+	}
+	"iss-00068": {
+		covers: ["R-04"]
+		text: """
+			モデルと推論の深さ（D-03）：`src/state/normalize.ts` と `test/state/` のテスト。実物の状態の文書で出どころを確かめる。
+			"""
+		session: "owner"
+	}
 }
 
-// 検証のしかた、戻し方、終わりの条件（任意）。critical では、切り分けがあれば rollback が要る。
-// verification: "..."
-// rollback:     "..."
-// exit:         "..."
+verification: """
+	iss-00066：`iconKey` と `AGENT_ICONS` の単体テスト、印と送信の欄のテスト、試しの画面の写し（明・暗）、全テストと lint。
+	iss-00067：照合とキーの組（または RPC）の単体テスト、答えられない形のテスト、試しの送り先での実物の確かめの記録、全テストと lint。
+	iss-00068：normalize の単体テスト（Antigravity・Gemini の項目あり・なし、Claude・Codex は今どおり）、実物の状態の文書の確かめ、全テストと lint。
+	最後に統括が、常駐の orca-web を立て直し、実際の Orca の Antigravity のエージェントで、印・送信・回答・モデルの表示を確かめる。
+	"""
 
-// 実行の割り当て（任意）。切り分けの session は、ここのセッションの名前を指す。
-// レビューの after は、どの切り分けの後かを指す。モデルと推論の名前は、どんな文字列でもよい。
-// execution: {
-// 	sessions: coord: {task: "統括", model: "...", effort: "...", rationale: "..."}
-// 	reviews: gate: {role: "最終の確かめ", after: "iss-00001", model: "...", effort: "..."}
-// }
+rollback: "各 Issue の PR を戻す。iss-00066 を戻すと印は中立の丸に、iss-00067 を戻すと Antigravity への回答はできなくなり、iss-00068 を戻すとモデルは出どころなしに戻る。"
+
+exit: "iss-00066、iss-00067、iss-00068 が閉じ、常駐の orca-web で、Antigravity のエージェントのアイコン・名前・回答・モデルが確かめられた。"
+
+execution: {
+	sessions: {
+		plan: {task: "Epic の仕様と切り分け（この記録）", model: "Opus 5.5", effort: "medium", rationale: "統括（方針の第2節、standard の統括）が自分で書いた"}
+		owner: {task: "各 Issue のタスク担当", model: "Opus 5.5", effort: "medium（iss-00067 は high）", rationale: "方針の第2節：standard のタスク担当は medium、strict の iss-00067 は high。実装担当は Issue の計画で選ぶ（iss-00066 は画面の部品なので Opus 5.5 / medium、iss-00067・iss-00068 はテストで確かめられるサーバー側なので GPT-6.2 Sol / medium を推す）"}
+	}
+}
