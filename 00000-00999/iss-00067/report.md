@@ -76,3 +76,8 @@ ID: "iss-00067"
 - レビュー（quality-gate-reviewer、Opus 5.5 / high）：pass、P0〜P3 なし。2人目（chatgpt-code-review-strict、GPT-6 / Extra High、選択の証拠 verified）：pass、findings 0。テスト：lint・test（1,138 合格）・build がすべて exit 0
 - 前のキャンペーン `iss-00067-fqg1`（9194661）は3つのレーンとも合格したが、main の iss-00066 の取り込みでやり直した。その P3 1件（README の字下げ）は c9b2173 で直した
 - 記録だけのコミット：なし（record_paths は空）
+
+### PR と CI
+
+- PR：https://github.com/chemitaro/orca-web/pull/71（head c9b2173、base main 4ad7471）。マージは統括が行う
+- CI：Actions の CI（run 44660051925）success。observer は OBSERVED_CI_PASS、merge_readiness READY（2026-11-20T02:21Z）
