@@ -27,4 +27,14 @@ ID: "iss-00066"
   - [1280 明](artifacts/20261120t014115z-01--samples-1280-light.png)、[1280 暗](artifacts/20261120t014115z--samples-1280-dark.png)
   - [390 明](artifacts/20261120t014116z-01--samples-390-light.png)、[390 暗](artifacts/20261120t014116z--samples-390-dark.png)
 
+- 最終品質ゲート（campaign iss-00066-fqg、Git の外の `.workbench/final-quality-gate/iss-00066-fqg/closure.md`）：1回目で合格。合格のコミット c4b9f34902dd3189ed05610f09a34217575cd655（範囲 58275ea..c4b9f34）。quality-gate-reviewer（Opus 5.5 / medium）pass・指摘 0、ChatGPT（GPT-6 Extra High、chatgpt-code-review-strict）pass・指摘 0（Antigravity の PNG との厳密な照合はコネクタの都合で未実施と記録）、lint・test 1123・build 通過。記録のコミットなし。
+- PR：https://github.com/chemitaro/orca-web/pull/70（Refs #66）
+
+## Outcome（追記）
+
+`iconKey` が `antigravity`・`gemini` を返し、`AGENT_ICONS` にそれぞれのアイコンと名前がある。送信の欄の名前は表から取る。知らない種類は今どおり中立の丸。
+
 ## Residual Risks / Follow-ups
+
+- Antigravity のアイコンは PNG の輪郭を写した path で、ロゴのグラデーションは単色にした。公式のベクターの素材が手に入れば、表の値だけを差し替える。
+- 常駐の orca-web の立て直しと SpecDock の iss-00674 への連絡は、マージの後に統括が行う。
