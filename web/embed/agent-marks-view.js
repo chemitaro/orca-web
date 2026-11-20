@@ -148,7 +148,7 @@ export function orderAgents(agents) {
 }
 
 /**
- * @typedef {{ id: string | null, mark: string, workingMode: 'monitoring' | null, icon: 'claude' | 'codex' | 'other' | 'none', typeLabel: string,
+ * @typedef {{ id: string | null, mark: string, workingMode: 'monitoring' | null, icon: 'claude' | 'codex' | 'antigravity' | 'gemini' | 'other' | 'none', typeLabel: string,
  *   elapsed: string | null, label: string, detail: string | null }} MarkView
  */
 
