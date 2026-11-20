@@ -350,11 +350,11 @@ export function composerKeyAction(event, { touchPrimary = false } = {}) {
 
 const TYPE_LABEL_MAX = 40;
 
-/** 種類の名前（Claude、Codex。ほかは agentType の文字。分からなければ null）。 */
+/** 種類の名前（表にある種類は表の名前。ほかは agentType の文字。分からなければ null）。 */
 function typeName(agentType) {
   if (!isText(agentType)) return null;
   const icon = iconKey(agentType);
-  return icon === 'claude' || icon === 'codex' ? AGENT_ICONS[icon].label : agentType.slice(0, TYPE_LABEL_MAX);
+  return icon !== 'other' && icon !== 'none' ? AGENT_ICONS[icon].label : agentType.slice(0, TYPE_LABEL_MAX);
 }
 
 /** 入力欄の placeholder（D-05）。理由は書かない（理由は知らせの欄に出す）。 */

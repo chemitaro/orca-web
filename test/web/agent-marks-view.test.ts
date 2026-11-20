@@ -118,9 +118,42 @@ test('iconKey：種類の値から表の鍵を決める', () => {
   assert.equal(iconKey(null), 'none');
   assert.equal(iconKey(''), 'none');
   assert.equal(iconKey(undefined), 'none');
-  assert.equal(iconKey('gemini'), 'other');
+  assert.equal(iconKey('antigravity'), 'antigravity');
+  assert.equal(iconKey('gemini'), 'gemini');
+  assert.equal(iconKey('opencode'), 'other');
   assert.equal(iconKey(42), 'other');
-  for (const key of ['claude', 'codex', 'other', 'none']) assert.ok(key in AGENT_ICONS);
+  for (const key of ['claude', 'codex', 'antigravity', 'gemini', 'other', 'none']) assert.ok(key in AGENT_ICONS);
+});
+
+// stablyai/orca 5e7ceb61eb028e3d62a6664ebfba8adfb60ad8e8 の provider-icons.tsx の GeminiIcon の star。
+const GEMINI_STAR =
+  'M32.447 0c.68 0 1.273.465 1.439 1.125a38.904 38.904 0 001.999 5.905c2.152 5 5.105 9.376 8.854 13.125 3.751 3.75 8.126 6.703 13.125 8.855a38.98 38.98 0 005.906 1.999c.66.166 1.124.758 1.124 1.438 0 .68-.464 1.273-1.125 1.439a38.902 38.902 0 00-5.905 1.999c-5 2.152-9.375 5.105-13.125 8.854-3.749 3.751-6.702 8.126-8.854 13.125a38.973 38.973 0 00-2 5.906 1.485 1.485 0 01-1.438 1.124c-.68 0-1.272-.464-1.438-1.125a38.913 38.913 0 00-2-5.905c-2.151-5-5.103-9.375-8.854-13.125-3.75-3.749-8.125-6.702-13.125-8.854a38.973 38.973 0 00-5.905-2A1.485 1.485 0 010 32.448c0-.68.465-1.272 1.125-1.438a38.903 38.903 0 005.905-2c5-2.151 9.376-5.104 13.125-8.854 3.75-3.749 6.703-8.125 8.855-13.125a38.972 38.972 0 001.999-5.905A1.485 1.485 0 0132.447 0z';
+
+test('アイコンの表：antigravity と gemini は label・viewBox・単色の path を持ち、Gemini の d は Orca の star と同じ', () => {
+  const expected = { antigravity: ['Antigravity', '0 0 64 64', '#3587FF'], gemini: ['Gemini', '0 0 65 65', '#3186FF'] };
+  for (const [key, [label, viewBox, fill]] of Object.entries(expected)) {
+    const icon = AGENT_ICONS[key as 'antigravity' | 'gemini'];
+    assert.equal(icon.label, label);
+    assert.equal(icon.viewBox, viewBox);
+    assert.equal(icon.paths.length, 1);
+    const p = first(icon.paths);
+    assert.equal(typeof p.d, 'string');
+    assert.ok(p.d.length > 0);
+    assert.equal(p.fill, fill);
+    assert.match(p.fill ?? '', /^#[0-9A-F]{6}$/);
+  }
+  assert.equal(first(AGENT_ICONS.gemini.paths).d, GEMINI_STAR);
+  assert.match(first(AGENT_ICONS.antigravity.paths).d, /^M[\d. -]+(C[\d. -]+)+Z$/);
+});
+
+test('アイコンの表：注に Gemini と Antigravity の出どころ（Orca、MIT、ファイル、コミット）と商標がある', () => {
+  const text = readFileSync('web/embed/agent-marks-icons.js', 'utf8');
+  const head = text.slice(0, text.indexOf('export const AGENT_ICONS'));
+  assert.match(head, /5e7ceb61eb028e3d62a6664ebfba8adfb60ad8e8/);
+  assert.match(head, /provider-icons\.tsx/);
+  assert.match(head, /GeminiIcon/);
+  assert.match(head, /antigravity\.png/);
+  assert.match(head, /Google LLC の商標/);
 });
 
 test('アイコンの表：claude と codex は Orca のロゴの値を写す', () => {
@@ -241,7 +274,9 @@ test('buildMarks：種類、知らない状態、起点ごとの経過の文、d
         elapsedFrom: ago(2 * HOUR),
         elapsedBasis: 'worktree-activity',
       }),
-      agent({ id: 'u', mark: 'exploded', agentType: 'gemini', detail: 'javascript:alert(1)' }),
+      agent({ id: 'u', mark: 'exploded', agentType: 'opencode', detail: 'javascript:alert(1)' }),
+      agent({ id: 'ag', mark: 'waiting', agentType: 'antigravity' }),
+      agent({ id: 'gm', mark: 'working', agentType: 'gemini' }),
       agent({ id: 'n', mark: 'done', agentType: null, detail: null, elapsedFrom: 'bad', elapsedBasis: 'state' }),
       agent({ id: 'f', mark: 'done', agentType: 'claude-agent-teams', elapsedFrom: ago(-MIN), elapsedBasis: 'state' }),
       agent({ id: 'l', mark: 'done', agentType: 'x'.repeat(60), detail: 'https://example.invalid/embed/agent?id=l' }),
@@ -269,8 +304,14 @@ test('buildMarks：種類、知らない状態、起点ごとの経過の文、d
   });
   assert.equal(byId.u.mark, 'unknown');
   assert.equal(byId.u.icon, 'other');
-  assert.equal(byId.u.typeLabel, 'gemini');
-  assert.equal(byId.u.label, 'gemini、不明');
+  assert.equal(byId.u.typeLabel, 'opencode');
+  assert.equal(byId.u.label, 'opencode、不明');
+  assert.equal(byId.ag.icon, 'antigravity');
+  assert.equal(byId.ag.typeLabel, 'Antigravity');
+  assert.match(byId.ag.label, /^Antigravity、/);
+  assert.equal(byId.gm.icon, 'gemini');
+  assert.equal(byId.gm.typeLabel, 'Gemini');
+  assert.match(byId.gm.label, /^Gemini、/);
   assert.equal(byId.u.detail, null);
   assert.equal(byId.n.icon, 'none');
   assert.equal(byId.n.typeLabel, 'エージェント');

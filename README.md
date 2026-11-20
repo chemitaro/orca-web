@@ -264,7 +264,7 @@ SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に、workt
 </script>
 ```
 
-- 種類はアイコン（Claude と Codex は各社のロゴ、ほかの種類は中立の丸、種類がなければ破線の丸）、状態は SpecDock のダッシュボードと同じ色（作業中 緑で、アイコンのまわりの弧が回る、許可待ち 琥珀、入力待ち 青（SpecDock の「着手できる」）、完了 灰、スリープ 薄い灰の線と月の印、不明 紫）、経過の時間は英語の短い形（1分未満 `now`、`5m`、`3h`、`2d`。週や月には上げない）。読み上げの名前と title は読める日本語の文（例「Claude、作業中、この状態になって 3時間」）。印の並びは、同じ worktree の中で、指揮の関係のないエージェント（同じ worktree に親も子もいない）を左に `startedAt` の新しい順、関係のあるものを右に上流から下流（親 → 子 → 孫の深さ優先、兄弟は新しいものが左）。状態では並べない。`parent`・`startedAt` のない古い要約は要約の順。並びは `orderAgents(agents)`（`agent-marks.js` からも import できる純粋な関数）の1か所で決まる。
+- 種類はアイコン（Claude、Codex、Antigravity、Gemini はそれぞれのロゴ、ほかの種類は中立の丸、種類がなければ破線の丸）、状態は SpecDock のダッシュボードと同じ色（作業中 緑で、アイコンのまわりの弧が回る、許可待ち 琥珀、入力待ち 青（SpecDock の「着手できる」）、完了 灰、スリープ 薄い灰の線と月の印、不明 紫）、経過の時間は英語の短い形（1分未満 `now`、`5m`、`3h`、`2d`。週や月には上げない）。読み上げの名前と title は読める日本語の文（例「Claude、作業中、この状態になって 3時間」）。印の並びは、同じ worktree の中で、指揮の関係のないエージェント（同じ worktree に親も子もいない）を左に `startedAt` の新しい順、関係のあるものを右に上流から下流（親 → 子 → 孫の深さ優先、兄弟は新しいものが左）。状態では並べない。`parent`・`startedAt` のない古い要約は要約の順。並びは `orderAgents(agents)`（`agent-marks.js` からも import できる純粋な関数）の1か所で決まる。
 - 各印の要素（`.orca-mark`）は、エージェントの id を `data-agent-id` に持つ（id のない印と「+N」にはない）。押した印とエージェントを結ぶのに使える。
 - バックグラウンドタスクを監視中（`workingMode: monitoring`）の印は、種類のロゴの右（経過の左）に脈の線の印（lucide の `Activity`）を置き、作業中の輪は出さない（回らない）。色は作業中と同じ緑、読み上げの名前と title の状態の言葉は Orca の日本語の画面と同じ「バックグラウンドタスクを監視中」、経過は作業中と同じ規則。受け箱と Run の木の行にも同じ印と言葉を出す。
 - 色だけに頼らないよう、各印は種類、状態、経過とその起点を読み上げの名前（aria-label）と title に持つ。
@@ -274,6 +274,7 @@ SpecDock の狭い枠（構造の図の箱、Issue の一覧の行）に、workt
 - 経過の表記は `web/embed/elapsed.js` の1か所（`formatElapsed`：短い形、`describeElapsed`：読める形、`elapsedMs`）。受け箱、Run の木、チャットからも同じ関数を import する（`{ clampFuture: true }` で未来の時刻を now にする）。
 - アイコンは `web/embed/agent-marks-icons.js` の表 `AGENT_ICONS` の1か所だけで決まる。差し替えるときはこの表の値だけを変える。
 - Claude と Codex（OpenAI）のロゴの SVG は、stablyai/orca（MIT）の `src/renderer/src/components/status-bar/icons.tsx`（コミット `80a514c`）から写した。ロゴは Anthropic・OpenAI の商標。
+- Gemini のロゴの形は、stablyai/orca（MIT）の `src/renderer/src/components/status-bar/accounts/provider-icons.tsx` の `GeminiIcon`（コミット `5e7ceb6`）の星の path を写した。Antigravity のロゴの形は、同じコミットの同梱の画像 `src/shared/agent-icons/antigravity.png` の輪郭を写した path。表は単色の塗りだけを持つので、どちらもロゴの主な色の単色にした（Gemini `#3186FF`、Antigravity `#3587FF`）。ロゴは Google LLC の商標。
 - 「Orca で開く」の Orca のロゴの SVG は、stablyai/orca（MIT）の `resources/logo.svg`（タグ v1.4.258、コミット `c91a7a6`）から写した。ロゴは Orca（Lovecast Inc.）の商標。
 - 状態の印は同じファイルの表 `STATE_ICONS` の1か所。監視中の脈の線は lucide（ISC、lucide-react 0.577.0 の `Activity`。Orca 1.4.258 の `AgentStateDot` の monitoring の印）から写した。
 
