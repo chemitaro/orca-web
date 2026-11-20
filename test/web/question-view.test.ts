@@ -529,6 +529,37 @@ const keysStatus = (over: Record<string, unknown> = {}): Any => ({
 });
 const KEY_ANSWERS = [{ questionId: '0', optionIds: ['0'] }];
 
+test('iss-00067 T-04：端末の Antigravity の質問は理由と「Orca で開く」を出し送信しない', async () => {
+  const { writer, calls } = fakeWriter([]);
+  const keys = createCallAnswerer({ agentId: 'a1', writer, mode: 'keys' });
+  const chat = createChatAnswerer({ agentId: 'a1', writer });
+  const board = createQuestionBoard({ answerers: { chat, terminal: terminalAnswerer, keys } });
+  const part = keysPart();
+  const status = keysStatus({
+    available: true,
+    agentType: 'antigravity',
+    answerKeys: { available: false, reason: 'agent_keys_unknown' },
+  });
+  const availability = keys.availability(part, status);
+  assert.ok('reason' in availability && 'open' in availability);
+  const { ok, reason, open } = availability;
+  assert.ok(ok === false && open === true && reason);
+  assert.equal(reason, QUESTION_REASONS.agent_keys_unknown);
+  assert.equal(board.toggleOption('k', part, 0, '0'), true);
+  const card = buildQuestionCard(part, {
+    key: 'k',
+    selection: board.selection('k', part),
+    flow: board.flow('k'),
+    availability: { ok, reason, open },
+  });
+  assert.equal(card.open, true);
+  assert.equal(card.reason, QUESTION_REASONS.agent_keys_unknown);
+  assert.equal(card.button.shown, false);
+  for (const option of card.questions[0].options) assert.equal(option.disabled, true);
+  await board.submit('k', part, status);
+  assert.equal(calls.length, 0);
+});
+
 test('iss-00049 T-13：answererFor は answerVia で rpc・keys・message の手段を選び、answerVia のない物は source の規則', () => {
   const chat = { availability: () => OK, submit: async () => ({ kind: 'done' }) };
   const keys = { availability: () => OK, submit: async () => ({ kind: 'done' }) };
