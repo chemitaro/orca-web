@@ -2,6 +2,7 @@
 // 手で書いた仮の会話で返す。本物の会話は写さない。形は stablyai/orca v1.4.256 に合わせる。
 import type { CapabilityReport, FeatureReport } from '../../src/orca/capabilities.ts';
 import type { RpcCallOptions, RpcOutcome, RpcTransport } from '../../src/orca/rpc.ts';
+import type { QuestionAnswer } from '../../src/send/answer.ts';
 
 export const PANE_CLAUDE = 'tab-1:leaf-1';
 export const PANE_CODEX = 'tab-2:leaf-2';
@@ -56,6 +57,49 @@ export function tabsInventory(overrides: { claudeSession?: string } = {}) {
 }
 
 const at = (n: number) => Date.UTC(2026, 10, 13, 0, 0, n);
+
+export const SESSION_ANTIGRAVITY = 'dddddddd-4444-4444-8444-444444444444';
+
+/** iss-00067 D-03 の Antigravity journal。識別子・問い・答えは仮の値。 */
+export function antigravityQuestionItem(mode: 'single' | 'multi', answers?: QuestionAnswer[]) {
+  const question = '仮の選択';
+  const multiSelect = mode === 'multi';
+  const options = [
+    { id: 'a', label: '甲' },
+    { id: 'b', label: '乙' },
+    { id: 'c', label: '丙' },
+    ...(multiSelect ? [{ id: 'd', label: '丁' }] : []),
+  ];
+  const freeText = multiSelect ? { freeTextQuestionId: 'choice' } : {};
+  return {
+    itemId: `legacy:antigravity:${SESSION_ANTIGRAVITY}:request%3Affffffff-5555-4555-8555-555555555555%3Aelicitation%3A${mode}`,
+    revision: answers ? 4 : 3,
+    sequence: 9,
+    observedAt: at(9),
+    body: {
+      kind: 'question',
+      question,
+      options,
+      ...freeText,
+      questions: [{ id: 'choice', question, header: '仮の見出し', multiSelect, options, ...freeText }],
+      resolution: answers
+        ? {
+            state: 'resolved',
+            selectedOptionId: `question-group:${encodeURIComponent(JSON.stringify(answers))}`,
+            answers,
+            resolvedBy: 'device-test',
+            resolvedAt: at(10),
+            resolvedByDevice: { kind: 'desktop' },
+          }
+        : { state: 'pending', selectedOptionId: null, resolvedBy: null, resolvedAt: null },
+    },
+  };
+}
+
+export function malformedAntigravityQuestionItem() {
+  const item = antigravityQuestionItem('single');
+  return { ...item, body: { ...item.body, questions: [{ id: 'choice' }] } };
+}
 
 /** 仮の端末の会話。思考、ツール、画像、未知のブロック、system の知らせ、危ない文字を含む。 */
 export function nativeMessages() {

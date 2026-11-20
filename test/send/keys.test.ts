@@ -162,6 +162,16 @@ test('T-03 planKeys：番号が2桁になる問いは prompt_unsupported', () =>
   });
 });
 
+test('iss-00067 T-03：Antigravity の質問と承認にはキーを組み立てない', () => {
+  assert.deepEqual(planKeys('antigravity', [q('0', ABC)], [ans('0', ['0'])]), {
+    ok: false,
+    error: 'not_sendable',
+    reason: 'agent_keys_unknown',
+  });
+  assert.equal(approvalKey('antigravity', 'allow_once'), null);
+  assert.equal(approvalKey('antigravity', 'reject_once'), null);
+});
+
 test('T-03 planKeys：64組を超える答えは invalid_answer（too_large）', () => {
   const many = Array.from({ length: 16 }, (_, i) => q(String(i), ABC, { multiSelect: true }));
   // 16問 ×（数字3つ＋右矢印）＋ Submit = 65組

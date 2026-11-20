@@ -263,13 +263,38 @@ test('前面を Orca と同じ規則でシェルと宛先のエージェント�
     ['codexish', 'codex', false],
     ['codex', 'claude', false],
     ['claude', 'codex', false],
-    ['antigravity', 'antigravity', false],
     ['codex', 'other', false],
   ] as const) {
     foreground = process;
     assert.deepEqual(
       await adapter.readForeground('term_test', 'inc-test', agentType),
       { ok: true, isShell: false, matchesAgent },
+      `${agentType}: ${process}`,
+    );
+  }
+  // iss-00067 T-01
+  for (const [process, agentType, isShell, matchesAgent] of [
+    ['antigravity', 'antigravity', false, true],
+    ['/opt/x/antigravity', 'antigravity', false, true],
+    ['"antigravity"', 'antigravity', false, true],
+    ['Antigravity', 'antigravity', false, true],
+    ['agy', 'antigravity', false, false],
+    ['zsh', 'antigravity', true, false],
+    ['bash', 'antigravity', true, false],
+    ['node', 'antigravity', false, false],
+    ['gemini', 'antigravity', false, false],
+    ['claude', 'antigravity', false, false],
+    ['codex', 'antigravity', false, false],
+    ['antigravity-helper', 'antigravity', false, false],
+    ['antigravity2', 'antigravity', false, false],
+    ['antigravity', 'claude', false, false],
+    ['antigravity', 'codex', false, false],
+    ['antigravity', 'constructor', false, false],
+  ] as const) {
+    foreground = process;
+    assert.deepEqual(
+      await adapter.readForeground('term_test', 'inc-test', agentType),
+      { ok: true, isShell, matchesAgent },
       `${agentType}: ${process}`,
     );
   }

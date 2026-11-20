@@ -8,7 +8,7 @@ import type { CapabilityReport } from '../../src/orca/capabilities.ts';
 import type { RpcOutcome } from '../../src/orca/rpc.ts';
 import { createSendAdapter } from '../../src/orca/send.ts';
 import { SendRpc } from '../../src/orca/send-gates.ts';
-import { digestAnswers } from '../../src/send/answer.ts';
+import { digestAnswers, type QuestionAnswer } from '../../src/send/answer.ts';
 import { SendJournal } from '../../src/send/journal.ts';
 import { type SendDeps, SendService, transcriptTail } from '../../src/send/service.ts';
 import { targetFingerprint } from '../../src/send/target.ts';
@@ -18,7 +18,13 @@ import {
   normalizeNativeMessages,
   type TranscriptMessage,
 } from '../../src/transcript/normalize.ts';
+import { terminalApprovalId } from '../../src/transcript/terminal-approval.ts';
 import { agent, fact, repo, state, worktree } from '../runs/fixture.ts';
+import {
+  antigravityQuestionItem,
+  malformedAntigravityQuestionItem,
+  SESSION_ANTIGRAVITY,
+} from '../transcript/fixture.ts';
 import {
   CHAT_AGENT,
   chatTab,
@@ -64,7 +70,7 @@ const ANSWERS = [
   { questionId: 'q-pick', optionIds: ['opt-secret-a'] },
   { questionId: 'q-free', optionIds: [], other: '秘密の文' },
 ];
-async function fixture(t: import('node:test').TestContext, agentType: 'claude' | 'codex' = 'codex') {
+async function fixture(t: import('node:test').TestContext, agentType: 'claude' | 'codex' | 'antigravity' = 'codex') {
   const dir = await mkdtemp(path.join(tmpdir(), 'orca-web-send-service-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const feature = () => ({ available: true, missing: [], satisfied: [], deferred: [] });
@@ -231,6 +237,36 @@ test('拒否の保存に失敗しても照会は refused を返し Orca に送�
   assert.equal(checked.record.outcome, 'refused');
   assert.equal(checked.record.refused?.notSendableReason, 'foreground_mismatch');
   assert.equal(f.calls.length, callsBeforeCheck);
+  assert.equal(f.sends().length, 0);
+});
+
+test('iss-00067 T-02：端末の Antigravity の送信状態と意図は前面の照合に従う', async (t) => {
+  const f = await fixture(t, 'antigravity');
+  const request = { agent: TERMINAL_AGENT, text: '仮の送信' };
+  const status = await f.service.status(TERMINAL_AGENT);
+  assert.equal(status.available, true);
+  assert.equal(status.route, 'terminal');
+  assert.equal(status.agentType, 'antigravity');
+  assert.equal(status.reason, null);
+  const intent = await f.service.intent(request);
+  assert.ok(intent.ok && intent.ticket);
+
+  for (const [foregroundProcess, reason] of [
+    ['zsh', 'shell_foreground'],
+    ['agy', 'foreground_mismatch'],
+    [null, 'foreground_unknown'],
+  ] as const) {
+    f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess } }));
+    const refused = await f.service.status(TERMINAL_AGENT);
+    assert.equal(refused.available, false);
+    assert.equal(refused.reason, reason);
+    assert.deepEqual(await f.service.intent(request), { ok: false, error: 'not_sendable', reason });
+  }
+  assert.deepEqual(await f.service.confirm({ ticket: intent.ticket, text: request.text }), {
+    ok: false,
+    error: 'not_sendable',
+    reason: 'foreground_unknown',
+  });
   assert.equal(f.sends().length, 0);
 });
 
@@ -1097,6 +1133,84 @@ const answerCalls = (f: { calls: { method: string }[] }) =>
 const writes = (f: { calls: { method: string }[] }) =>
   f.calls.filter((c) => ['terminal.send', 'agentSession.send', 'agentSession.respondToQuestion'].includes(c.method));
 
+async function antigravityChatFixture(t: import('node:test').TestContext) {
+  const f = await fixture(t);
+  const chat = f.snapshot.agents.find((entry) => entry.id === CHAT_AGENT);
+  assert.ok(chat);
+  chat.agentType = fact('antigravity');
+  f.responses.set(
+    'session.tabs.listAll',
+    ok(inventory([terminalTab(), { ...chatTab(), agent: 'antigravity', sessionId: SESSION_ANTIGRAVITY }])),
+  );
+  return f;
+}
+
+test('iss-00067 T-05：Antigravity Chat の単一選択と複数選択＋その他を1回ずつ RPC で答える', async (t) => {
+  const cases: Array<['single' | 'multi', QuestionAnswer[]]> = [
+    ['single', [{ questionId: 'choice', optionIds: ['b'] }]],
+    ['multi', [{ questionId: 'choice', optionIds: ['a', 'c'], other: '仮の補足' }]],
+  ];
+  for (const [mode, answers] of cases) {
+    await t.test(mode, async (t) => {
+      const f = await antigravityChatFixture(t);
+      const item = antigravityQuestionItem(mode);
+      const resolved = antigravityQuestionItem(mode, answers);
+      const prompt = { itemId: item.itemId, revision: item.revision };
+      f.setHistory([item], { sessionId: SESSION_ANTIGRAVITY });
+      f.responses.set(
+        'agentSession.respondToQuestion',
+        ok({
+          ok: true,
+          value: { itemId: resolved.itemId, revision: resolved.revision, resolution: resolved.body.resolution },
+        }),
+      );
+
+      const status = await f.service.status(CHAT_AGENT);
+      assert.equal(status.agentType, 'antigravity');
+      assert.deepEqual(status.answer, { available: true, reason: null });
+      const intent = await f.service.answerIntent({ agent: CHAT_AGENT, prompt, answers });
+      assert.ok(intent.ok, JSON.stringify(intent));
+      assert.equal(writes(f).length, 0);
+      assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers }), {
+        ok: true,
+        operationId: intent.operationId,
+        outcome: 'submitted',
+        detail: { code: 'resolved' },
+      });
+      const sent = f.sends();
+      assert.equal(sent.length, 1);
+      assert.equal(sent[0]?.method, 'agentSession.respondToQuestion');
+      const params = sent[0]?.params as { answers: unknown };
+      assert.partialDeepStrictEqual(params, {
+        itemId: item.itemId,
+        expectedRevision: 3,
+        envelope: {
+          sessionId: SESSION_ANTIGRAVITY,
+          clientOperationId: intent.operationId,
+          expectedRuntimeFence: 4,
+        },
+      });
+      assert.deepEqual(params.answers, answers);
+    });
+  }
+});
+
+test('iss-00067 T-06：Antigravity Chat の読めない質問と問いに合わない答えを拒む', async (t) => {
+  const f = await antigravityChatFixture(t);
+  const item = antigravityQuestionItem('single');
+  const prompt = { itemId: item.itemId, revision: item.revision };
+  const intent = (optionIds: string[]) =>
+    f.service.answerIntent({ agent: CHAT_AGENT, prompt, answers: [{ questionId: 'choice', optionIds }] });
+
+  f.setHistory([malformedAntigravityQuestionItem()], { sessionId: SESSION_ANTIGRAVITY });
+  assert.deepEqual(await intent(['a']), { ok: false, error: 'unknown_shape' });
+
+  f.setHistory([item], { sessionId: SESSION_ANTIGRAVITY });
+  assert.deepEqual(await intent(['missing']), { ok: false, error: 'invalid_answer', reason: 'unknown_option' });
+  assert.deepEqual(await intent(['a', 'b']), { ok: false, error: 'invalid_answer', reason: 'too_many_choices' });
+  assert.equal(writes(f).length, 0);
+});
+
 test('T-07 answerIntent は送れないときの理由を返し、どれも書き込みの RPC を送らない', async (t) => {
   const f = await fixture(t);
   const intent = (extra: Record<string, unknown> = {}) =>
@@ -1491,6 +1605,36 @@ async function callFixture(
   };
 }
 const keyTexts = (f: { writes(): { params: unknown }[] }) => f.writes().map((c) => (c.params as { text: string }).text);
+
+test('iss-00067 T-03：端末の Antigravity の質問と承認の意図は agent_keys_unknown でキーを送らない', async (t) => {
+  const f = await callFixture(t, { agentType: 'antigravity' });
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'idle' } }));
+  const status = await f.service.status(TERMINAL_AGENT);
+  assert.equal(status.available, true);
+  assert.deepEqual(status.answerKeys, { available: false, reason: 'agent_keys_unknown' });
+
+  const refused = { ok: false, error: 'not_sendable', reason: 'agent_keys_unknown' };
+  assert.deepEqual(
+    await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: PICK_ANSWERS }),
+    refused,
+  );
+
+  const interactivePrompt = JSON.stringify({ approval: { tool: '仮の道具', summary: '仮の確認' } });
+  const stateStartedAt = 1_700_000_000_000;
+  f.setPrompt({ state: 'blocked', toolName: '仮の道具', interactivePrompt, stateStartedAt });
+  f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'permission' } }));
+  for (const optionId of ['allow_once', 'reject_once']) {
+    assert.deepEqual(
+      await f.service.approvalIntent({
+        agent: TERMINAL_AGENT,
+        promptId: terminalApprovalId(interactivePrompt, stateStartedAt),
+        optionId,
+      }),
+      refused,
+    );
+  }
+  assert.equal(f.writes().length, 0);
+});
 
 test('T-08 answerIntent（callId）：端末の質問に、確かめが通れば票を返し、status が permission でも通り、書き込みを送らない', async (t) => {
   const f = await callFixture(t);

@@ -252,6 +252,17 @@ function classifyKeyGroup(outcome: RpcOutcome): { ack: KeyAck; code?: string } {
   const code = outcome.kind === 'orca-error' ? (outcome.code ?? 'orca-error') : outcome.kind;
   return code === 'method_not_found' || code === 'invalid_argument' ? { ack: 'refused', code } : { ack: 'unknown' };
 }
+
+const FOREGROUND_MATCHERS = new Map<string, (processName: string) => boolean>([
+  ['claude', (name) => name === 'claude'],
+  ['codex', (name) => name === 'codex' || name.startsWith('codex-')],
+  ['antigravity', (name) => name === 'antigravity'],
+]);
+
+function matchesForegroundAgent(agentType: string, processName: string): boolean {
+  return FOREGROUND_MATCHERS.get(agentType)?.(processName) ?? false;
+}
+
 export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').SendRpc }) {
   /** 末尾の 200 件から itemId の項目を読む。 */
   async function readJournalItem(
@@ -315,9 +326,7 @@ export function createSendAdapter({ rpc }: { rpc: import('./send-gates.ts').Send
     return {
       ok: true,
       isShell: [normalized, basename, processName].some((name) => shellNames.includes(name)),
-      matchesAgent:
-        (agentType === 'claude' && processName === 'claude') ||
-        (agentType === 'codex' && (processName === 'codex' || processName.startsWith('codex-'))),
+      matchesAgent: matchesForegroundAgent(agentType, processName),
     };
   }
   async function sendGroup(target: TerminalSendTarget, bytes: string): Promise<{ ack: KeyAck; code?: string }> {

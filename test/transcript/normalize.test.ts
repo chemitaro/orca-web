@@ -24,7 +24,14 @@ import {
   TRANSCRIPT_SCHEMA,
 } from '../../src/transcript/normalize.ts';
 import { terminalApprovalId } from '../../src/transcript/terminal-approval.ts';
-import { journalItems, nativeMessages, SESSION_CLAUDE, TRANSCRIPT_PATH } from './fixture.ts';
+import {
+  antigravityQuestionItem,
+  journalItems,
+  malformedAntigravityQuestionItem,
+  nativeMessages,
+  SESSION_CLAUDE,
+  TRANSCRIPT_PATH,
+} from './fixture.ts';
 
 test('端末の会話：本文、ツールの呼び出しと結果、表示できない印、system の知らせを返し、思考を印も付けずに落とし、並べ替えない', () => {
   const messages = normalizeNativeMessages(nativeMessages());
@@ -341,6 +348,48 @@ const questionItem = (body: Record<string, unknown>, extra: Record<string, unkno
   body: { kind: 'question', ...body },
 });
 const firstPart = (items: unknown[]) => normalizeJournalItems(items)?.[0]?.parts[0];
+
+test('iss-00067 T-05：Antigravity journal の質問は RPC 用になり、解決後は答えを表示する', () => {
+  for (const mode of ['single', 'multi'] as const) {
+    const item = antigravityQuestionItem(mode);
+    const part = firstPart([item]);
+    assert.ok(part?.type === 'question');
+    assert.equal(part.source, 'chat');
+    assert.equal(part.answerVia, 'rpc');
+    assert.deepEqual(part.prompt, { itemId: item.itemId, revision: 3 });
+    assert.equal(part.state, 'pending');
+    assert.equal(part.answers, null);
+    assert.equal(part.questions.length, 1);
+    assert.partialDeepStrictEqual(part.questions[0], {
+      id: 'choice',
+      header: '仮の見出し',
+      multiSelect: mode === 'multi',
+      allowOther: mode === 'multi',
+    });
+    assert.deepEqual(
+      part.questions[0]?.options.map((option) => option.id),
+      mode === 'multi' ? ['a', 'b', 'c', 'd'] : ['a', 'b', 'c'],
+    );
+
+    const answer =
+      mode === 'multi'
+        ? { questionId: 'choice', optionIds: ['a', 'c'], other: '仮の補足' }
+        : { questionId: 'choice', optionIds: ['b'] };
+    const resolved = antigravityQuestionItem(mode, [answer]);
+    const answered = firstPart([resolved]);
+    assert.ok(answered?.type === 'question');
+    assert.deepEqual(answered.prompt, { itemId: item.itemId, revision: 4 });
+    assert.equal(answered.state, 'answered');
+    assert.deepEqual(answered.answers, [{ ...answer, other: answer.other ?? null }]);
+  }
+});
+
+test('iss-00067 T-06：読めない Antigravity journal の質問は回答できる部分を作らない', () => {
+  assert.deepEqual(
+    normalizeJournalItems([malformedAntigravityQuestionItem()])?.flatMap((m) => m.parts),
+    [{ type: 'unsupported', what: 'question' }],
+  );
+});
 
 test('T-01 構造化 Chat：1問の question（freeTextQuestionId なし）は id q1・単一選択の部分になり、prompt に itemId と revision が入る', () => {
   const part = firstPart([
