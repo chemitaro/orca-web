@@ -12,7 +12,12 @@ ID: "iss-00067"
 
 ## Outcome
 
-（実装の後に書く）
+- 端末の Antigravity：前面のプロセスの照合を `src/orca/send.ts` の1か所の表（`FOREGROUND_MATCHERS`）にし、`antigravity` との完全一致だけを足した（R-01、F-01）。claude・codex の規則は同値のまま。`agy` などは合わせない。
+- 構造化 Chat の Antigravity の質問：今のコードのまま RPC（`agentSession.respondToQuestion`）で答えられることを、実物で確かめた形の仮名の fixture のテストで固定した（R-02、F-03）。
+- 端末の Antigravity の質問と承認：Orca 1.4.263 自身もキーの列を持たないので、キーの組を作らず、`agent_keys_unknown` で送らないことをテストで固定した（F-02）。`KEY_AGENTS`・`planKeys`・`approvalKey`・`keysUnsupported` は変えていない。
+- README の送る経路・質問・承認の節に Antigravity の扱いを書いた。
+- 実装担当：impl（Codex、`launch.effective` は agent codex・model gpt-6.2-sol・effort medium、dispatch ctx_7d897667abef）が S-01 を cb648d1 で実装。S-02（README と実物の確かめ）はタスク担当（Opus 5.5 / high）。
+- コミット：cb648d1（S-01）、e3ada41（origin/main 9ad58fa の取り込み、iss-00068）、9194661（README）、8e9ec0c（origin/main 4ad7471 の取り込み、iss-00066）、c9b2173（README の直し：最終品質ゲート fqg1 の P3 の字下げと、端末の送信の受け取りの事実）。
 
 ## Verification
 
@@ -30,11 +35,24 @@ ID: "iss-00067"
   - タブの `agentStatus.agentType`：`antigravity`、`terminal.agentStatus` の `isRunningAgent` 真。
   - タブに `providerSession` がなく（agent launch の経路でない）、orca-web は `no_session` で送らない（今の規則による正しい拒み）。前面の照合を足す前は、セッションがあっても `foreground_mismatch` で送れない形。
   - Orca 1.4.263 の native chat は Antigravity の会話を読まない（`nativeChat.readSession` は `Transcript unavailable`、`NATIVE_CHAT_SUPPORTED_AGENT_LIST` に antigravity なし）。Orca も端末の Antigravity の待っている問いを `unsupported` にする（`readAgentPromptAnswers`）。
+### 実装の後の実物の確かめ（タスク担当、2026-11-20、試しの orca-web は c9b2173 の前の 9194661 のコード）
+
+- 構造化 Chat の Antigravity：単一選択（4択から1つ）の問いに答え、`submitted`（`code: resolved`）、journal の件が `answered` と送った answers、エージェントが選んだ答えで続けた。送れるかの口は `route: chat`、送信・答え・承認 available。
+- 端末の Antigravity（統括が Orca の agent launch で起動した端末。本人の了承で今回だけ起動の止めのフックを外した）：
+  - `launchAttested` 真、`foregroundProcess` は `antigravity`。
+  - 起動の直後はタブに `providerSession` がなく `no_session`。統括の許した最初の指示を `orca terminal send` で1回送った後（accepted）、`providerSession` が付いた。
+  - その送信の受け取りは `provider: unsupported`、`observation: unsupported`：Orca 1.4.263 は端末の Antigravity への送信をエージェントとして確かめない。orca-web はこの形を今の分け方どおり結果不明（`agent_not_verified`、要確認。送り直さない）にする（既存のテスト `test/orca/send.test.ts` の unsupported の受け取り）。
+  - このタブには `ptyId` がなく（`parentLayout` にも `ptyIdsByLeafId` がない。直接起動の端末にはあった）、orca-web は `identity_unavailable` で送らない（宛先の同一性の今の規則どおり）。Orca の画面でタブが描かれた後に `ptyId` が付くかは未確認（統括が本人に表示を頼んだ。msg_522d268eae2a）。
+  - よって、orca-web から端末の Antigravity へ文が届くところは未確認。照合は単体テスト（T-01・T-02）と前面の名前の実物の確かめだけ。
 - Gemini CLI：この PC に `gemini` の CLI がなく、未確認（CLI 未導入。統括の了承、msg_6e61a42ec388）。Orca 1.4.263 の起動の表には `gemini`（`detectCmd: gemini`）があり、native chat の対応の表にはない（同梱のコードの読み）。
 
 ## Residual Risks / Follow-ups
 
-（実装の後に書く）
+- 端末の Antigravity への送信が届くところは未確認（上記）。本人がタブを表示して `ptyId` が付けば、試しの orca-web で1回送って追記する。届いても結果はいつも要確認（Orca が `provider: unsupported` を返すため）。
+- 端末の Antigravity の質問と承認には答えない。Orca がキーの列を持ち、native chat が Antigravity の会話を読むようになったら、その版で確かめて別の Issue で写す。
+- Gemini CLI は未確認（CLI 未導入）。Orca 1.4.263 の起動の表には `gemini` があるが native chat の対応にはない。導入された後に確かめ、送信の対象になるなら別の Issue にする。
+- 逸脱：S-01 のコミットの件名（git-autocommit の生成）は「feat(send): Antigravity の質問応答を追加」だが、実際の本番の変更は前面の照合だけで、質問応答はテストの固定（履歴は書き換えない。PR の本文で正す）。git-autocommit のコミットに `Co-Authored-By` の行が付いていない。
+- 仕様のレビューの ChatGPT の2人目は、Strict の束縛で仕様のブランチにないコードを読めなかった（下記）。
 
 ## レビュー記録
 
