@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildInbox } from '../../src/inbox/classify.ts';
 import { OrcaCli, ReadOnlyOrcaCli } from '../../src/orca/orca-cli.ts';
-import type { OrcaTab, OrcaTabSnapshot, OrcaWorker } from '../../src/orca/read-state.ts';
+import type { OrcaLaunch, OrcaTab, OrcaTabSnapshot, OrcaWorker } from '../../src/orca/read-state.ts';
 import { createStateReader, SOURCE_NAMES } from '../../src/orca/read-state.ts';
 import type { CliRecording } from '../../src/orca/replay/recording.ts';
 import { ReplayCliRunner, ReplayRpcTransport } from '../../src/orca/replay/replay.ts';
@@ -73,17 +73,141 @@ function orcaWorker(dispatchId: string, patch: Partial<OrcaWorker> = {}): OrcaWo
   };
 }
 
-function normalize(tabs: OrcaTabSnapshot[], workers: OrcaWorker[]): StateDocument {
+function normalize(
+  tabs: OrcaTabSnapshot[],
+  workers: OrcaWorker[],
+  launches = new Map<string, OrcaLaunch>(),
+): StateDocument {
   const empty = Object.fromEntries(SOURCE_NAMES.map((name) => [name, snap([])])) as unknown as NormalizeSources;
   return normalizeState({
     now: NOW,
     connection: { state: 'connected', reason: null, checkedAt: new Date(NOW).toISOString() },
     orca: null,
-    sources: { ...empty, workerLaunch: snap(new Map()), tabs: snap(tabs), workers: snap(workers) },
+    sources: { ...empty, workerLaunch: snap(launches), tabs: snap(tabs), workers: snap(workers) },
   });
 }
 
 const workerOf = (doc: StateDocument, id: string) => doc.agents.find((a) => a.id === id)?.worker;
+
+test('iss-00068 T-01: Antigravity の chat-tab では effective を優先し requested も出す', () => {
+  const launches = new Map([
+    [
+      'd-1',
+      {
+        effective: { agent: 'antigravity', model: 'gemini-3.8-flash-low', effort: 'low' },
+        requested: { agent: 'antigravity', model: 'gemini-3.8-flash-medium', effort: 'medium' },
+      },
+    ],
+  ]);
+  const doc = normalize(
+    [{ worktreeId: 'wt-a', tabs: [chat('t', { agent: 'antigravity' })] }],
+    [orcaWorker('d-1')],
+    launches,
+  );
+  const agent = doc.agents.find((a) => a.id === 'chat:t');
+  assert.ok(agent);
+  for (const [key, effective, requested] of [
+    ['model', 'gemini-3.8-flash-low', 'gemini-3.8-flash-medium'],
+    ['effort', 'low', 'medium'],
+  ] as const) {
+    const resolved = {
+      value: effective,
+      source: 'workerLaunch',
+      field: `startOptions.launch.effective.${key}`,
+      meaning: 'launch-resolved',
+    };
+    assert.deepEqual(agent[key], {
+      ...resolved,
+      missing: null,
+      readings: [
+        resolved,
+        {
+          value: requested,
+          source: 'workerLaunch',
+          field: `startOptions.launch.requested.${key}`,
+          meaning: 'launch-requested',
+        },
+      ],
+    });
+  }
+});
+
+test('iss-00068 T-01: Antigravity の chat-tab は requested だけでも値を出す', () => {
+  const launches = new Map([
+    [
+      'd-1',
+      {
+        effective: null,
+        requested: { agent: 'antigravity', model: 'gemini-3.8-flash-low', effort: 'low' },
+      },
+    ],
+  ]);
+  const doc = normalize(
+    [{ worktreeId: 'wt-a', tabs: [chat('t', { agent: 'antigravity' })] }],
+    [orcaWorker('d-1')],
+    launches,
+  );
+  const agent = doc.agents.find((a) => a.id === 'chat:t');
+  assert.ok(agent);
+  for (const [key, value] of [
+    ['model', 'gemini-3.8-flash-low'],
+    ['effort', 'low'],
+  ] as const) {
+    const reading = {
+      value,
+      source: 'workerLaunch',
+      field: `startOptions.launch.requested.${key}`,
+      meaning: 'launch-requested',
+    };
+    assert.deepEqual(agent[key], { ...reading, missing: null, readings: [reading] });
+  }
+});
+
+test('iss-00068 T-01: Claude の chat-tab の出どころは worker の起動記録だけ', () => {
+  const tab = chat('t', {
+    agentStatus: {
+      lastAssistantMessage: null,
+      agentType: 'claude',
+      state: null,
+      workingMode: null,
+      stateStartedAt: null,
+      firstStateStartedAt: null,
+      historyStartedAt: null,
+      model: 'tab-model',
+      effort: 'high',
+      paneKey: null,
+      orchestration: null,
+    },
+  });
+  const launches = new Map([
+    [
+      'd-1',
+      {
+        effective: { agent: 'claude', model: 'claude-opus', effort: 'medium' },
+        requested: { agent: 'claude', model: 'claude-sonnet', effort: 'low' },
+      },
+    ],
+  ]);
+  const doc = normalize([{ worktreeId: 'wt-a', tabs: [tab] }], [orcaWorker('d-1')], launches);
+  const agent = doc.agents.find((a) => a.id === 'chat:t');
+  assert.ok(agent);
+  for (const [key, effective, requested] of [
+    ['model', 'claude-opus', 'claude-sonnet'],
+    ['effort', 'medium', 'low'],
+  ] as const) {
+    assert.equal(agent[key].value, effective);
+    assert.equal(agent[key].source, 'workerLaunch');
+    assert.equal(agent[key].field, `startOptions.launch.effective.${key}`);
+    assert.equal(agent[key].meaning, 'launch-resolved');
+    assert.deepEqual(
+      agent[key].readings.map(({ source, meaning, value }) => [source, meaning, value]),
+      [
+        ['workerLaunch', 'launch-resolved', effective],
+        ['workerLaunch', 'launch-requested', requested],
+      ],
+    );
+  }
+});
 
 test('T-01: worker-list の resource.endpointIncarnation が structured:<S> のときだけ S を拾う', async () => {
   const row = (dispatchId: string, resource: unknown) => ({
@@ -143,8 +267,17 @@ test('T-02: S の worker 1行と sessionId が S のタブで、chat-tab の wor
     const doc = normalize([{ worktreeId: 'wt-a', tabs: [chat(tabId)] }], [orcaWorker('d-1')]);
     assert.deepEqual(workerOf(doc, `chat:${tabId}`), { dispatchId: 'd-1', taskId: 'task:d-1', runId: 'run-a' }, tabId);
     const agent = doc.agents.find((a) => a.id === `chat:${tabId}`);
-    assert.equal(agent?.model.missing, 'no-source');
-    assert.equal(agent?.effort.missing, 'no-source');
+    assert.ok(agent);
+    for (const key of ['model', 'effort'] as const) {
+      assert.deepEqual(agent[key], {
+        value: null,
+        source: 'workerLaunch',
+        field: `startOptions.launch.effective.${key}`,
+        missing: 'source-failed',
+        meaning: null,
+        readings: [],
+      });
+    }
   }
 });
 
@@ -159,6 +292,69 @@ test('T-02: S の worker が2行、sessionId の違い、タブに sessionId が
   for (const [name, tab, workers] of cases) {
     const doc = normalize([{ worktreeId: 'wt-a', tabs: [tab] }], workers);
     assert.equal(workerOf(doc, 'chat:t'), null, name);
+  }
+});
+
+test('iss-00068 T-02: 結ばれた Gemini の chat-tab に起動の値がない理由を出す', () => {
+  const launches = new Map([
+    [
+      'd-without-values',
+      {
+        effective: { agent: 'gemini', model: null, effort: null },
+        requested: { agent: 'gemini', model: null, effort: null },
+      },
+    ],
+  ]);
+  const cases = [
+    [orcaWorker('d-without-values'), 'not-provided'],
+    [orcaWorker('d-released', { workerState: 'succeeded', terminalState: 'released' }), 'not-fetched'],
+  ] as const;
+  for (const [worker, missing] of cases) {
+    const doc = normalize([{ worktreeId: 'wt-a', tabs: [chat('t', { agent: 'gemini' })] }], [worker], launches);
+    const agent = doc.agents.find((a) => a.id === 'chat:t');
+    assert.ok(agent);
+    for (const key of ['model', 'effort'] as const) {
+      assert.deepEqual(agent[key], {
+        value: null,
+        source: 'workerLaunch',
+        field: `startOptions.launch.effective.${key}`,
+        missing,
+        meaning: null,
+        readings: [],
+      });
+    }
+  }
+});
+
+test('iss-00068 T-02: worker を一意に結べない chat-tab の値は no-source', () => {
+  const launch = {
+    effective: { agent: 'antigravity', model: 'gemini-3.8-flash-low', effort: 'low' },
+    requested: null,
+  };
+  const launches = new Map([
+    ['d-1', launch],
+    ['d-2', launch],
+  ]);
+  const cases: [string, OrcaWorker[]][] = [
+    ['antigravity', []],
+    ['gemini', []],
+    ['antigravity', [orcaWorker('d-1'), orcaWorker('d-2')]],
+  ];
+  for (const [agentType, workers] of cases) {
+    const doc = normalize([{ worktreeId: 'wt-a', tabs: [chat('t', { agent: agentType })] }], workers, launches);
+    const agent = doc.agents.find((a) => a.id === 'chat:t');
+    assert.ok(agent);
+    assert.equal(agent.worker, null);
+    for (const key of ['model', 'effort'] as const) {
+      assert.deepEqual(agent[key], {
+        value: null,
+        source: null,
+        field: null,
+        missing: 'no-source',
+        meaning: null,
+        readings: [],
+      });
+    }
   }
 });
 
