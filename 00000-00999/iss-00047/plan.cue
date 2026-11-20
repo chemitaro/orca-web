@@ -3,13 +3,13 @@ package spec
 goal: "開く口を、押した端末で worktree を先に表示してからタブを選ぶ形に直し、端末の見分けと前面に出すことを足し、ボタンの言葉と文書を直し、実機で確かめて閉じる。"
 
 steps: {
-	"S-01": {title: "開く口の送る順・門・端末の見分け・前面に出す（D-01、D-02、D-03、D-04 のサーバー、D-05 のサーバー）", realizes: ["R-01", "R-02", "R-03", "R-04", "R-05", "F-01", "F-02"], status: "todo", session: "impl"
+	"S-01": {title: "開く口の送る順・門・端末の見分け・前面に出す（D-01、D-02、D-03、D-04 のサーバー、D-05 のサーバー）", realizes: ["R-01", "R-02", "R-03", "R-04", "R-05", "F-01", "F-02"], status: "done", session: "impl"
 		text: "対象：`src/orca/open.ts`・`open-gates.ts`・`open-target.ts`、新しい `src/orca/open-device.ts`・`src/orca/raise.ts`、`src/orca/wiring.ts`、`src/server/app.ts`（handleOpen と OPEN_ERROR_STATUS だけ）・`main.ts`、`test/` の下（開く口・門・選び方の既存のテスト、新しい `test/orca/open-device.test.ts`・`test/orca/raise.test.ts`、開く道のテスト）。lsof と open は注入した runner でだけ呼び、テストは実物を呼ばない。既存のテストの期待は、送る順が変わった分（worktree.activate が先）だけを直す。確かめ：T-01〜T-06。完了：`npm run lint`、`npm test`、`npm run build` が通り、コミットして止まり HEAD を報告する"
 	}
-	"S-02": {title: "ボタンの言葉とクライアントで前面に出す口（D-04 の画面、D-05 の画面）", realizes: ["R-04", "R-05"], status: "todo", after: ["S-01"], session: "ui"
+	"S-02": {title: "ボタンの言葉とクライアントで前面に出す口（D-04 の画面、D-05 の画面）", realizes: ["R-04", "R-05"], status: "done", after: ["S-01"], session: "ui"
 		text: "対象：`web/embed/open-control-view.js`（openResult、OPEN_MESSAGES）、`web/embed/open-control.js`（runOpen の raiseClient）、`web/embed/open-button.js`（sandbox の印）、`test/web/` の開くボタンのテスト。見た目（CSS）は変えない。確かめ：T-07、T-08、T-11。完了：`npm run lint`、`npm test`、`npm run build` が通り、コミットして止まり HEAD を報告する"
 	}
-	"S-03": {title: "文書と実機の確かめ（D-06）", realizes: ["R-01", "R-02", "R-04"], status: "todo", after: ["S-02"], session: "doc"
+	"S-03": {title: "文書と実機の確かめ（D-06）", realizes: ["R-01", "R-02", "R-04"], status: "done", after: ["S-02"], session: "doc"
 		text: "タスク担当が行う。README.md と AGENTS.md を D-06 のとおり直す。一時の orca-web で、作業の済んだこのリポジトリの worktree へ開き、前と後を report.md に残して元へ戻す。試しの画面（`npm run trial`）を Mac の幅と 390px で写す。Chrome と Safari で、埋め込みのボタンの iframe から `orca://` へ移れるかを確かめる（ホストの Mac で、結果を client に見立てた一時の確かめ用のページで移る口だけを試す）。クライアントの確かめは統括に ask で頼む。確かめ：T-09、T-10。完了：`npm run lint`、`npm test`、`npm run build` が通り、コミットする"
 	}
 }

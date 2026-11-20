@@ -95,3 +95,10 @@ sandbox の iframe の中のボタンを押し（`Input.dispatchMouseEvent`、�
 
 - S-01 の実装担当：Codex GPT-6.1 Sol / medium（ctx_90ef40473b08）は、sandbox の初期化で chat-scratch の writable root が symlink を含むとして拒まれ、何も変えずに止まった。統括の了承済みの手順どおり worker-stop し、Claude Opus 5.5 / medium（ctx_41e98a4ba9e0）に切り替えた。
 - final-quality-gate（iss-00047-fqg1）：5a8bad4 で **pass**。レビュー attempt 01 fail（FQG-001：実機の記録の未完。記録を書いて応答）→ attempt 02 pass（P2 1：Safari 未確かめ）。2人目 ChatGPT GPT-6 / Extra High pass（P2 2：未送信の 2 の route、lsof の終了コード 1 と stderr）。テスト lint 0・test 752 合格・build 0。closure：`closure.md`。
+
+## 統括の締め（2026-11-20）
+
+- PR #51（合格のコミット 5a8bad4）は 2026-11-17 にマージ済み（47cbc20）。常駐の orca-web はその後の版で動いている。最終品質ゲートは closure.md のとおり合格。
+- 本人の確かめ待ちの2点（R-02：クライアントの PC で押すとクライアントの Orca が切り替わりホストは動かない、R-04：Safari の sandbox の iframe からの `orca://`）は、この Issue の中では確かめていない。常駐の orca-web で本人がいつでも確かめられるので、Issue は完了とし、2点は orca-web のカタログの人のタスク（check）で追う。不具合が見つかれば、新しい Issue にする。
+- 試しの orca-web（8792）と試しの画面（47900）は、すでに止まっている。
+- closure.md の P2（ChatGPT の2件：送っていない段の route、lsof の終了コード 1 の扱い）は直していない（情報）。
