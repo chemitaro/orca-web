@@ -13,7 +13,7 @@ steps: {
 		title:    "種類の表、送信の欄の名前、試しの見本（D-01、D-02、D-03 の見本）"
 		text:     "対象：`web/embed/agent-marks-icons.js`、`web/embed/send-view.js`、`web/trial/trial-view.js` と、`test/web/agent-marks-view.test.ts`、`test/web/send-view.test.ts`、`test/web/trial-view.test.ts`（必要なら `test/web/agent-marks-dom.test.ts`）。ほかのファイル（CSS、README、src/）は変えない。Gemini の d は stablyai/orca の 5e7ceb61eb028e3d62a6664ebfba8adfb60ad8e8 の `src/renderer/src/components/status-bar/accounts/provider-icons.tsx` の `GeminiIcon` の `star` から一字も変えずに写す（`gh api` で取れる）。Antigravity の d は同じコミットの `src/shared/agent-icons/antigravity.png` の輪郭を写し、ブラウザー（素の HTML に PNG と svg を重ねる一時のページ。.workbench に置き、コミットしない）で形を確かめる。確かめ：T-01〜T-04。完了：T-01〜T-04 のテストがあり、`npm run lint`、`npm test`、`npm run build` が通る。終えたら止まって HEAD を報告する。区切りのレビュー：なし（最終品質ゲートで見る）"
 		realizes: ["R-01", "R-02", "F-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -21,7 +21,7 @@ steps: {
 		text:     "タスク担当が行う。README の稼働の印の節の種類のアイコンと出どころの行に Antigravity と Gemini を足す。`npm run trial` の試しの画面（試しの orca-web は別の port と専用の settings、sendEnabled は偽のまま）で、状態の見本の Antigravity と Gemini の印を、幅 1280 と 390、明と暗で写し、report.md に挙げる。確かめ：T-05。完了：report.md の Verification に写しがあり、`npm run lint`、`npm test`、`npm run build` が通る"
 		realizes: ["R-01"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }
