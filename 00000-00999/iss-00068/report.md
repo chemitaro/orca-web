@@ -12,11 +12,16 @@ ID: "iss-00068"
 
 ## Outcome
 
+- worker に結ばれた構造化 Chat のタブ（chat-tab）の `model`・`effort` を、その worker の起動の記録（`startOptions.launch.effective`、なければ `requested`）から出すようにした（`src/state/normalize.ts` の chatTab）。実物の Antigravity の worker で `gemini-3.8-flash-low`・`low` が出た。端末のタブの読み取りは変えていない。
+
 ## レビュー記録
 
 - 仕様レビュー（spec-reviewer、Opus / medium、standard なので1人）：合格。round-1 で P0 0・P1 0・P2 1・P3 1（`.workbench/spec-review/iss-00068/round-1.json`、検査 `round-1.check.json`）。
   - 合格した文書の sha256：requirement.cue `864e7834f33ffadc9ffba16790a83fffef82dc49ff7912091bb41dbed073cacf`、design.cue `dde2fe5f375cfd401eae611590e186f63a3ec0f30d8cda332e3b3c0e0c8c96d3`、plan.cue `91b2f26eb8b64d15f1a1c53212cc0370a1013fa96ffe090d19f451085b54d95c`（コードの HEAD は 58275ea）。
   - P2（マージの担い手が AGENTS.md の『PR のマージは利用者が行う』と食い違う）：統括の依頼書のとおり、本人が統括にマージを委任済み。記録だけにする。P3（T-02 の番号が既存のテスト名と重なる）：記録だけにする。
+
+- 最終品質ゲート：キャンペーン `.workbench/final-quality-gate/iss-00068-fqg/`（範囲 `58275ea..d8d44f2`）の attempt 1 で合格。合格のコミット `d8d44f20b6f6a251fbc21f34c14153b1a31273df`。主（quality-gate-reviewer、Opus / medium、観点 functional-correctness・requirements-closure・test-adequacy・compatibility-regression）pass、指摘 0。2人目 ChatGPT GPT-6 / Extra High（chatgpt-code-review-strict、GitHub の SHA の一致を確かめた）pass、指摘 0。テスト lint 0・test 1126/1126・build 0。closure：`.workbench/final-quality-gate/iss-00068-fqg/closure.md`（写し `artifacts/closure.md`）。記録だけのコミットはない。PR の直前に origin/main を確かめ、58275ea のまま。
+- 区切りのレビュー：なし（計画のとおり）。
 
 ## Verification
 
