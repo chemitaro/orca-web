@@ -260,6 +260,37 @@ test('CapabilityCache は接続できなかった結果を持たない', async (
   assert.equal(probes, 2);
 });
 
+test('iss-00073 T-01：再起動中の不一致は返すが、揃った報告だけを持つ', async () => {
+  const initial = (await probe()).report;
+  const reports = [
+    initial,
+    { ...initial, runtimeId: 'uuid-2', runtimeIdConsistent: false },
+    { ...initial, runtimeIdConsistent: false },
+    { ...initial, runtimeId: 'uuid-2' },
+  ];
+  let probes = 0;
+  let fileId: string | null = 'uuid-1';
+  const cache = new CapabilityCache(
+    async () => {
+      const report = reports[probes++];
+      assert.ok(report);
+      return report;
+    },
+    async () => fileId,
+  );
+
+  assert.deepEqual(await cache.get(), reports[0]);
+  // 再起動でファイルを一時的に読めず、probe では旧ファイルと新 status を読む。
+  fileId = null;
+  assert.deepEqual(await cache.get(), reports[1]);
+  // 新ファイルに切り替わっても status の旧値を読む不一致がありうる。
+  fileId = 'uuid-2';
+  assert.deepEqual(await cache.get(), reports[2]);
+  assert.deepEqual(await cache.get(), reports[3]);
+  assert.deepEqual(await cache.get(), reports[3]);
+  assert.equal(probes, 4);
+});
+
 test('送信の各 capability と読む機能の不足を分け、書く RPC は確かめない', async () => {
   const caps = ['terminal.prompt-delivery.v1', 'agent-session.structured.v1', 'agent-session.send-recorded.v1'];
   const cliWith = (missing?: string) =>

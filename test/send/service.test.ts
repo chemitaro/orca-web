@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, open, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import type { CapabilityReport } from '../../src/orca/capabilities.ts';
+import { CapabilityCache, type CapabilityReport } from '../../src/orca/capabilities.ts';
 import type { RpcOutcome } from '../../src/orca/rpc.ts';
 import { createSendAdapter } from '../../src/orca/send.ts';
 import { SendRpc } from '../../src/orca/send-gates.ts';
@@ -185,6 +185,64 @@ async function fixture(t: import('node:test').TestContext, agentType: 'claude' |
       ),
   };
 }
+
+test('iss-00073 T-02：同じサービスが runtime ID の不一致から回復する', async (t) => {
+  const f = await fixture(t);
+  let statusId = 'uuid-1';
+  let fileId = 'uuid-1';
+  let cacheFileId: string | null = fileId;
+  let probes = 0;
+  const cache = new CapabilityCache(
+    async () => {
+      probes += 1;
+      const runtimeIdConsistent = statusId === fileId;
+      const features = { ...f.cap.features };
+      if (!runtimeIdConsistent) {
+        for (const key of ['sendTerminal', 'sendChat', 'answerKeys', 'answerChat', 'answerApproval'] as const) {
+          features[key] = { ...features[key], available: false, missing: ['runtime-id:consistent'] };
+        }
+      }
+      return { ...f.cap, runtimeId: statusId, runtimeIdConsistent, features };
+    },
+    async () => cacheFileId,
+  );
+  const service = new SendService({ ...f.deps, capabilities: () => cache.get() });
+  const agents = [TERMINAL_AGENT, CHAT_AGENT];
+  async function assertAvailable() {
+    for (const agent of agents) {
+      const status = await service.status(agent);
+      assert.equal(status.available, true, agent);
+      assert.equal(status.reason, null, agent);
+    }
+  }
+
+  f.responses.set('session.tabs.listAll', ok(inventory(), 'uuid-1'));
+  await assertAvailable();
+  assert.equal(probes, 1);
+
+  statusId = 'uuid-2';
+  f.responses.set('session.tabs.listAll', ok(inventory(), 'uuid-2'));
+  // キャッシュ照合でファイルを読めず、直後の probe では旧ファイルが見える。
+  cacheFileId = null;
+  for (const agent of agents) {
+    const status = await service.status(agent);
+    assert.equal(status.available, false, agent);
+    assert.equal(status.reason, 'unsupported', agent);
+    assert.deepEqual(await service.intent({ agent, text: 'hello' }), {
+      ok: false,
+      error: 'unsupported',
+      missing: ['runtime-id:consistent'],
+    });
+  }
+  assert.equal(f.sends().length, 0);
+
+  fileId = 'uuid-2';
+  cacheFileId = fileId;
+  const interruptedProbes = probes;
+  await assertAvailable();
+  assert.equal(probes, interruptedProbes + 1);
+  assert.equal(f.sends().length, 0);
+});
 
 test('意図と確定は稼働中の状態が残っても宛先と違う前面には送らない', async (t) => {
   for (const agentType of ['claude', 'codex'] as const) {
