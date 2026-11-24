@@ -29,3 +29,9 @@ ID: "iss-00073"
 - P2 の2件（直さず記録。意味を変えない解釈として実装担当への依頼に含めた）：
   1. T-02 は R-01 の受け入れの3つ目の順（古い runtime で一致 → 途中の不一致 → 新しい runtime で一致、file の runtimeId が不一致の報告の runtimeId に追いつく条件）で組む。
   2. R-02 の受け入れの3つ目（ptyId null の記録を hasAnswer・hasApproval が読む、前の記録も読める）と、キーの組・端末の承認の確定が ptyId null の宛先で送れることをテストで確かめる。
+
+### 区切りのレビュー cp1（code-review、S-01・S-02）：合格（round 1、2026-11-24）
+
+- 範囲 `3204e6d..3a32dc8`（S-01 a5e525a、S-02 3a32dc8）、worktree clean。レビュアー code-reviewer（Opus 5.5 / medium、axis both）。
+- 結果：`.workbench/code-review/iss-00073-cp1/round-1.json`（validate-review の exit 0、P0〜P3 すべて 0）。
+- タスク担当の確かめ：同じ HEAD で `npm run lint`（info 1件は基準からある useTemplate）・`npm test`（1146件すべて合格）・`npm run build` が通る。仕様の3つの sha256 は合格のときのまま。差分の本体（capabilities.ts、model.ts、target.ts、send-live.ts）を読み、D-01・D-02・D-04 どおりで送信の門を変えていないことを確かめた。
