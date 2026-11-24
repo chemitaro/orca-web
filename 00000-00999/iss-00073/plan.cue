@@ -25,7 +25,7 @@ steps: {
 		text:     "タスク担当が行う。README.md の送る経路の段に、端末の宛先の同一性と、Orca の再起動のあとの機能の判定の確かめ直しを書く。直したコードで、この worktree の使い捨ての検証用の宛先だけに送って確かめ（端末は send:live、構造化 Chat は別のポートの試しの orca-web）、report.md に記録する（会話の中身、id、個人のパスを書かない）。PR の直前に origin/main を取り込み直す。確かめ：T-07。完了：report.md の Verification に結論があり、`npm run lint`、`npm test`、`npm run build` が通る"
 		realizes: ["R-03"]
 		after:    ["S-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "doc"
 	}
 }
