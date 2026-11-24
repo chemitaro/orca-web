@@ -11,13 +11,13 @@ package spec
 // すべての要件を、いずれかの子に任せる。standard 以上では、それが「確かめるテストがある」にも当たり、
 // strict 以上では、すべての失敗の条件を任せ、どの子にも、任せる番号を書く。
 // 子の題名は GitHub に、子の保証レベルは子の requirement.cue にあるので、ここには書かない。
+goal: "Orca 1.4.272 で止まった送信を直し、常駐の orca-web で届くことを確かめる。"
+
 slices: {
-	// "iss-00001": {
-	// 	covers: ["R-01", "F-01"]
-	// 	text:   "この Issue に任せること"
-	// 	after: ["iss-00002"]
-	// 	session: "coord"
-	// }
+	"iss-00073": {
+		covers: ["R-01"]
+		text:   "機能の判定のキャッシュ（runtime ID の一致した報告だけを持つ）と、ptyId のない端末のタブの宛先の同一性（handle・incarnationId）を直す。PR #74（マージ ac35101）"
+	}
 }
 
 // 検証のしかた、戻し方、終わりの条件（任意）。critical では、切り分けがあれば rollback が要る。
