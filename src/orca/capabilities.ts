@@ -272,7 +272,8 @@ export async function probeCapabilities(deps: ProbeDeps): Promise<CapabilityRepo
 
 /**
  * runtime の ID ごとに確かめの結果を持つ。ID が変わったら（Orca の再起動や接続先の変化）捨てて確かめ直す。
- * 接続できなかった結果は持たず、次の get で確かめ直す。
+ * 接続できなかった結果や ID が不一致の結果は持たず、次の get で確かめ直す。
+ * 再起動中に status とファイルの ID が違う結果を持つと、ファイルが新しい ID に追いついても使い続けてしまう。
  */
 export class CapabilityCache {
   readonly #probe: () => Promise<CapabilityReport>;
@@ -289,7 +290,10 @@ export class CapabilityCache {
     const cached = this.#cached;
     if (cached && current !== null && cached.runtimeId === current) return cached;
     const report = await this.#probe();
-    this.#cached = report.connection.state === 'connected' && report.runtimeId !== null ? report : null;
+    this.#cached =
+      report.connection.state === 'connected' && report.runtimeId !== null && report.runtimeIdConsistent
+        ? report
+        : null;
     return report;
   }
 }

@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import type { RpcRecording } from '../../src/orca/replay/recording.ts';
+import { ReplayRpcTransport } from '../../src/orca/replay/replay.ts';
 import type { TerminalSendTarget } from '../../src/send/model.ts';
 import { promptMatches } from '../../src/send/question-state.ts';
 import {
@@ -24,6 +27,30 @@ import {
 
 test('端末の paneKey と snapshot の worktree から完全な送信先を解く', () => {
   assert.deepEqual(resolveTarget(inventory(), TERMINAL_AGENT, RUNTIME), { ok: true, target: terminalTarget() });
+});
+
+test('iss-00073 T-03：ptyId がないか空か文字列以外の端末を解く', () => {
+  const tab = terminalTab();
+  delete tab.ptyId;
+  for (const variant of [tab, { ...tab, ptyId: '' }, { ...tab, ptyId: 1 }]) {
+    assert.deepEqual(resolveTarget(inventory([variant]), TERMINAL_AGENT, RUNTIME), {
+      ok: true,
+      target: { ...terminalTarget(), ptyId: null },
+    });
+  }
+});
+
+test('iss-00073 T-03：Orca 1.4.272 の録画から ptyId のない端末を解く', async () => {
+  const file = new URL('../fixtures/recordings/rpc-orca-1.4.272-send.json', import.meta.url);
+  const rpc = new ReplayRpcTransport(JSON.parse(readFileSync(file, 'utf8')) as RpcRecording);
+  const tabs = await rpc.call('session.tabs.listAll', {});
+  assert.ok(tabs.ok && tabs.runtimeId);
+  const resolved = resolveTarget(tabs.result, 'uuid-5:uuid-10', tabs.runtimeId);
+  assert.ok(resolved.ok && resolved.target.route === 'terminal');
+  assert.equal(resolved.target.ptyId, null);
+  assert.equal(resolved.target.handle, 'term_uuid-14');
+  assert.equal(resolved.target.incarnationId, 'uuid-12');
+  assert.equal(resolved.target.providerSessionId, 'uuid-11');
 });
 
 test('構造化 Chat の id で解き、読めない sleptAt は宛先判定に使わない', () => {
@@ -51,7 +78,7 @@ test('宛先がない場合と、スリープ、セッションなし、識別�
       reason: 'no_session',
     });
   }
-  for (const key of ['terminal', 'ptyId', 'incarnationId']) {
+  for (const key of ['terminal', 'incarnationId']) {
     for (const value of [undefined, '', 1]) {
       assert.deepEqual(resolveTarget(inventory([{ ...terminalTab(), [key]: value }]), TERMINAL_AGENT, RUNTIME), {
         ok: false,
@@ -150,6 +177,16 @@ test('タブ、leaf、端末、種類、セッションの識別子の違いを�
   );
 });
 
+test('iss-00073 T-04：ptyId は双方が持つときだけ比べる', () => {
+  const legacy = terminalTarget();
+  const withoutPty = { ...legacy, ptyId: null };
+  assert.equal(compareTargets(legacy, withoutPty), null);
+  assert.equal(compareTargets(withoutPty, legacy), null);
+  assert.equal(compareTargets(withoutPty, withoutPty), null);
+  assert.equal(compareTargets(withoutPty, { ...withoutPty, handle: 'term_other' }), 'terminal_changed');
+  assert.equal(compareTargets(withoutPty, { ...withoutPty, incarnationId: 'other-inc' }), 'terminal_changed');
+});
+
 function previewState() {
   return state({
     repos: [repo('repo-test', '仮のリポジトリ')],
@@ -211,19 +248,25 @@ test('状態の worktree、handle、種類が宛先と一致しなければ確�
 
 test('指紋は経路ごとの固定値で、各識別項目を区別し識別子を含まない', () => {
   for (const [target, expected] of [
-    [terminalTarget(), '6339a27dcf1cdc2cf7f87b7fa5b4591f'],
+    [terminalTarget(), 'adceb3d876c7b9f9f39f6c8948078318'],
     [chatTarget(), '0e1821f3ebe7bdfe81c7053700be51f1'],
   ] as const) {
     assert.equal(targetFingerprint(target), expected);
     assert.match(targetFingerprint(target), /^[a-f0-9]{32}$/);
     for (const [key, value] of Object.entries(target)) {
-      if (key === 'agentId' || key === 'route') continue;
+      if (key === 'agentId' || key === 'route' || key === 'ptyId') continue;
       assert.notEqual(targetFingerprint({ ...target, [key]: `${value}-changed` }), expected, key);
       assert.ok(!expected.includes(value), key);
     }
     assert.equal(targetFingerprint({ ...target, agentId: 'derived-id' }), expected);
   }
   assert.notEqual(targetFingerprint({ ...terminalTarget(), leafId: null }), targetFingerprint(terminalTarget()));
+});
+
+test('iss-00073 T-04：ptyId だけが違う宛先の指紋は同じ値', () => {
+  const target = terminalTarget();
+  assert.equal(targetFingerprint(target), targetFingerprint({ ...target, ptyId: null }));
+  assert.equal(targetFingerprint(target), targetFingerprint({ ...target, ptyId: 'other-pty' }));
 });
 
 test('iss-00049 T-05 terminalPromptOf：タブの agentStatus から state・toolName・interactivePrompt を読み、文字でなければ null', () => {

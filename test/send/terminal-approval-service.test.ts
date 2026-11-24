@@ -26,7 +26,7 @@ const STARTED = 1_700_000_000_000;
 const PROMPT_ID = terminalApprovalId(PROMPT, STARTED);
 const accepted = ok({ send: { accepted: true, writeSettlement: { outcome: 'accepted' } } });
 
-async function fixture(t: import('node:test').TestContext, agentType = 'claude') {
+async function fixture(t: import('node:test').TestContext, agentType = 'claude', withPtyId = true) {
   const dir = await mkdtemp(path.join(tmpdir(), 'orca-web-terminal-approval-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const feature = () => ({ available: true, missing: [], satisfied: [], deferred: [] });
@@ -66,7 +66,9 @@ async function fixture(t: import('node:test').TestContext, agentType = 'claude')
     stateStartedAt: STARTED,
     ...extra,
   });
-  const tabsWith = (agentStatus: unknown) => ok(inventory([{ ...terminalTab(), agentStatus }, chatTab()]));
+  const tab = terminalTab();
+  if (!withPtyId) delete tab.ptyId;
+  const tabsWith = (agentStatus: unknown) => ok(inventory([{ ...tab, agentStatus }, chatTab()]));
   /** 宛先のペインの agentStatus。listAlls に積めば、読むたびに先頭から1つずつ使い、空なら base を使う。 */
   let base = tabsWith(status());
   const listAlls: RpcOutcome[] = [];
@@ -302,8 +304,8 @@ test('T-06 approvalIntent（promptId）：前に送った記録があれば新�
   assert.equal(g.writes().length, 0);
 });
 
-test('T-07 approvalConfirm（promptId）：before の記録の後にキーを1回だけ送り（claude の allow_once が 1）、同じ票の2回目と後の同じ promptId を送らない', async (t) => {
-  const f = await fixture(t);
+test('iss-00073 T-05：ptyId のない端末にも before の記録の後に承認キーを1回だけ送り、同じ票の2回目は送らない', async (t) => {
+  const f = await fixture(t, 'claude', false);
   const intent = await f.service.approvalIntent(intentOf('allow_once'));
   assert.ok(intent.ok);
   const result = await f.service.approvalConfirm({ ticket: intent.ticket, optionId: 'allow_once' });
@@ -314,6 +316,7 @@ test('T-07 approvalConfirm（promptId）：before の記録の後にキーを1�
     detail: { code: 'keys_sent', sentGroups: 1, totalGroups: 1 },
   });
   assert.equal(f.beforeAtSend(), true);
+  assert.equal(f.writes()[0]?.method, 'terminal.send');
   assert.deepEqual(
     f.writes().map((c) => c.params),
     [
@@ -332,6 +335,11 @@ test('T-07 approvalConfirm（promptId）：before の記録の後にキーを1�
     reason: 'unknown',
   });
   assert.equal(f.writes().length, 1);
+  const journal = new SendJournal(f.sendsDir);
+  const record = await journal.read(intent.operationId);
+  assert.ok(record?.before?.target.route === 'terminal');
+  assert.equal(record.before.target.ptyId, null);
+  assert.equal(await journal.hasApproval(TERMINAL_AGENT, PROMPT_ID), true);
 });
 
 test('T-07 approvalConfirm（promptId）：codex の reject_once は ESC を1回だけ送る', async (t) => {

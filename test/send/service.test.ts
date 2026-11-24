@@ -4,8 +4,10 @@ import { mkdir, mkdtemp, open, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import type { CapabilityReport } from '../../src/orca/capabilities.ts';
-import type { RpcOutcome } from '../../src/orca/rpc.ts';
+import { CapabilityCache, type CapabilityReport } from '../../src/orca/capabilities.ts';
+import type { RpcRecording } from '../../src/orca/replay/recording.ts';
+import { ReplayRpcTransport } from '../../src/orca/replay/replay.ts';
+import type { RpcCallOptions, RpcOutcome } from '../../src/orca/rpc.ts';
 import { createSendAdapter } from '../../src/orca/send.ts';
 import { SendRpc } from '../../src/orca/send-gates.ts';
 import { digestAnswers, type QuestionAnswer } from '../../src/send/answer.ts';
@@ -134,10 +136,10 @@ async function fixture(t: import('node:test').TestContext, agentType: 'claude' |
       }),
     ],
   ]);
-  const calls: { method: string; params: unknown }[] = [];
+  const calls: { method: string; params: unknown; options?: RpcCallOptions }[] = [];
   const rpc = new SendRpc({
-    async call<T>(method: string, params: unknown) {
-      calls.push({ method, params });
+    async call<T>(method: string, params: unknown, options?: RpcCallOptions) {
+      calls.push({ method, params, ...(options ? { options } : {}) });
       const result = responses.get(method);
       assert.ok(result, method);
       return result as RpcOutcome<T>;
@@ -185,6 +187,64 @@ async function fixture(t: import('node:test').TestContext, agentType: 'claude' |
       ),
   };
 }
+
+test('iss-00073 T-02：同じサービスが runtime ID の不一致から回復する', async (t) => {
+  const f = await fixture(t);
+  let statusId = 'uuid-1';
+  let fileId = 'uuid-1';
+  let cacheFileId: string | null = fileId;
+  let probes = 0;
+  const cache = new CapabilityCache(
+    async () => {
+      probes += 1;
+      const runtimeIdConsistent = statusId === fileId;
+      const features = { ...f.cap.features };
+      if (!runtimeIdConsistent) {
+        for (const key of ['sendTerminal', 'sendChat', 'answerKeys', 'answerChat', 'answerApproval'] as const) {
+          features[key] = { ...features[key], available: false, missing: ['runtime-id:consistent'] };
+        }
+      }
+      return { ...f.cap, runtimeId: statusId, runtimeIdConsistent, features };
+    },
+    async () => cacheFileId,
+  );
+  const service = new SendService({ ...f.deps, capabilities: () => cache.get() });
+  const agents = [TERMINAL_AGENT, CHAT_AGENT];
+  async function assertAvailable() {
+    for (const agent of agents) {
+      const status = await service.status(agent);
+      assert.equal(status.available, true, agent);
+      assert.equal(status.reason, null, agent);
+    }
+  }
+
+  f.responses.set('session.tabs.listAll', ok(inventory(), 'uuid-1'));
+  await assertAvailable();
+  assert.equal(probes, 1);
+
+  statusId = 'uuid-2';
+  f.responses.set('session.tabs.listAll', ok(inventory(), 'uuid-2'));
+  // キャッシュ照合でファイルを読めず、直後の probe では旧ファイルが見える。
+  cacheFileId = null;
+  for (const agent of agents) {
+    const status = await service.status(agent);
+    assert.equal(status.available, false, agent);
+    assert.equal(status.reason, 'unsupported', agent);
+    assert.deepEqual(await service.intent({ agent, text: 'hello' }), {
+      ok: false,
+      error: 'unsupported',
+      missing: ['runtime-id:consistent'],
+    });
+  }
+  assert.equal(f.sends().length, 0);
+
+  fileId = 'uuid-2';
+  cacheFileId = fileId;
+  const interruptedProbes = probes;
+  await assertAvailable();
+  assert.equal(probes, interruptedProbes + 1);
+  assert.equal(f.sends().length, 0);
+});
 
 test('意図と確定は稼働中の状態が残っても宛先と違う前面には送らない', async (t) => {
   for (const agentType of ['claude', 'codex'] as const) {
@@ -446,6 +506,8 @@ test('confirm は票の操作 ID で before と after を残し一度だけ送�
   assert.ok(record.after);
   assert.equal(record.before.digest, intent.digest);
   assert.equal(record.before.target.agentId, TERMINAL_AGENT);
+  assert.ok(record.before.target.route === 'terminal');
+  assert.equal(record.before.target.ptyId, 'pty-test');
   assert.equal(record.outcome, result.outcome);
   assert.equal(f.sends().length, 1);
   assert.deepEqual(await f.service.confirm({ ticket: intent.ticket, text: 'hello' }), {
@@ -454,6 +516,87 @@ test('confirm は票の操作 ID で before と after を残し一度だけ送�
     reason: 'unknown',
   });
   assert.equal(f.sends().length, 1);
+});
+
+test('iss-00073 T-05：録画の ptyId のない端末に1回送り v1 の記録を照会する', async (t) => {
+  const f = await fixture(t, 'claude');
+  const file = new URL('../fixtures/recordings/rpc-orca-1.4.272-send.json', import.meta.url);
+  const replay = new ReplayRpcTransport(JSON.parse(readFileSync(file, 'utf8')) as RpcRecording);
+  const tabs = await replay.call<{ snapshots: { worktree: string }[] }>('session.tabs.listAll', {});
+  assert.ok(tabs.ok && tabs.runtimeId);
+  const [recordedWorktree] = tabs.result.snapshots;
+  assert.ok(recordedWorktree);
+  const agentId = 'uuid-5:uuid-10';
+  const handle = 'term_uuid-14';
+  const [worktree] = f.snapshot.worktrees;
+  const [agent] = f.snapshot.agents;
+  assert.ok(agent && worktree);
+  Object.assign(worktree, { id: recordedWorktree.worktree });
+  Object.assign(agent, { id: agentId, worktreeId: worktree.id, terminalHandle: handle });
+  f.cap.runtimeId = tabs.runtimeId;
+  f.responses.set('session.tabs.listAll', tabs);
+  f.responses.set('terminal.agentStatus', await replay.call('terminal.agentStatus', { terminal: handle }));
+
+  const status = await f.service.status(agentId);
+  assert.equal(status.available, true);
+  assert.equal(status.route, 'terminal');
+  assert.ok(status.target);
+  assert.deepEqual(status.answerKeys, { available: true, reason: null });
+  const text = 'hello';
+  const intent = await f.service.intent({ agent: agentId, text, target: status.target });
+  assert.ok(intent.ok);
+  const result = await f.service.confirm({ ticket: intent.ticket, text });
+  assert.ok(result.ok);
+  assert.equal(result.outcome, 'submitted');
+  assert.deepEqual(f.sends(), [
+    {
+      method: 'terminal.send',
+      params: {
+        terminal: handle,
+        text,
+        enter: true,
+        agentPrompt: true,
+        client: { id: 'orca-web', type: 'desktop' },
+        waitSubmitMs: 10000,
+      },
+      options: { timeoutMs: 25000, envelope: { orchestrationRequestId: intent.operationId } },
+    },
+  ]);
+  const fresh = new SendService({ ...f.deps, journal: new SendJournal(f.sendsDir) });
+  const checked = await fresh.check(intent.operationId, { query: false });
+  assert.ok(checked.ok && checked.state === 'recorded');
+  assert.equal(checked.record.outcome, 'submitted');
+  const before = checked.record.before;
+  assert.ok(before?.target.route === 'terminal');
+  assert.equal(before.schema, 'orca-web.send-record/v1');
+  assert.equal(before.target.ptyId, null);
+  assert.deepEqual(before.generation, { runtimeId: tabs.runtimeId, incarnationId: 'uuid-12' });
+});
+
+test('iss-00073 T-05：ptyId のない端末の handle または incarnation が変わったら送らない', async (t) => {
+  for (const [key, value] of [
+    ['terminal', 'term_other'],
+    ['incarnationId', 'inc-other'],
+  ] as const) {
+    const f = await fixture(t);
+    const tab = terminalTab();
+    delete tab.ptyId;
+    f.responses.set('session.tabs.listAll', ok(inventory([tab])));
+    const intent = await f.service.intent({ agent: TERMINAL_AGENT, text: 'hello' });
+    assert.ok(intent.ok);
+    if (key === 'terminal') {
+      const [agent] = f.snapshot.agents;
+      assert.ok(agent);
+      agent.terminalHandle = value;
+    }
+    f.responses.set('session.tabs.listAll', ok(inventory([{ ...tab, [key]: value }])));
+    assert.deepEqual(await f.service.confirm({ ticket: intent.ticket, text: 'hello' }), {
+      ok: false,
+      error: 'target_changed',
+      reason: 'terminal_changed',
+    });
+    assert.equal(f.sends().length, 0);
+  }
 });
 
 test('同時の確定は busy で票を残し設定の読み待ち中でも二重送信しない', async (t) => {
@@ -1522,7 +1665,11 @@ const accepted = ok({ send: { accepted: true, writeSettlement: { outcome: 'accep
 
 async function callFixture(
   t: import('node:test').TestContext,
-  { agentType = 'claude', input = ASK_INPUT }: { agentType?: string; input?: unknown } = {},
+  {
+    agentType = 'claude',
+    input = ASK_INPUT,
+    withPtyId = true,
+  }: { agentType?: string; input?: unknown; withPtyId?: boolean } = {},
 ) {
   const f = await fixture(t, agentType === 'codex' ? 'codex' : 'claude');
   const status = (extra: Record<string, unknown> = {}) => ({
@@ -1533,11 +1680,10 @@ async function callFixture(
     interactivePrompt: JSON.stringify(input),
     ...extra,
   });
+  const tab = terminalTab();
+  if (!withPtyId) delete tab.ptyId;
   const setPrompt = (extra: Record<string, unknown> = {}) =>
-    f.responses.set(
-      'session.tabs.listAll',
-      ok(inventory([{ ...terminalTab(), agentStatus: status(extra) }, chatTab()])),
-    );
+    f.responses.set('session.tabs.listAll', ok(inventory([{ ...tab, agentStatus: status(extra) }, chatTab()])));
   setPrompt();
   f.responses.set('terminal.agentStatus', ok({ agentStatus: { isRunningAgent: true, status: 'permission' } }));
   f.responses.set('terminal.inspectProcess', ok({ process: { foregroundProcess: agentType } }));
@@ -1788,8 +1934,8 @@ test('T-08 answerIntent（callId）：前に送った記録があれば、新し
   assert.equal(f.writes().length, 1);
 });
 
-test('T-09 answerConfirm（keys）：before の記録の後に組を1組ずつ送り、組の間に 1000ms、同じ票の2回目は送らない', async (t) => {
-  const f = await callFixture(t);
+test('iss-00073 T-05：ptyId のない端末にも before の記録の後にキーを1組ずつ送り、同じ票の2回目は送らない', async (t) => {
+  const f = await callFixture(t, { withPtyId: false });
   const intent = await f.service.answerIntent({ agent: TERMINAL_AGENT, callId: CALL, answers: KEY_ANSWERS });
   assert.ok(intent.ok);
   f.queueKeys(accepted, accepted, accepted);
@@ -1801,10 +1947,26 @@ test('T-09 answerConfirm（keys）：before の記録の後に組を1組ずつ�
     detail: { code: 'keys_sent', sentGroups: 3, totalGroups: 3 },
   });
   assert.equal(f.beforeSeenAtFirstKey(), true);
-  assert.deepEqual(keyTexts(f), ['3', '秘密の文', '\r']);
+  assert.deepEqual(
+    f.writes().map(({ method, params }) => ({ method, params })),
+    ['3', '秘密の文', '\r'].map((text) => ({
+      method: 'terminal.send',
+      params: {
+        terminal: 'term_test',
+        text,
+        enter: false,
+        requireWriteSettlement: true,
+        client: { id: 'orca-web', type: 'desktop' },
+      },
+    })),
+  );
   assert.deepEqual(f.sleeps, [1000, 1000]);
-  const record = await f.journal.read(intent.operationId);
+  const journal = new SendJournal(f.sendsDir);
+  const record = await journal.read(intent.operationId);
   assert.equal(record?.outcome, 'input_accepted');
+  assert.ok(record?.before?.target.route === 'terminal');
+  assert.equal(record.before.target.ptyId, null);
+  assert.equal(await journal.hasAnswer(TERMINAL_AGENT, CALL), true);
   assert.deepEqual(await f.service.answerConfirm({ ticket: intent.ticket, answers: KEY_ANSWERS }), {
     ok: false,
     error: 'ticket_invalid',

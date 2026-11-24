@@ -48,7 +48,7 @@ export function resolveTarget(listAll: unknown, agentId: string, runtimeId: stri
       const ptyId = text(tab.ptyId);
       const incarnationId = text(tab.incarnationId);
       const agentType = text(status?.agentType);
-      if (!handle || !ptyId || !incarnationId || !agentType)
+      if (!handle || !incarnationId || !agentType)
         return { ok: false, error: 'not_sendable', reason: 'identity_unavailable' };
       return {
         ok: true,
@@ -80,8 +80,8 @@ export function compareTargets(confirmed: SendTarget, fresh: SendTarget): Target
     if (confirmed.leafId !== fresh.leafId) return 'tab_changed';
     if (
       confirmed.handle !== fresh.handle ||
-      confirmed.ptyId !== fresh.ptyId ||
-      confirmed.incarnationId !== fresh.incarnationId
+      confirmed.incarnationId !== fresh.incarnationId ||
+      (confirmed.ptyId !== null && fresh.ptyId !== null && confirmed.ptyId !== fresh.ptyId)
     )
       return 'terminal_changed';
   }
@@ -130,7 +130,6 @@ export function targetFingerprint(target: SendTarget): string {
           target.tabId,
           target.leafId ?? '',
           target.handle,
-          target.ptyId,
           target.incarnationId,
           target.agentType,
           target.providerSessionId,
