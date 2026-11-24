@@ -28,6 +28,14 @@ steps: {
 		status:   "done"
 		session:  "doc"
 	}
+	"S-04": {
+		title:    "マージの後、常駐の orca-web（8791）での実物の確かめ（タスク担当。統括の依頼 2026-11-24）"
+		text:     "統括がマージ（ac35101）とビルド・常駐の再起動を済ませた後、この worktree の使い捨ての宛先（端末・構造化 Chat）だけに、8791 の HTTP の道で送信・質問の答え・承認の答えを確かめ、report.md に記録する。承認は宛先が auto の許可モードのため未確認として記録した"
+		realizes: ["R-03"]
+		after:    ["S-03"]
+		status:   "done"
+		session:  "doc"
+	}
 }
 
 tests: {

@@ -36,9 +36,28 @@ ID: "iss-00073"
 - `npm run lint`（info 1件は基準からある useTemplate）、`npm test`（1146件すべて合格）、`npm run build` が通る。
 - 質問の答え・承認の実物の確かめはしていない（検証用の宛先に質問や承認を出させる用意をしていない）。同じ宛先の解決と機能の判定を通ることは T-02・T-05 のテストで確かめた。
 
+### マージの後、常駐の orca-web（8791）での確かめ（タスク担当、2026-11-24、統括の依頼 task_4b684563149b）
+
+環境：main ac35101（PR #74 のマージ）を統括がビルドし、常駐の orca-web（launchd、127.0.0.1:8791、2026-11-24 22:54 に起動し直し）が新しい dist で動く（`dist/send/target.js` に ptyId の比べ方の新しい式がある）。Orca 1.4.272。宛先はタスク担当がこの worktree に `orca agent launch` で起動した使い捨ての Claude Code（claude-haiku-5-5 / low）の端末1つ（タブに `ptyId` なし）と構造化 Chat 1つだけ。業務中のエージェントには送っていない。HTTP は同じオリジンの道（`POST /api/token` → `/api/send/intent`（送れるかの口の `target` 付き）→ `/api/send/confirm`）。会話の中身・id・パスは書かない。
+
+- 送れるかの口 `GET /api/send/status?agent=<id>`：
+  - 構造化 Chat：`available: true`、`route: chat`、answer・approval・answerMessage available、answerKeys は `chat_route`。
+  - 端末：起動の直後の1回は `foreground_mismatch`（Claude Code が立ち上がる途中で、前面がまだ `claude` でなかった）。数秒後には `available: true`、`route: terminal`、answerKeys・answerMessage available（前面 `claude`）。`unsupported` は出ない。
+- 送信：
+  - 端末：confirm `submitted`（stages `input_accepted`・`turn_started`、provider claude、observation supported）。照会 `GET /api/send/<操作の ID>?check=1`：`state: recorded`、outcome submitted、送る前の記録の target の `ptyId` は null。宛先が返事をした。
+  - 構造化 Chat：confirm `accepted`（`dispatchState: pending`）。照会：`state: recorded`、outcome accepted。宛先が返事をした。
+- 質問の答え（宛先に AskUserQuestion で単一選択の1問を出させた）：
+  - 構造化 Chat（`answerVia: rpc`、prompt の itemId・revision 1）：`/api/answer/intent`・`confirm` が `submitted`（`code: resolved`）。会話の質問の部分が `answered` と送った答えになり、宛先は選んだ答えで返事をした。
+  - 端末（`answerVia: keys`、callId）：`/api/answer/intent`・`confirm` が `input_accepted`（`code: keys_sent`、1組中1組）。宛先は選んだ答えで返事をした。会話の記録の質問の部分は、答えた後も `state: pending` のまま見える（端末の質問の状態は会話の記録から決めるため。今回の修正の範囲外、要確認の観察）。
+  - 確かめの道具の側の誤り（orca-web の誤りではない）：質問を待つ間は送れるかの口が `target: null`（reason permission）を返すので、それを意図の本文に入れると 400 `invalid_request` になる。`target` を付けずに送り直して通った。画面（question-view）は送れないときの指紋を固定しない。
+- 承認の答え：未確認。Orca が起動した宛先はどちらも `--permission-mode auto` で、作業の場所の外への空のファイルの書き込み（`touch "$HOME/…"`）も許可の確認なしに実行された（作ったファイルは消した）。許可の確認を出せる宛先を、利用者の設定を変えずに用意できなかった。承認の答えは T-02・T-05 のテストと、PR の前の実装（iss-00050・iss-00054）の確かめだけ。
+- 画面（`/embed/agent`）での確かめはしていない（HTTP の道で同じ口を通した）。
+
 ## Residual Risks / Follow-ups
 
-- 常駐の orca-web の入れ替え（ビルドと再起動）は利用者か統括の操作。入れ替えるまで、今の常駐は送れないまま。
+- 常駐の orca-web の入れ替え（ビルドと再起動）は統括が済ませ、常駐で送信と質問の答えが届くことを確かめた（上の節）。
+- 承認の答えは実物で未確認（宛先が auto の許可モードで、許可の確認を出せなかった）。
+- 端末の質問の部分が、答えた後も会話の記録で `pending` に見える（範囲外の観察。別の Issue で確かめる候補）。
 - Orca の画面がタブを描いた後に agent launch の端末のタブに `ptyId` が付くかは未確認（直したコードはどちらでも送れる）。
 - `SendService` の method_not_found による止め（`#blocked`）は、Orca の起動の途中に method_not_found が返ると同じ runtime の間残りうる（今回の再現では関わっていない。runtime ID が変われば消える）。
 
