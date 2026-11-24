@@ -61,3 +61,10 @@ ID: "iss-00073"
 - 範囲 `3204e6d..3a32dc8`（S-01 a5e525a、S-02 3a32dc8）、worktree clean。レビュアー code-reviewer（Opus 5.5 / medium、axis both）。
 - 結果：`.workbench/code-review/iss-00073-cp1/round-1.json`（validate-review の exit 0、P0〜P3 すべて 0）。
 - タスク担当の確かめ：同じ HEAD で `npm run lint`（info 1件は基準からある useTemplate）・`npm test`（1146件すべて合格）・`npm run build` が通る。仕様の3つの sha256 は合格のときのまま。差分の本体（capabilities.ts、model.ts、target.ts、send-live.ts）を読み、D-01・D-02・D-04 どおりで送信の門を変えていないことを確かめた。
+
+### 最終品質ゲート（final-quality-gate fqg-iss-00073）：合格（attempt 1、2026-11-24）
+
+- 合格のコミット b1abd43（範囲 3204e6d..b1abd43、clean）。記録だけのコミットなし。
+- レビュー：quality-gate-reviewer（Opus 5.5 / medium）、P0〜P3 すべて 0、coverage_complete。観点 functional-correctness・requirements-closure・test-adequacy・security-baseline・reliability-recovery。
+- テスト：`npm run lint`・`npm test`（1146件）・`npm run build` すべて exit 0。
+- closure：`.workbench/final-quality-gate/fqg-iss-00073/closure.md`
