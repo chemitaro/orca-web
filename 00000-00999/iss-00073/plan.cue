@@ -43,7 +43,8 @@ tests: {
 verification: """
 	各手順で、その手順のテストを通す。最後に `npm run lint`、`npm test`、`npm run build` を通す。
 	関門（coding-task の `## 関門` に当たる。CUE に専用の項目がないので、ここに書く）：
-	- merge：owner（統括の依頼による coordinated の使い方なので、マージは統括が行う。タスク担当はマージしない）
+	- merge：agent（統括の依頼による coordinated の使い方なので、マージは統括が行う。タスク担当はマージしない）
+	- merge_permission：本人「このコーディングタスクのワークフローに則って、Final Quality Gate検証できたらマージ、そしてこのPC環境へのインストール…アップデート、そして動作確認まで含めて…あなたの方で主導して進めてください」（2026-11-24、統括の Claude Code の会話）
 	- 区切りのレビュー：cp1。最後の手順 S-02、範囲 `3204e6d..<S-02 の HEAD>`、レビュアー code-reviewer（Opus 5.5 / medium、方針の standard）。理由：宛先の同一性という送信の安全の規則を変える唯一のコードの変更なので、文書と実物の確かめの前に見る
 	- 最終品質ゲート：範囲 `3204e6d..HEAD` の全体（`src/`、`test/`、`README.md`）。PR の直前に `origin/main` を取り込み直したときは、取り込んだ後のコミットでやり直す。追加の観点：security-baseline（宛先の同一性を緩めすぎない、送信の門を広げない、録画に秘密や個人の値を入れない）、reliability-recovery（拒みで送らない、二重に送らない、Orca の再起動から戻る）。second_opinion：none（standard の既定）
 	- test_commands：`npm run lint`、`npm test`、`npm run build`（結合のテストは `npm test` の中の `test/server/*.test.ts`、`test/tools/*.test.ts`）
