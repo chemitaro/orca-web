@@ -11,7 +11,7 @@ export interface TerminalSendTarget extends TargetBase {
   route: 'terminal';
   leafId: string | null;
   handle: string;
-  ptyId: string;
+  ptyId: string | null;
   incarnationId: string;
   providerSessionId: string;
 }

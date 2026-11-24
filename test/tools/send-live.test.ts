@@ -30,7 +30,7 @@ test('handleを全件検査し、0件・3件・重複・不明・複数一致・
   assert.throws(() => selectSendTargets(main, '/fake/send-test', ['term_test']));
 });
 
-function environment() {
+function environment(withPtyId = true) {
   const calls: string[] = [];
   const state = snapshot();
   const target = state.agents[0];
@@ -39,13 +39,15 @@ function environment() {
   target.agentType = fact('codex');
   target.title = fact('private-title-text');
   const capabilities = report();
+  const tab = terminalTab();
+  if (!withPtyId) delete tab.ptyId;
   capabilities.runtimeId = 'runtime-test';
   capabilities.features.sendTerminal = { available: true, missing: [], satisfied: [], deferred: [] };
   const rpc = new SendRpc({
     async call<T>(method: string): Promise<RpcOutcome<T>> {
       calls.push(method);
       const results: Record<string, unknown> = {
-        'session.tabs.listAll': inventory([terminalTab()]),
+        'session.tabs.listAll': inventory([tab]),
         'terminal.agentStatus': { agentStatus: { isRunningAgent: true, status: 'idle' } },
         'terminal.inspectProcess': { process: { foregroundProcess: 'codex' } },
         'terminal.send': { send: { accepted: true, prompt: { provider: 'codex', stages: ['turn_started'] } } },
@@ -93,8 +95,8 @@ test('応答を捨てても送るRPCは1回だけ届き、query付き照会がre
   assert.equal(env.calls.filter((method) => method === 'orchestration.requestShow').length, 1);
 });
 
-test('票のセッションとptyを書き換えた確定は比較で止まり、送るRPCは0回', async () => {
-  const env = environment();
+test('iss-00073 T-06：ptyId がなくても、票のセッションと incarnation の変更で送信は0回', async () => {
+  const env = environment(false);
   const result = await probeSends(env, { worktree: '/fake/send-test', handles: ['term_test'] });
   assert.deepEqual(result.scenarios.targetChanged, {
     count: 2,

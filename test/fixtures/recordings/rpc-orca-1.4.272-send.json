@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "kind": "rpc",
+  "exchanges": [
+    {
+      "method": "session.tabs.listAll",
+      "params": {},
+      "chunks": [
+        "{\"id\":\"$ID\",\"ok\":true,\"result\":{\"snapshots\":[{\"worktree\":\"uuid-1::/p-1/p-2/p-3/p-4/p-5/p-6/p-7\",\"publicationEpoch\":\"renderer:uuid-2\",\"snapshotVersion\":346,\"activeGroupId\":\"headless-terminals:uuid-1::/p-1/p-2/p-3/p-4/p-5/p-6/p-7\",\"activeTabId\":\"agent-session:uuid-3\",\"activeTabType\":\"agent-session\",\"tabGroups\":[{\"id\":\"headless-terminals:uuid-1::/p-1/p-2/p-3/p-4/p-5/p-6/p-7\",\"activeTabId\":\"agent-session:uuid-3\",\"tabOrder\":[\"agent-session:uuid-3\",\"agent-session:uuid-4\",\"uuid-5\"]}],\"tabGroupLayout\":{\"type\":\"leaf\",\"groupId\":\"headless-terminals:uuid-1::/p-1/p-2/p-3/p-4/p-5/p-6/p-7\"},\"retiredTerminalSurfaces\":[{\"parentTabId\":\"uuid-6\",\"leafId\":\"uuid-7\",\"ptyId\":\"uuid-1::/p-1/p-2/p-3/p-4/p-5/p-6/p-8\",\"terminal\":\"term_uuid-8\",\"incarnationId\":\"uuid-9\"}],\"tabs\":[{\"type\":\"agent-session\",\"id\":\"agent-session:uuid-3\",\"title\":\"text-1\",\"sessionId\":\"uuid-3\",\"agent\":\"claude\",\"isActive\":true,\"chatStatus\":{\"state\":\"working\",\"mainAgent\":{\"state\":\"working\",\"stateStartedAt\":1795525995162},\"updatedAt\":1795526660213,\"evidenceObservedAt\":1795526660209,\"structuredHostOwned\":true}},{\"type\":\"agent-session\",\"id\":\"agent-session:uuid-4\",\"title\":\"text-2\",\"sessionId\":\"uuid-4\",\"agent\":\"claude\",\"isActive\":false,\"chatStatus\":{\"state\":\"done\",\"mainAgent\":{\"state\":\"done\",\"outcome\":\"success\",\"stateStartedAt\":1795526508763},\"updatedAt\":1795526508767,\"evidenceObservedAt\":1795526508764,\"structuredHostOwned\":true}},{\"type\":\"terminal\",\"id\":\"uuid-5::uuid-10\",\"parentTabId\":\"uuid-5\",\"leafId\":\"uuid-10\",\"title\":\"text-3\",\"customTitle\":null,\"aiVaultTitle\":{\"agent\":\"claude\",\"sessionId\":\"uuid-11\",\"title\":\"text-3\",\"kind\":\"named\"},\"resolvesSessionTitle\":true,\"incarnationId\":\"uuid-12\",\"terminalTheme\":{\"mode\":\"dark\",\"theme\":{\"background\":\"text-4\",\"foreground\":\"text-5\",\"cursor\":\"text-5\",\"cursorAccent\":\"text-4\",\"selectionBackground\":\"text-6\",\"selectionForeground\":\"text-5\",\"black\":\"text-7\",\"red\":\"text-8\",\"green\":\"text-9\",\"yellow\":\"text-10\",\"blue\":\"text-11\",\"magenta\":\"text-12\",\"cyan\":\"text-13\",\"white\":\"text-14\",\"brightBlack\":\"text-15\",\"brightRed\":\"text-16\",\"brightGreen\":\"text-17\",\"brightYellow\":\"text-18\",\"brightBlue\":\"text-19\",\"brightMagenta\":\"text-20\",\"brightCyan\":\"text-21\",\"brightWhite\":\"text-22\"}},\"launchAgent\":\"claude\",\"agentStatus\":{\"state\":\"done\",\"prompt\":\"text-23\",\"agentType\":\"claude\",\"model\":\"claude-haiku-5-5\",\"lastAssistantMessage\":\"text-24\",\"mainAgent\":{\"state\":\"done\",\"stateStartedAt\":1795526588792},\"paneKey\":\"uuid-5:uuid-10\",\"updatedAt\":1795526588792,\"evidenceObservedAt\":1795526588792,\"stateStartedAt\":1795526588792,\"turnEndedAt\":1795526588792,\"turnEndDisposition\":\"identified\",\"stateHistory\":[],\"worktreeId\":\"uuid-1::/p-1/p-2/p-3/p-4/p-5/p-6/p-7\",\"tabId\":\"uuid-5\",\"terminalTitle\":\"text-3\",\"providerSession\":{\"key\":\"session_id\",\"id\":\"uuid-11\",\"transcriptPath\":\"/p-9/p-10/p-11/p-12/p-13/p-14\",\"cwd\":\"/p-1/p-2/p-3/p-4/p-5/p-6/p-7\",\"effort\":\"low\",\"permissionMode\":\"auto\"},\"orcaSessionId\":\"uuid-13\",\"programStatus\":{\"state\":\"done\",\"observedAt\":1795526591290},\"terminalHandle\":\"term_uuid-14\"},\"launchAttested\":true,\"parentLayout\":{\"root\":{\"type\":\"leaf\",\"leafId\":\"uuid-10\"},\"activeLeafId\":\"uuid-10\",\"expandedLeafId\":null},\"isActive\":false,\"status\":\"ready\",\"terminal\":\"term_uuid-14\"}],\"agentSenderAssociations\":{\"principals\":[],\"peerFingerprint\":\"text-25\",\"associations\":[{\"identity\":\"term_uuid-14\",\"paneKey\":\"uuid-5:uuid-10\",\"worktreeId\":\"uuid-1::/p-1/p-2/p-3/p-4/p-5/p-6/p-7\"},{\"identity\":\"term_uuid-8\",\"paneKey\":\"uuid-6:uuid-7\",\"worktreeId\":\"uuid-1::/p-1/p-2/p-3/p-4/p-5/p-6/p-7\"},{\"identity\":\"orca_session_id:uuid-4\",\"paneKey\":\"structured-agent-session-uuid-4:uuid-15\",\"worktreeId\":\"uuid-1::/p-1/p-2/p-3/p-4/p-5/p-6/p-7\",\"sessionId\":\"uuid-4\"},{\"identity\":\"orca_session_id:uuid-3\",\"paneKey\":\"structured-agent-session-uuid-3:uuid-16\",\"worktreeId\":\"uuid-1::/p-1/p-2/p-3/p-4/p-5/p-6/p-7\",\"sessionId\":\"uuid-3\"}],\"attachments\":[],\"revision\":{\"epoch\":\"uuid-17\",\"revision\":10}}}]},\"_meta\":{\"runtimeId\":\"uuid-18\"}}\n"
+      ],
+      "end": "close"
+    },
+    {
+      "method": "terminal.agentStatus",
+      "params": {
+        "terminal": "term_uuid-14"
+      },
+      "chunks": [
+        "{\"id\":\"$ID\",\"ok\":true,\"result\":{\"agentStatus\":{\"handle\":\"term_uuid-14\",\"isRunningAgent\":true,\"status\":\"idle\"}},\"_meta\":{\"runtimeId\":\"uuid-18\"}}\n"
+      ],
+      "end": "close"
+    }
+  ]
+}

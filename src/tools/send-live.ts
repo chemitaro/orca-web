@@ -66,7 +66,7 @@ class ProbeTickets extends TicketStore {
     const result = super.take(ticket);
     if (result.ok && result.value.target.route === 'terminal') {
       if (this.change === 'session') result.value.target.providerSessionId += '-probe-changed';
-      if (this.change === 'terminal') result.value.target.ptyId += '-probe-changed';
+      if (this.change === 'terminal') result.value.target.incarnationId += '-probe-changed';
     }
     this.change = null;
     return result;
