@@ -68,3 +68,8 @@ ID: "iss-00073"
 - レビュー：quality-gate-reviewer（Opus 5.5 / medium）、P0〜P3 すべて 0、coverage_complete。観点 functional-correctness・requirements-closure・test-adequacy・security-baseline・reliability-recovery。
 - テスト：`npm run lint`・`npm test`（1146件）・`npm run build` すべて exit 0。
 - closure：`.workbench/final-quality-gate/fqg-iss-00073/closure.md`
+
+### PR と CI（2026-11-24）
+
+- PR #74 https://github.com/chemitaro/orca-web/pull/74（base main、head b1abd43 = 合格のコミット、`Refs #73`）。
+- CI：github-pr-checks の observer（`--watch`）の終わり exit 0、`OBSERVED_CI_PASS`、coverage ACTIONS_AND_COMMIT_STATUSES、merge_readiness READY（run 45407446911 CI success、2026-11-24T13:50:54Z）。マージは統括が行う。
