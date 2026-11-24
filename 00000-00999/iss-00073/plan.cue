@@ -9,7 +9,7 @@ steps: {
 		title:    "CapabilityCache が一致した報告だけを持つ（D-01）"
 		text:     "対象：`src/orca/capabilities.ts`（`CapabilityCache` だけ）、`test/orca/capabilities.test.ts`、`test/send/service.test.ts`（または送信のサービスの近いテストのファイル）。確かめ：T-01、T-02。完了：`npm run lint`、`npm test`、`npm run build` が通り、T-01・T-02 があり、今のテストの振る舞いの主張を変えずに通す。コミットして次へ進む（区切りのレビューなし）"
 		realizes: ["R-01", "F-02"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-02": {
@@ -17,7 +17,7 @@ steps: {
 		text:     "対象：`src/send/model.ts`、`src/send/target.ts`、型の誤りが出る `src/send/` と `src/orca/send.ts` の箇所だけ、`src/tools/send-live.ts`（`ProbeTickets` の terminal の場面だけ）、`test/send/target.test.ts`、`test/send/service.test.ts`・`test/send/terminal-approval-service.test.ts`・`test/send/journal.test.ts` のうち要るもの、`test/tools/send-live.test.ts`、`test/fixtures/recordings/rpc-orca-1.4.272-send.json`（`.workbench/diag/rec/rpc-orca-1.4.272-send.json` を中身を変えずに写す）。送信の門 `src/orca/send-gates.ts` と `web/` は変えない。確かめ：T-03〜T-06。完了：`npm run lint`、`npm test`、`npm run build` が通り、T-03〜T-06 のテストがある。実装担当 impl の最後の手順。止まって HEAD を報告する。区切りのレビュー：あり（cp1、`3204e6d..HEAD`）"
 		realizes: ["R-02", "F-01", "F-03"]
 		after:    ["S-01"]
-		status:   "todo"
+		status:   "done"
 		session:  "impl"
 	}
 	"S-03": {
