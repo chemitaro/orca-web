@@ -184,7 +184,7 @@ test('F-01: 結べない節があっても、木の親子と数は変わらな�
   assert.equal(unlinked?.root.children[0]?.agentId, null);
 });
 
-test('T-04: activeCoordinatorHandle があれば handle のエージェントだけを使い、parentPaneKey の候補を見ない', () => {
+test('T-04: activeCoordinatorHandle の端末があれば handle のエージェントを使い、なければ parentPaneKey の候補に進む（iss-00082 D-03）', () => {
   const withHandle = structured({
     runs: [run({ coordinatorHandle: 'term-root' })],
     agents: [
@@ -203,7 +203,7 @@ test('T-04: activeCoordinatorHandle があれば handle のエージェントだ
     ],
   });
   const doc = buildRunTree(missingHandle, 'run-a');
-  assert.equal(doc?.root.agentId, null);
+  assert.equal(doc?.root.agentId, 'chat:coord-a');
   assert.equal(doc?.root.children[0]?.agentId, 'chat:w-1');
 });
 

@@ -134,13 +134,13 @@ test('T-07：390px 以下では隠して読み込まず、広くなったら読�
 });
 
 test('T-07：3か所の HTML と JS に、見える「Orca で開く」の文字のボタンと横の結果の文字が残らない', () => {
-  for (const path of ['embed/open-button.html', 'embed/agent.html', 'index.html']) {
+  for (const path of ['embed/open-button.html', 'embed/agent.html', 'inbox.html']) {
     const html = read(path);
     assert.doesNotMatch(html, /<button\b[^>]*>\s*Orca で開く/, path);
     assert.doesNotMatch(html, /id="(open|open-status|status)"/, path);
   }
   assert.match(read('embed/agent.html'), /<span\b[^>]*\bid="open-slot"/);
-  for (const path of ['embed/open-button.html', 'embed/agent.html', 'index.html']) {
+  for (const path of ['embed/open-button.html', 'embed/agent.html', 'inbox.html']) {
     assert.match(read(path), /href="[./]*(embed\/)?open-control\.css"/, path);
   }
   for (const path of ['embed/open-button-frame.js', 'embed/agent-frame.js', 'inbox.js', 'inbox-dom.js']) {

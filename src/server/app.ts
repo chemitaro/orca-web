@@ -13,7 +13,7 @@ import { buildInbox } from '../inbox/classify.ts';
 import type { InboxInputs } from '../inbox/model.ts';
 import type { OpenErrorCode, OpenOutcome, OpenRequest } from '../orca/open.ts';
 import type { TranscriptErrorCode, TranscriptReader } from '../orca/read-transcript.ts';
-import { buildRunList, buildRunTree } from '../runs/tree.ts';
+import { buildRunList, buildRunTree, type RunBundleInput } from '../runs/tree.ts';
 import type { SendFailure, SendService } from '../send/service.ts';
 import { checkSelection, FIELDS } from '../state/fields.ts';
 import type { StateDocument } from '../state/model.ts';
@@ -135,8 +135,10 @@ export const OPEN_ERROR_STATUS: Record<OpenErrorCode, number> = {
 const STATIC_FILES: Readonly<
   Record<string, { file: string; type: string; page?: 'index' | 'embed'; cors?: 'read'; frameSelf?: true }>
 > = {
-  '/': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
-  '/index.html': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
+  // 最初の画面は指揮の画面（iss-00082 D-01）。/apexes は別名として残す。受け箱は /inbox。
+  '/': { file: 'apexes.html', type: 'text/html; charset=utf-8', page: 'index' },
+  '/index.html': { file: 'apexes.html', type: 'text/html; charset=utf-8', page: 'index' },
+  '/inbox': { file: 'inbox.html', type: 'text/html; charset=utf-8', page: 'index' },
   '/inbox.js': { file: 'inbox.js', type: 'text/javascript; charset=utf-8' },
   '/inbox-view.js': { file: 'inbox-view.js', type: 'text/javascript; charset=utf-8' },
   '/inbox-dom.js': { file: 'inbox-dom.js', type: 'text/javascript; charset=utf-8' },
@@ -429,6 +431,15 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
   // 束 → 頂点の対応表と最後の A3〜A6 の判定。app の生存の間に1つ。メモリだけに持つ。
   const bundleOwners = new BundleOwners();
   const verdictMemo = new ApexVerdictMemo();
+
+  /** Run の木と一覧の読み。内部の値があれば、頂点の一覧と同じ対応表で束の頂点を結ぶ（iss-00082 D-03）。 */
+  async function runsRead(source: StateSource): Promise<{ state: StateDocument; bundles?: RunBundleInput }> {
+    if (!source.snapshotWithExtras) return { state: await source.snapshot() };
+    const now = Date.now();
+    const { state, extras, generation } = await source.snapshotWithExtras();
+    bundleOwners.sweep(state, extras, generation, now);
+    return { state, bundles: { extras, owners: bundleOwners, now } };
+  }
   const frameAncestors = readOrigins.size > 0 ? [...readOrigins].join(' ') : "'none'";
   const frameAncestorsWithSelf = ["'self'", ...readOrigins].join(' ');
   const webDir = options.webDir ?? DEFAULT_WEB_DIR;
@@ -767,7 +778,8 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
             return;
           }
           options.runs.noteViewer();
-          const document = buildRunTree(await options.runs.snapshot(), id);
+          const { state, bundles } = await runsRead(options.runs);
+          const document = buildRunTree(state, id, bundles);
           if (document === null) sendError(res, 404, 'not_found');
           else sendJson(res, 200, document);
         } else if (pathname === '/api/runs') {
@@ -781,7 +793,8 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
             return;
           }
           options.runs.noteViewer();
-          sendJson(res, 200, buildRunList(await options.runs.snapshot(), project));
+          const { state, bundles } = await runsRead(options.runs);
+          sendJson(res, 200, buildRunList(state, project, bundles));
         } else if (pathname === '/api/apexes') {
           const project = url.searchParams.get('project');
           if (project !== null && project.length > 512) {

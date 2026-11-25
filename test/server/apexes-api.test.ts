@@ -173,8 +173,8 @@ test('R-05: /apexes を index と同じ CSP で配り、部品の JS を配り�
       assert.equal(res.headers['access-control-allow-origin'], undefined);
     }
     assert.equal((await send('/apexes.html')).status, 404);
-    for (const path of ['/', '/runs', '/settings']) {
-      assert.match((await send(path)).text, /<a href="\/apexes">指揮<\/a>/, path);
+    for (const path of ['/inbox', '/runs', '/settings']) {
+      assert.match((await send(path)).text, /<a href="\/">(← )?指揮<\/a>/, path);
     }
   });
 });

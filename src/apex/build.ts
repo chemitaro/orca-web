@@ -17,7 +17,7 @@ import type {
   UnlinkedItem,
 } from './model.ts';
 import { APEXES_SCHEMA } from './model.ts';
-import { SETTLED_TASK_STATES } from './owners.ts';
+import { type BundleOwners, SETTLED_TASK_STATES } from './owners.ts';
 import { buildTeam } from './team.ts';
 
 /** メンバーの許可待ち・入力待ちを対応が必要にするまでの猶予。自動の承認で一瞬だけ出る表示を拾わない。 */
@@ -449,6 +449,51 @@ function countMarks(marks: readonly AgentMark[]): ApexItem['counts'] {
     waiting: marks.filter((mark) => mark === 'blocked' || mark === 'waiting').length,
     done: marks.filter((mark) => mark === 'done' || mark === 'sleeping').length,
   };
+}
+
+/** 束の頂点を探す入力。頂点の一覧と同じ内部の値と対応表。 */
+export interface BundleApexInput {
+  state: StateDocument;
+  extras: OrchestrationExtras;
+  owners: BundleOwners | null;
+  now: number;
+}
+
+/**
+ * Run の id → その Run の今の世代（`consumerGeneration`）の束の持ち主の頂点（iss-00082 D-03）。
+ * 結び方は頂点の一覧と同じ（`place` と `linkApexes`）。今の世代が読めないときだけ、最も新しい世代の束の頂点を使う。
+ * 今の世代の束に持ち主がなければ、古い世代の頂点には結ばない。
+ */
+export function bundleApexes(input: BundleApexInput): Map<string, AgentState> {
+  const { state, extras, now } = input;
+  const agents = state.connection.state === 'starting' ? [] : state.agents;
+  const links = linkApexes({ state, agents, placements: place(agents), extras, owners: input.owners, now });
+  const byId = new Map(agents.map((agent) => [agent.id, agent]));
+  const owned = new Map<string, { generation: number | null; apex: AgentState }[]>();
+  for (const [apexId, bundles] of links.bundles) {
+    const apex = byId.get(apexId);
+    if (!apex) continue;
+    for (const bundle of bundles) {
+      owned.set(bundle.runId, [...(owned.get(bundle.runId) ?? []), { generation: bundle.generation, apex }]);
+    }
+  }
+  const result = new Map<string, AgentState>();
+  for (const [runId, entries] of owned) {
+    const current = extras.runs.get(runId)?.generation ?? null;
+    const found =
+      current !== null
+        ? entries.find((entry) => entry.generation === current)
+        : entries.reduce<(typeof entries)[number] | undefined>(
+            (best, entry) =>
+              best === undefined ||
+              (entry.generation ?? Number.NEGATIVE_INFINITY) > (best.generation ?? Number.NEGATIVE_INFINITY)
+                ? entry
+                : best,
+            undefined,
+          );
+    if (found) result.set(runId, found.apex);
+  }
+  return result;
 }
 
 export function buildApexList(input: BuildApexListInput): ApexListDocument {

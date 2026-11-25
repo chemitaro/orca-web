@@ -4,7 +4,10 @@ import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import type { RunListDocument, RunTreeDocument } from '../../src/runs/model.ts';
 import { type AppOptions, createAppServer } from '../../src/server/app.ts';
-import { run, state } from '../runs/fixture.ts';
+import type { StateDocument } from '../../src/state/model.ts';
+import type { StateWithExtras } from '../../src/state/poller.ts';
+import { orchestration, tabbedWorker } from '../apex/fixture.ts';
+import { agent, fact, repo, run, state, worktree } from '../runs/fixture.ts';
 
 async function withApp(
   options: AppOptions,
@@ -236,8 +239,68 @@ test('木・一覧・プロジェクトの画面は絶対パスのスクリプ�
       assert.equal(reply.status, 200, path);
       assert.equal(reply.headers['content-type'], 'text/javascript; charset=utf-8');
     }
-    const inbox = await send('/');
+    const inbox = await send('/inbox');
     assert.match(inbox.text, /href="\/runs"/);
     assert.match(inbox.text, /id="project-link"/);
   });
+});
+
+test('T-04・T-07: snapshotWithExtras があれば、木と一覧の根を束の頂点で結び、対応表を頂点の一覧と要求の間で保つ', async () => {
+  const chat = agent('chat', {
+    kind: 'chat-tab',
+    paneKey: 'pane-chat',
+    terminalHandle: null,
+    terminal: fact(null),
+    worktreeId: 'wt-b',
+  });
+  const kid = tabbedWorker('kid', 'd1', 't-1', { parentPaneKey: fact('pane-chat'), terminalHandle: null });
+  const o = orchestration({
+    runs: { 'run-a': 1 },
+    tasks: [
+      { id: 't-root', generation: 1 },
+      { id: 't-1', parent: 't-root', generation: 1 },
+    ],
+    dispatches: [{ id: 'd1', task: 't-1', state: 'succeeded' }],
+  });
+  const read = (agents: StateDocument['agents'], generation: number): StateWithExtras => ({
+    state: state({
+      runs: [run({ coordinatorHandle: null, coordinatorWorktreeId: fact(null) })],
+      repos: [repo('repo-a', '仮の作業プロジェクト'), repo('repo-b', '仮の統括プロジェクト')],
+      worktrees: [worktree(), worktree({ id: 'wt-b', repoId: 'repo-b' })],
+      agents,
+      tasks: o.tasks,
+      workers: o.workers,
+    }),
+    extras: o.extras,
+    generation,
+  });
+  // 1回目は生きた辺（kid → chat）で束の持ち主を覚え、2回目からはタブが閉じている。
+  const reads = [read([chat, kid], 1)];
+  let plainReads = 0;
+  await withApp(
+    {
+      runs: {
+        noteViewer() {},
+        async snapshot() {
+          plainReads++;
+          return read([chat], 9).state;
+        },
+        async snapshotWithExtras() {
+          return reads.shift() ?? read([chat], 2);
+        },
+      },
+    },
+    async (send) => {
+      assert.equal((await send('/api/apexes')).status, 200);
+      const tree = (await send('/api/runs/run-a/tree')).json<RunTreeDocument>();
+      assert.equal(tree.root.agentId, 'chat', 'タブが閉じた後も束の頂点で結ぶ');
+      assert.deepEqual(tree.run.coordinatorProject, { id: 'repo-b', name: '仮の統括プロジェクト' });
+      const list = (await send('/api/runs?project=repo-b')).json<RunListDocument>();
+      assert.deepEqual(
+        list.runs.map((r) => [r.id, r.coordinatorProject?.id ?? null]),
+        [['run-a', 'repo-b']],
+      );
+      assert.equal(plainReads, 0);
+    },
+  );
 });
