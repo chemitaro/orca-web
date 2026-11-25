@@ -41,7 +41,7 @@ design: {
 		text: """
 			`paneKey` → エージェントの表を作る（同じ paneKey が2つ以上あれば、その paneKey は親として使わない）。各エージェントの親は「`parentPaneKey` に一致する、自分でないエージェントがちょうど1つ」のときだけ。親をたどって根を求め、たどる途中で同じエージェントに戻れば輪として打ち切る。
 			- 根が「`parentPaneKey` なし・`worker` なし」なら、その根が頂点で、途中のすべてがメンバー（depth は根からの段数）。
-			- 根がそれ以外なら、根と途中のすべてが結べないもの（根の理由：`parentPaneKey` があり親がない → parent_missing、`worker` があり親がない → worker_without_parent、輪 → cycle）。
+			- 根がそれ以外なら、根と途中のすべてが結べないもの。理由は根の理由を途中の節も引き継ぐ（`parentPaneKey` があり親がない → parent_missing、`worker` があり親がない → worker_without_parent）。輪の中の節と、輪にぶら下がる節は、どれも cycle。
 			"""
 		satisfies: ["R-01"]
 	}
@@ -56,7 +56,7 @@ design: {
 		title: "段と並び"
 		text: """
 			最後の活動 = 頂点とメンバーの `stateStartedAt` の最大。どれもなければ頂点の worktree の `lastActivityAt`。どれもなければ null（null は段の末尾、眠っているにしない）。
-			眠っている：status が対応が必要でなく、頂点の `terminal` が `awaiting-restore` か、最後の活動が `now - 7日` より前。
+			眠っている：R-04 のとおり（動き・待ち・猶予のない頂点のうち、復元待ち、done で 7 日より前、unverified だけで 24 時間より前）。
 			以前の完了：status done で、最後の活動が `now - 24時間` より前。
 			段の中は最後の活動の新しい順、同じなら id の順。
 			"""
@@ -65,7 +65,7 @@ design: {
 	"D-05": {
 		title: "API `GET /api/apexes`"
 		text: """
-			`src/server/app.ts` の、同じオリジンだけの道の組（`/api/inbox`・`/api/runs` と同じ判定）に足す。状態の文書は `/api/runs` と同じ `options.runs.snapshot()` から取り、`noteViewer()` を呼ぶ。`?project=` の扱いは受け箱と同じ（512 字まで）。`options.runs` がなければ 503 `apexes_unavailable`。
+			`src/server/app.ts` の、同じオリジンだけの道の組（`/api/inbox`・`/api/runs` と同じ判定）に足す。状態の文書は `/api/runs` と同じ `options.runs.snapshot()` から取り、`noteViewer()` を呼ぶ。`?project=` は 512 字まで。頂点と結べないものを、その worktree の repo の id で絞り、counts は絞った後の items で数える。`options.runs` がなければ 503 `apexes_unavailable`。
 			`stale` は、状態の文書の `stale` が真か、`connection.state` が `connected` でないとき真。
 			"""
 		satisfies: ["R-06", "R-03", "F-01"]

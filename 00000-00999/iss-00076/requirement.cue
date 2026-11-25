@@ -51,8 +51,9 @@ requirements: {
 			状態の印は受け箱の `agentMark`（working・blocked・waiting・done・sleeping・unknown）を使う。上から順に最初に当たったもの：
 			1. 対応が必要：頂点が blocked か waiting（理由 `apex_blocked`・`apex_waiting`）。または、メンバーが blocked か waiting で、`stateStartedAt` から 20 秒以上たった（`stateStartedAt` がなければすぐ）。端末のタブのメンバーは `terminal` が `attached` のものだけ（理由 `member_blocked`・`member_waiting`）。
 			2. 作業中：チームの誰か（頂点かメンバー）が working（理由 `working`、頂点が monitoring なら `monitoring`、メンバーだけが動いていれば `members_working`）。または、メンバーの許可待ち・入力待ちが 20 秒の猶予の中。
-			3. 頂点の印が unknown：作業中にし、札 `unverified` を付ける。
-			4. 完了：それ以外（頂点が done か sleeping で、チームに動いている・待っているものがない）。
+			3. 頂点の印が unknown：作業中にする（理由なし）。
+			4. 完了：それ以外（頂点が done か sleeping で、チームに動いている・待っているものがない）。理由は印に合わせて `done` か `sleeping`。
+			`reasons` には、当たった規則の理由だけでなく、当てはまる理由をすべてこの順で並べる（例：頂点が waiting でメンバーが working なら `["apex_waiting", "members_working"]`）。札 `unverified` は、どの規則が当たっても、頂点の印が unknown なら付ける。
 			"""
 		acceptance: [
 			"頂点が done でメンバーが working の頂点は作業中（理由 members_working）",
@@ -64,11 +65,11 @@ requirements: {
 	"R-03": {
 		title: "読めない・古いときを完了と区別する"
 		text: """
-			- 頂点の印が unknown なら完了にせず、作業中に札 `unverified`（「確かめられない」）。
+			- 頂点の印が unknown（state が null で、terminal が `awaiting-restore` でない）なら完了にせず、作業中に札 `unverified`（「確かめられない」）。state が null で復元待ちの頂点は、`agentMark` のとおり sleeping（タブが復元されておらず動いていないことが分かる）として完了・眠っているに入る。
 			- 状態の文書が `stale` か接続が `connected` でないとき、文書に `stale: true` を立て、画面に帯を出す（状態は最後に読めた値のまま）。
 			"""
 		acceptance: [
-			"state が null の頂点（配下なし）は作業中・札 unverified で、完了の数に入らない",
+			"state が null で復元待ちでない頂点（配下なし）は作業中・札 unverified で、完了の数に入らない。state が null で復元待ちの頂点は完了（理由 sleeping）で眠っているに入る",
 			"状態の文書が stale のとき、一覧の文書の stale が真で、画面に「Orca を読めていません」の帯が出る",
 		]
 	}
@@ -76,14 +77,15 @@ requirements: {
 		title: "完了と古いものを畳む段に分ける"
 		text: """
 			画面の段は5つ：対応が必要、作業中、完了（最近）、以前の完了、眠っている。ほかに結べない仕事。
-			- 眠っている：頂点の `terminal` が `awaiting-restore`、または最後の活動（頂点とメンバーの `stateStartedAt` の最大、なければ worktree の `lastActivityAt`）が 7 日より前。対応が必要の頂点は眠っているにしない。
+			- 眠っている：チームに動いている・待っている・猶予の中のものがない頂点（status が done か、status が working で理由がなく札 unverified だけのもの）のうち、次のどれか。頂点の `terminal` が `awaiting-restore`。status が done で最後の活動（頂点とメンバーの `stateStartedAt` の最大、なければ worktree の `lastActivityAt`）が 7 日より前。札 unverified だけの頂点で最後の活動が 24 時間より前（Epic R-03）。
 			- 以前の完了：完了で、最後の活動が 24 時間より前（眠っているでないもの）。
 			- 完了（最近）：完了で、最後の活動が 24 時間以内。
 			段の中は、最後の活動の新しい順。以前の完了・眠っている・結べない仕事は畳んで出す。
 			"""
 		acceptance: [
 			"25 時間前に done になった頂点は以前の完了、復元待ちの頂点は眠っている、に入る",
-			"unverified の頂点で 8 日動きがないものは眠っているに入る",
+			"unverified だけの頂点で 25 時間動きがないものは眠っているに入り、23 時間なら作業中のまま",
+			"頂点が復元待ちでもメンバーが working なら作業中の段に出て、眠っているに入らない",
 		]
 	}
 	"R-05": {
@@ -98,7 +100,7 @@ requirements: {
 		title: "API を同じオリジンだけに配り、プロジェクトで絞れる"
 		acceptance: [
 			"`GET /api/apexes` が `orca-web.apexes/v1` を返し、別のオリジンは 403、GET 以外は 405",
-			"`?project=<repo の id>` で、その repo の worktree にいる頂点だけになる（513 字以上は 400）",
+			"`?project=<repo の id>` で、その repo の worktree にいる頂点と結べないものだけになり、counts は絞った後の items で数える（513 字以上は 400）",
 		]
 	}
 	"R-07": {

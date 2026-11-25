@@ -34,12 +34,12 @@ steps: {
 
 tests: {
 	"T-01": {title: "分け方：親・子・孫の木で、子（depth 1）と孫（depth 2）が頂点のメンバーになり、頂点が1件。単独のエージェントは配下 0 の頂点。数の合計がエージェントの数に一致", verifies: ["R-01"]}
-	"T-02": {title: "結べないもの：parentPaneKey の親がない子（parent_missing）、worker があり親のない子（worker_without_parent）、2つが互いを親にする輪（cycle）が unlinked に出て、頂点にならない。同じ paneKey が2つあるとき、その paneKey を親にする子は結べないもの", verifies: ["R-01"]}
-	"T-03": {title: "状態：頂点 done・メンバー working → working（members_working）。頂点 waiting・メンバー working → needs_action（apex_waiting）。頂点 working かつ monitoring → working（monitoring）。頂点もメンバーも done → done", verifies: ["R-02"]}
+	"T-02": {title: "結べないもの：parentPaneKey の親がない子（parent_missing）、worker があり親のない子（worker_without_parent）、2つが互いを親にする輪（cycle）が unlinked に出て、頂点にならない。parent_missing の根の子も parent_missing、輪にぶら下がる子も cycle。同じ paneKey が2つあるとき、その paneKey を親にする子は結べないもの", verifies: ["R-01"]}
+	"T-03": {title: "状態：頂点 done・メンバー working → working（members_working）。頂点 waiting・メンバー working → needs_action（apex_waiting）。頂点 working かつ monitoring → working（monitoring）。頂点もメンバーも done → done（reasons done）。reasons は当てはまるものをすべて決めた順で並べ、等しさで確かめる。メンバーが working で頂点の state が null → working、tags に unverified", verifies: ["R-02"]}
 	"T-04": {title: "メンバーの猶予：terminal attached のメンバーが blocked で stateStartedAt から 19 秒 → working（member_grace）、20 秒 → needs_action（member_blocked）、stateStartedAt なし → needs_action。terminal が awaiting-restore のメンバーの blocked は数えない。構造化 Chat のメンバーは terminal を問わない", verifies: ["R-02"]}
 	"T-05": {title: "不明と古さ：state null・配下なしの頂点 → working・tags に unverified・counts.done に入らない。状態の文書の stale 真、または connection が unreachable → 一覧の stale 真", verifies: ["R-03"]}
-	"T-06": {title: "段：最後の活動が 23 時間前の done → done_recent、25 時間前 → done_older、8 日前 → sleeping、terminal awaiting-restore → sleeping、needs_action は 8 日前でも needs_action。unverified で 8 日前 → sleeping。段の中は新しい順。文書に paneKey・terminalHandle・パスの文字列がない", verifies: ["R-04", "F-02"]}
-	"T-07": {title: "API：GET が 200 と schema `orca-web.apexes/v1`、別のオリジンの Origin は 403、POST は 405、`?project=` で絞られ、513 字は 400、runs の部品がなければ 503 apexes_unavailable。CORS の見出しがない", verifies: ["R-06", "F-01"]}
+	"T-06": {title: "段：最後の活動が 23 時間前の done → done_recent、25 時間前 → done_older、8 日前 → sleeping、terminal awaiting-restore → sleeping、needs_action は 8 日前でも needs_action。unverified だけで 25 時間前 → sleeping、23 時間前 → working。頂点が awaiting-restore でもメンバーが working → working の段。state null で awaiting-restore の頂点 → done（reasons sleeping）で sleeping、counts.done に入る。段の中は新しい順。文書に paneKey・terminalHandle・パスの文字列がない", verifies: ["R-04", "F-02"]}
+	"T-07": {title: "API：GET が 200 と schema `orca-web.apexes/v1`、別のオリジンの Origin は 403、POST は 405、`?project=` で items と unlinked が絞られ counts が絞った後の数になり、513 字は 400、runs の部品がなければ 503 apexes_unavailable。CORS の見出しがない", verifies: ["R-06", "F-01"]}
 	"T-08": {title: "view：段の並び（開く3つと畳む3つ）、見出しの数、理由の札の言葉、配下の数（配下 0 なら出さない）、stale の帯、行のリンク先 `/embed/agent?id=<id>`", verifies: ["R-05"]}
 	"T-09": {title: "題名：対応が必要 2 → `(2) 指揮 — orca-web`、0 → `指揮 — orca-web`（view の純粋な関数で確かめる）", verifies: ["R-07"]}
 	"T-10": {title: "dom：描いた木に innerHTML を使わず、リンクが `_blank`・`noopener noreferrer`。入口の apexes.js が visibilitychange で読みを止め、見えたら読み直す（既存の入口のテストと同じく、ソースの確かめか注入した口で）", verifies: ["R-05", "R-07"]}
