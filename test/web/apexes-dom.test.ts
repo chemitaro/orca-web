@@ -30,6 +30,12 @@ class FakeElement {
   readonly attrs: Record<string, string> = {};
   readonly children: FakeElement[] = [];
   readonly dataset: Record<string, string> = {};
+  readonly style = {
+    props: {} as Record<string, string>,
+    setProperty(name: string, value: string) {
+      this.props[name] = String(value);
+    },
+  };
   className = '';
   title = '';
   href = '';
@@ -111,6 +117,7 @@ const fakeDocument = {
 };
 
 const DANGER = '<script>alert(1)</script><img src=x onerror=alert(2)>';
+const SHORT_DANGER = '<script>alert(1)</script>';
 const ALLOWED = new Set([
   'SECTION',
   'H2',
@@ -728,4 +735,180 @@ test('iss-00080 T-04：メンバーの枠の間の［頂点に伝える］は頂
     { frame: '/embed/agent?id=apex', message: { type: 'orca-web:draft', text }, origin: 'http://127.0.0.1:8791' },
   ]);
   sender.frameCreated(null);
+});
+
+test('iss-00092 T-03：頂点の行の選ぶボタンの中に稼働中の内訳の木を textContent だけで描き、選びの動きは変えない', () => {
+  const doc = {
+    items: [
+      {
+        id: 'apex',
+        kind: 'terminal',
+        agentType: 'claude',
+        title: '統括',
+        worktreeId: 'w',
+        group: 'working',
+        mark: 'working',
+        reasons: ['members_working'],
+        tags: [],
+        badges: [],
+        counts: { total: 3, working: 1, waiting: 0, done: 2 },
+        lastActivityAt: new Date(NOW).toISOString(),
+        members: [{ id: 'impl', agentType: 'codex' }],
+        team: [
+          {
+            key: 'dispatch:old',
+            kind: 'dispatch',
+            agentId: null,
+            dispatchId: 'old',
+            parentKey: null,
+            depth: 1,
+            title: '終わった',
+            status: 'done',
+            createdAt: null,
+            completedAt: null,
+            stateStartedAt: null,
+          },
+          {
+            key: 'dispatch:owner',
+            kind: 'dispatch',
+            agentId: null,
+            dispatchId: 'owner',
+            parentKey: null,
+            depth: 1,
+            title: SHORT_DANGER,
+            status: 'done',
+            createdAt: null,
+            completedAt: null,
+            stateStartedAt: null,
+          },
+          {
+            key: 'agent:impl',
+            kind: 'agent',
+            agentId: 'impl',
+            dispatchId: null,
+            parentKey: 'dispatch:owner',
+            depth: 2,
+            title: '実装担当',
+            status: 'working',
+            createdAt: null,
+            completedAt: null,
+            stateStartedAt: new Date(NOW - 5 * 60_000).toISOString(),
+          },
+        ],
+      },
+      {
+        id: 'idle',
+        kind: 'terminal',
+        agentType: 'claude',
+        title: '暇',
+        worktreeId: 'w',
+        group: 'working',
+        mark: 'working',
+        reasons: [],
+        tags: [],
+        badges: [],
+        counts: { total: 1, working: 0, waiting: 0, done: 1 },
+        lastActivityAt: null,
+        members: [],
+        team: [
+          {
+            key: 'dispatch:x',
+            kind: 'dispatch',
+            agentId: null,
+            dispatchId: 'x',
+            parentKey: null,
+            depth: 1,
+            title: '終わった',
+            status: 'done',
+            createdAt: null,
+            completedAt: null,
+            stateStartedAt: null,
+          },
+        ],
+      },
+    ],
+    unlinked: [],
+    counts: {},
+    stale: false,
+    project: null,
+  };
+  const view = buildApexesView(doc, { now: NOW });
+  const section = renderSection(
+    fakeDocument,
+    view.sections.find((s: { key: string }) => s.key === 'working'),
+  ) as FakeElement;
+  const nodes = section.all();
+  for (const tag of new Set(nodes.map((e) => e.tagName))) assert.ok(ALLOWED.has(tag), `unexpected element ${tag}`);
+  const buttons = nodes.filter((e) => e.tagName === 'BUTTON');
+  assert.deepEqual(
+    buttons.map((b) => b.dataset.apex),
+    ['apex', 'idle'],
+  );
+  const trees = nodes.filter((e) => e.className === 'apex-live');
+  assert.equal(trees.length, 1, '稼働中のない頂点には木を出さない');
+  const [tree] = trees;
+  const [button] = buttons;
+  assert.ok(tree && button);
+  assert.ok(button.all().includes(tree), '木は選ぶボタンの中');
+  const rows = tree.all().filter((e) => e.dataset.liveKey !== undefined);
+  assert.deepEqual(
+    rows.map((e) => [e.dataset.liveKey, e.style.props['--depth'], e.className]),
+    [
+      ['dispatch:owner', '1', 'apex-live-node apex-live-node--dim'],
+      ['agent:impl', '2', 'apex-live-node'],
+    ],
+  );
+  const [owner, impl] = rows;
+  assert.ok(owner && impl);
+  assert.ok(owner.textContent.includes(SHORT_DANGER));
+  assert.ok(impl.textContent.includes('実装担当'));
+  assert.ok(impl.textContent.includes('作業中'));
+  assert.ok(impl.textContent.includes('5m'));
+  assert.ok(
+    impl.all().some((e) => e.tagName === 'svg'),
+    'エージェントの節は agentType のアイコン',
+  );
+  assert.ok(
+    owner.all().some((e) => e.className === 'apex-live-dot'),
+    'Dispatch の節は小さな印',
+  );
+  assert.ok(!tree.textContent.includes('終わった'));
+});
+
+test('iss-00092 T-03：上限を超えた木は「ほか n」を添える', () => {
+  const team = Array.from({ length: 12 }, (_, i) => ({
+    key: `dispatch:d${i}`,
+    kind: 'dispatch',
+    agentId: null,
+    dispatchId: `d${i}`,
+    parentKey: null,
+    depth: 1,
+    title: `仕事 ${i}`,
+    status: 'live',
+    createdAt: null,
+    completedAt: null,
+    stateStartedAt: null,
+  }));
+  const item = {
+    id: 'apex',
+    group: 'working',
+    mark: 'working',
+    reasons: [],
+    tags: [],
+    badges: [],
+    counts: {},
+    members: [],
+    team,
+  };
+  const view = buildApexesView({ items: [item], unlinked: [], counts: {}, stale: false, project: null }, { now: NOW });
+  const section = renderSection(
+    fakeDocument,
+    view.sections.find((s: { key: string }) => s.key === 'working'),
+  ) as FakeElement;
+  const nodes = section.all();
+  assert.equal(nodes.filter((e) => e.dataset.liveKey !== undefined).length, 8);
+  assert.deepEqual(
+    nodes.filter((e) => e.className === 'apex-live-more').map((e) => e.textContent),
+    ['ほか 4'],
+  );
 });
