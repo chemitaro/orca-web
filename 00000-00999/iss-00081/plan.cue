@@ -3,8 +3,8 @@ package spec
 goal: "`/apexes` で、対応が必要の favicon と、条件を満たしたときだけの1回の通知がテストで確かめられている。"
 
 steps: {
-	"S-01": {title: "favicon（D-01）", text: "対象：`web/favicon.svg`・`web/favicon-alert.svg`、`src/server/app.ts` の STATIC_FILES、`web/apexes.html`・`web/apexes.js`・`web/apexes-view.js`（href を選ぶ純粋な関数）、テスト。確かめ：T-01", realizes: ["R-01"], session: "impl"}
-	"S-02": {title: "通知の判断と出す口（D-02、D-03）", text: "対象：新しい `web/apexes-notify.js` とテスト、`web/apexes.js`・`web/apexes-dom.js`（D-04 の見えない間の読みを含む）、STATIC_FILES、README の追記。確かめ：T-02〜T-05。実装担当の最後の手順", realizes: ["R-02", "R-03", "F-01"], after: ["S-01"], session: "impl"}
+	"S-01": {status: "done", title: "favicon（D-01）", text: "対象：`web/favicon.svg`・`web/favicon-alert.svg`、`src/server/app.ts` の STATIC_FILES、`web/apexes.html`・`web/apexes.js`・`web/apexes-view.js`（href を選ぶ純粋な関数）、テスト。確かめ：T-01", realizes: ["R-01"], session: "impl"}
+	"S-02": {status: "done", title: "通知の判断と出す口（D-02、D-03）", text: "対象：新しい `web/apexes-notify.js` とテスト、`web/apexes.js`・`web/apexes-dom.js`（D-04 の見えない間の読みを含む）、STATIC_FILES、README の追記。確かめ：T-02〜T-05。実装担当の最後の手順", realizes: ["R-02", "R-03", "F-01"], after: ["S-01"], session: "impl"}
 }
 
 tests: {
