@@ -7,6 +7,8 @@ import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { buildApexList } from '../apex/build.ts';
+import { ApexVerdictMemo } from '../apex/memo.ts';
+import { BundleOwners } from '../apex/owners.ts';
 import { buildInbox } from '../inbox/classify.ts';
 import type { InboxInputs } from '../inbox/model.ts';
 import type { OpenErrorCode, OpenOutcome, OpenRequest } from '../orca/open.ts';
@@ -15,6 +17,7 @@ import { buildRunList, buildRunTree } from '../runs/tree.ts';
 import type { SendFailure, SendService } from '../send/service.ts';
 import { checkSelection, FIELDS } from '../state/fields.ts';
 import type { StateDocument } from '../state/model.ts';
+import type { StateWithExtras } from '../state/poller.ts';
 import type { SettingsStore } from '../state/settings.ts';
 import { buildWorktreeSummary } from '../summary/build.ts';
 import { FirstSeenStartTimes } from '../summary/started.ts';
@@ -26,6 +29,8 @@ import type { ListenerStatus } from './listen.ts';
 export interface StateSource {
   noteViewer(): void;
   snapshot(): Promise<StateDocument>;
+  /** 頂点の一覧のための、同じ読みの内部の値と読みの世代。なければ頂点の一覧は生きた辺だけで結ぶ。 */
+  snapshotWithExtras?(): Promise<StateWithExtras>;
 }
 
 export interface AppOptions {
@@ -410,6 +415,9 @@ function pagePolicy(page: 'index' | 'embed', frameAncestors: string): string {
 export function createAppHandler(options: AppOptions = {}): (req: IncomingMessage, res: ServerResponse) => void {
   const readOrigins = new Set(options.readOrigins ?? []);
   const firstSeen = new FirstSeenStartTimes();
+  // 束 → 頂点の対応表と最後の A3〜A6 の判定。app の生存の間に1つ。メモリだけに持つ。
+  const bundleOwners = new BundleOwners();
+  const verdictMemo = new ApexVerdictMemo();
   const frameAncestors = readOrigins.size > 0 ? [...readOrigins].join(' ') : "'none'";
   const frameAncestorsWithSelf = ["'self'", ...readOrigins].join(' ');
   const webDir = options.webDir ?? DEFAULT_WEB_DIR;
@@ -774,7 +782,14 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
             return;
           }
           options.runs.noteViewer();
-          sendJson(res, 200, buildApexList({ state: await options.runs.snapshot(), now: Date.now(), project }));
+          const now = Date.now();
+          if (options.runs.snapshotWithExtras) {
+            const { state, extras, generation } = await options.runs.snapshotWithExtras();
+            bundleOwners.sweep(state, extras, generation, now);
+            sendJson(res, 200, buildApexList({ state, now, project, extras, owners: bundleOwners, memo: verdictMemo }));
+          } else {
+            sendJson(res, 200, buildApexList({ state: await options.runs.snapshot(), now, project }));
+          }
         } else if (pathname === '/api/inbox') {
           const project = url.searchParams.get('project');
           if (project !== null && project.length > 512) {

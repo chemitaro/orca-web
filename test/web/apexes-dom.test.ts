@@ -545,3 +545,34 @@ test('T-07：入口は見た時刻を保存の口で読み書きし、選びを�
   assert.match(entry, /seenTracker\.show\(selection\.id, pane\.remember\?\.lastActivityAt \?\? null\)/);
   assert.match(entry, /seen: seenMap/);
 });
+
+test('T-11: 札は理由の後に chip badge で描き、結べない束の行は /runs/<id> を新しいタブで開く', () => {
+  const doc = buildApexList({
+    state: input({ agents: [agent('a', { state: fact('done') })] }).state,
+    now: NOW,
+    project: null,
+  });
+  const items = doc.items.map((item) => ({ ...item, badges: [{ kind: 'remaining_tasks' as const, count: 2 }] }));
+  const view = buildApexesView(
+    {
+      ...doc,
+      items,
+      unlinked: [
+        { id: 'run-b#1', kind: 'bundle', runId: 'run-b', objective: DANGER, generation: 1, live: 1, questions: 0 },
+      ],
+    },
+    { now: NOW },
+  );
+  const nodes = view.sections.flatMap((s: unknown) => (renderSection(fakeDocument, s) as FakeElement).all());
+  const badges = nodes.filter((e: FakeElement) => e.className === 'chip badge');
+  assert.deepEqual(
+    badges.map((e: FakeElement) => e.textContent),
+    ['残りの task 2'],
+  );
+  const bundleLink = nodes.find((e: FakeElement) => e.tagName === 'A' && e.href === '/runs/run-b');
+  assert.ok(bundleLink);
+  assert.equal(bundleLink.target, '_blank');
+  assert.equal(bundleLink.rel, 'noopener noreferrer');
+  assert.ok(bundleLink.textContent.includes(DANGER));
+  assert.ok(bundleLink.textContent.includes('生きた仕事 1'));
+});

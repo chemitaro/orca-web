@@ -38,7 +38,7 @@ function newTabLink(doc, href, text, className) {
 
 /**
  * 1つの行。頂点の行は、押すと右のペインに出す選ぶボタン（data-apex）と、小さな「新しいタブで開く」のリンク。
- * 結べない行は、行の全体が /embed/agent?id= を新しいタブで開くリンク。
+ * 結べない行は、行の全体が /embed/agent?id=（結べない束は /runs/<id>）を新しいタブで開くリンク。
  */
 export function renderRow(doc, row) {
   const li = make(doc, 'li', null, row.selected ? 'item apex apex--selected' : 'item apex');
@@ -81,10 +81,12 @@ export function renderRow(doc, row) {
   if (row.elapsed) meta.append(make(doc, 'span', row.elapsed, 'elapsed'));
   a.append(meta);
 
-  if (row.reasons.length > 0 || row.tags.length > 0) {
+  const badges = row.badges ?? [];
+  if (row.reasons.length > 0 || row.tags.length > 0 || badges.length > 0) {
     const chips = make(doc, 'span', null, 'reason');
     for (const text of row.reasons) chips.append(make(doc, 'span', text, 'chip'));
     for (const text of row.tags) chips.append(make(doc, 'span', text, 'chip tag'));
+    for (const text of badges) chips.append(make(doc, 'span', text, 'chip badge'));
     a.append(chips);
   }
   li.append(a);
