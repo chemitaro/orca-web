@@ -368,3 +368,53 @@ test('A4 は問いを待つ Dispatch を止まった仕事に数えない（A3 �
   c.dispatches = [...(c.dispatches ?? []), { id: 'd2', task: 't-root', state: 'working' }];
   assert.ok(apex(run(c)).reasons.includes('stalled'));
 });
+
+test('cp1：A6 は、Run の今の世代でなく生きた Dispatch のない古い世代の束の失敗では鳴らない（札には使う）', () => {
+  const x = coordinator();
+  const y = agent('y', { paneKey: 'pane-y', state: fact('working') });
+  const c: Case = {
+    agents: [x, y],
+    runs: { 'run-a': 2 },
+    tasks: [
+      { id: 't-root-1', paneKey: 'pane-c', generation: 1, status: 'completed' },
+      { id: 't-1', parent: 't-root-1', generation: 1, status: 'failed', completedAt: ago(600) },
+      { id: 't-root-2', paneKey: 'pane-y', generation: 2 },
+    ],
+    dispatches: [{ id: 'd1', task: 't-1', state: 'failed' }],
+    patch: {},
+  };
+  const old = apex(run({ ...c, agents: [coordinator({ stateStartedAt: fact(ago(3600)) }), y] }));
+  assert.equal(old.status, 'done');
+  assert.ok(!old.reasons.includes('failed'));
+  assert.deepEqual(old.badges, [{ kind: 'failed_members', count: 1 }]);
+  // 今の世代の束なら鳴る。
+  const current = apex(run({ ...c, runs: { 'run-a': 1 } }));
+  assert.ok(current.reasons.includes('failed'));
+  // 古い世代でも、束に生きた Dispatch があれば見る（タブのある作業者の Dispatch は付け替えない）。
+  const kid = tabbedWorker('kid', 'd-live', 't-root-1', { parentPaneKey: fact('pane-c'), state: fact('working') });
+  const live = apex(
+    run({
+      ...c,
+      agents: [coordinator(), y, kid],
+      dispatches: [
+        { id: 'd-live', task: 't-root-1', state: 'working' },
+        { id: 'd1', task: 't-1', state: 'failed' },
+      ],
+    }),
+  );
+  assert.ok(live.reasons.includes('failed'));
+});
+
+test('cp1：failed_members は task ごとの最後の Dispatch が failed のものだけを数え、再実行で直った task の古い失敗を除く', () => {
+  const c = failCase(700);
+  c.dispatches = [
+    { id: 'd1', task: 't-1', state: 'failed' },
+    { id: 'd2', task: 't-1', state: 'succeeded' },
+  ];
+  assert.deepEqual(apex(run(c)).badges, []);
+  c.dispatches = [
+    { id: 'd2', task: 't-1', state: 'succeeded' },
+    { id: 'd1', task: 't-1', state: 'failed' },
+  ];
+  assert.deepEqual(apex(run(c)).badges, [{ kind: 'failed_members', count: 1 }]);
+});

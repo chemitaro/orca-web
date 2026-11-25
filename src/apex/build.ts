@@ -224,17 +224,29 @@ function judgeWork(apex: AgentState, members: readonly AgentState[], work: Work,
     if (live.length > 0 || asks.length > 0 || gates.length > 0) found.add('apex_closed');
   }
   // A6 新しい失敗：task ごとに最後の Dispatch が failed で、頂点の状態が始まった後に終わった。
+  // Run の今の世代でなく生きた Dispatch もない古い世代の束は、終わった履歴なので見ない（R-04。札には使う）。
   const started = time(apexStart);
   if (started !== null && !apexMoving) {
-    for (const bundle of work.bundles)
-      for (const task of bundle.tasks) {
-        const last = bundle.dispatches.filter((worker) => worker.taskId === task.id).at(-1);
-        if (last?.state.value?.toLowerCase() !== 'failed') continue;
+    for (const bundle of work.bundles) {
+      const current = work.extras.runs.get(bundle.runId)?.generation ?? null;
+      if (current !== null && bundle.generation !== current && !bundle.dispatches.some(isLiveDispatch)) continue;
+      for (const { task } of lastFailed(bundle)) {
         const completed = time(task.completedAt.value);
         if (completed === null || completed <= started) continue;
         hit(completed, 'failed');
       }
+    }
   }
+}
+
+/** task ごとに最後の Dispatch（worker-list の並び）が failed のもの。再実行で直った task の古い失敗は含まない。 */
+function lastFailed(bundle: Bundle): { task: Bundle['tasks'][number]; worker: WorkerState }[] {
+  const result: { task: Bundle['tasks'][number]; worker: WorkerState }[] = [];
+  for (const task of bundle.tasks) {
+    const last = bundle.dispatches.filter((worker) => worker.taskId === task.id).at(-1);
+    if (last?.state.value?.toLowerCase() === 'failed') result.push({ task, worker: last });
+  }
+  return result;
 }
 
 function judge(apex: AgentState, members: readonly AgentState[], work: Work, now: number) {
@@ -289,9 +301,7 @@ function badgesOf(
     if (ci === 'failure') ciFailed++;
     else if (ci === null || ci === 'success') merge++;
   }
-  const failed = bundles
-    .flatMap((bundle) => bundle.dispatches)
-    .filter((w) => w.state.value?.toLowerCase() === 'failed');
+  const failed = bundles.flatMap(lastFailed).map(({ worker }) => worker);
   const remaining = bundles
     .flatMap((bundle) => bundle.tasks)
     .filter((task) => task.status.value === null || !SETTLED_TASK_STATES.has(task.status.value));
