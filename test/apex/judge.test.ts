@@ -418,3 +418,89 @@ test('cp1：failed_members は task ごとの最後の Dispatch が failed の�
   ];
   assert.deepEqual(apex(run(c)).badges, [{ kind: 'failed_members', count: 1 }]);
 });
+
+// iss-00091：作業を続けている作業者（activity working）の問いは対応が必要にしない。
+const workingAsk = (attention: string[], activity: string | null, state = 'working'): Case => ({
+  tasks: [{ id: 't-root', paneKey: 'pane-c', createdAt: ago(600) }],
+  dispatches: [{ id: 'd1', task: 't-root', state, attention, activity }],
+});
+
+test('iss-00091 T-02: input で activity working の Dispatch だけなら、90 秒を過ぎても作業中で question_working。止まった仕事にもしない', () => {
+  for (const attention of [['input'], ['approval'], ['input', 'approval']]) {
+    const item = apex(run(workingAsk(attention, 'working')));
+    assert.equal(item.status, 'working', attention.join());
+    assert.deepEqual(item.reasons, ['question_working', 'live_work'], attention.join());
+  }
+});
+
+test('iss-00091 T-02: activity done・読めない・知らない値の Dispatch は、今のとおり 90 秒で question・decision', () => {
+  for (const activity of ['done', 'idle', null, 'novel']) {
+    const ask = apex(run(workingAsk(['input'], activity, 'blocked')));
+    assert.equal(ask.status, 'needs_action', String(activity));
+    assert.ok(ask.reasons.includes('question'), String(activity));
+    assert.ok(!ask.reasons.includes('question_working'), String(activity));
+    const gate = apex(run(workingAsk(['approval'], activity, 'blocked')));
+    assert.equal(gate.status, 'needs_action', String(activity));
+    assert.ok(gate.reasons.includes('decision'), String(activity));
+  }
+});
+
+test('iss-00091 T-02: working と done の Dispatch が並ぶと、done の問いで question、working の問いで question_working', () => {
+  const item = apex(
+    run({
+      tasks: [
+        { id: 't-root', paneKey: 'pane-c', createdAt: ago(600) },
+        { id: 't-2', paneKey: 'pane-c', createdAt: ago(600) },
+      ],
+      dispatches: [
+        { id: 'd1', task: 't-root', state: 'working', attention: ['input'], activity: 'working' },
+        { id: 'd2', task: 't-2', state: 'blocked', attention: ['input'], activity: 'done' },
+      ],
+    }),
+  );
+  assert.equal(item.status, 'needs_action');
+  assert.deepEqual(item.reasons, ['question', 'question_working', 'live_work']);
+});
+
+test('iss-00091 T-02: A5 は activity working の問いも元のとおり数える（閉じたタブの頂点は apex_closed）', () => {
+  const item = apex(
+    run({
+      ...workingAsk(['input'], 'working', 'succeeded'),
+      agents: [coordinator({ terminal: fact('awaiting-restore') })],
+    }),
+  );
+  assert.equal(item.status, 'needs_action');
+  assert.ok(item.reasons.includes('apex_closed'));
+  assert.ok(item.reasons.includes('question_working'));
+});
+
+test('iss-00091 T-03: 鮮度が古い間も question_working は memo から残り、対応が必要にならない', () => {
+  const memo = new ApexVerdictMemo();
+  assert.ok(apex(run({ ...workingAsk(['input'], 'working'), memo })).reasons.includes('question_working'));
+  for (const stale of [['tasks'], ['workers']] as const) {
+    const item = apex(run({ ...workingAsk(['input'], 'working'), stale: [...stale], memo }));
+    assert.equal(item.status, 'working', stale[0]);
+    assert.ok(item.reasons.includes('question_working'), stale[0]);
+    assert.ok(!item.reasons.includes('question'), stale[0]);
+  }
+});
+
+test('iss-00091 T-04: questions の各項目の working は activity から決まる', () => {
+  const item = apex(
+    run({
+      tasks: [
+        { id: 't-root', paneKey: 'pane-c', createdAt: ago(600), title: '仮の題' },
+        { id: 't-2', paneKey: 'pane-c', createdAt: ago(600), title: '仮の題2' },
+      ],
+      dispatches: [
+        { id: 'd1', task: 't-root', state: 'working', attention: ['input', 'approval'], activity: 'working' },
+        { id: 'd2', task: 't-2', state: 'blocked', attention: ['input'], activity: null },
+      ],
+    }),
+  );
+  assert.deepEqual(item.questions, [
+    { dispatchId: 'd1', taskTitle: '仮の題', kind: 'ask', working: true },
+    { dispatchId: 'd2', taskTitle: '仮の題2', kind: 'ask', working: false },
+    { dispatchId: 'd1', taskTitle: '仮の題', kind: 'gate', working: true },
+  ]);
+});

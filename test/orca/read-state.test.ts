@@ -143,6 +143,7 @@ test('run-list と worker-list はカーソルを最後まで読む', async () =
     worktreeId: WT1,
     structuredSessionId: null,
     attentionCategories: ['input'],
+    activity: 'working',
   });
 });
 
@@ -368,10 +369,14 @@ test('run の consumer_generation、task の created_by_pane_key・created_by_ru
           {
             dispatchId: 'd1',
             workerState: 'running',
-            projection: { attention: { requiresAction: true, categories: ['input', 'approval', 'novel', 3] } },
+            projection: {
+              attention: { requiresAction: true, categories: ['input', 'approval', 'novel', 3] },
+              stage: { activity: 'working' },
+            },
           },
-          { dispatchId: 'd2', projection: { attention: { categories: 'input' } } },
-          { dispatchId: 'd3' },
+          { dispatchId: 'd2', projection: { attention: { categories: 'input' }, stage: { activity: 7 } } },
+          { dispatchId: 'd3', projection: { stage: 'working' } },
+          { dispatchId: 'd4' },
         ],
         page: { hasMore: false },
       }),
@@ -396,11 +401,12 @@ test('run の consumer_generation、task の created_by_pane_key・created_by_ru
   const workers = await r.workers();
   assert.ok(workers.ok);
   assert.deepEqual(
-    workers.data.map((w) => [w.workerState, w.attentionCategories]),
+    workers.data.map((w) => [w.workerState, w.attentionCategories, w.activity]),
     [
-      ['running', ['input', 'approval', 'novel']],
-      [null, []],
-      [null, []],
+      ['running', ['input', 'approval', 'novel'], 'working'],
+      [null, [], null],
+      [null, [], null],
+      [null, [], null],
     ],
   );
 });

@@ -119,3 +119,24 @@ test('T-08：/apexes-cards-view.js を STATIC_FILES に登録する', () => {
     /'\/apexes-cards-view\.js': \{ file: 'apexes-cards-view\.js', type: 'text\/javascript; charset=utf-8' \}/,
   );
 });
+
+test('iss-00091 T-04：working の質問のカードは「作業を続けながらの質問」と添え、［頂点に伝える］は今のとおり', () => {
+  const cards = buildApexCards(
+    item({
+      reasons: ['question_working', 'question'],
+      questions: [
+        { dispatchId: 'd1', taskTitle: '調べる', kind: 'ask', working: true },
+        { dispatchId: 'd2', taskTitle: '決める', kind: 'gate', working: false },
+        { dispatchId: 'd3', taskTitle: '古い', kind: 'ask' },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    cards.map((card) => [card.text, 'note' in card ? card.note : null, 'action' in card ? card.action.label : null]),
+    [
+      ['調べるの質問（ask）', '作業を続けながらの質問', '頂点に伝える'],
+      ['決めるの判断（gate）', null, '頂点に伝える'],
+      ['古いの質問（ask）', null, '頂点に伝える'],
+    ],
+  );
+});

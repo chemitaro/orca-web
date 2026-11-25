@@ -6,8 +6,8 @@ export interface OrchestrationExtras {
   runs: Map<string, { generation: number | null }>;
   /** task の id → 作成者の paneKey と、作成の時の Run の世代。 */
   tasks: Map<string, { paneKey: string | null; generation: number | null }>;
-  /** Dispatch の id → workerState と attention の種類。 */
-  workers: Map<string, { workerState: string | null; attention: string[] }>;
+  /** Dispatch の id → workerState と attention の種類と、作業者が作業を続けているか（`projection.stage.activity`）。 */
+  workers: Map<string, { workerState: string | null; attention: string[]; activity: string | null }>;
 }
 
 export interface RawOrchestration {
@@ -29,6 +29,7 @@ export function buildOrchestrationExtras(raw: RawOrchestration): OrchestrationEx
     extras.workers.set(worker.dispatchId, {
       workerState: worker.workerState,
       attention: [...worker.attentionCategories],
+      activity: worker.activity,
     });
   return extras;
 }

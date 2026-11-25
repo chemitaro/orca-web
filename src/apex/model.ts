@@ -16,6 +16,7 @@ export type ApexReason =
   | 'member_waiting'
   | 'question'
   | 'decision'
+  | 'question_working'
   | 'stalled'
   | 'apex_closed'
   | 'failed'
@@ -90,6 +91,8 @@ export interface ApexQuestion {
   /** task の題名（200 字まで）。 */
   taskTitle: string | null;
   kind: 'ask' | 'gate';
+  /** 作業者が作業を続けながら出した問い（`projection.stage.activity` が working）。対応が必要の材料にしない（iss-00091）。 */
+  working: boolean;
 }
 
 export interface ApexItem {
