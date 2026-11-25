@@ -14,35 +14,11 @@ assurance: {
 	reason: "利用で見つかった判定と表示の改善。読み取りと表示だけで、送信と Orca の状態は変えない"
 }
 
-// 目的と背景（任意）。
-// purpose:    "この Epic が実現する価値"
-// background: "解く問題と、関係者"
+purpose: "epic-00075 で作った指揮の画面を実際に使って見つかった、判定と表示の不足を直す。"
 
-// 対象と対象外（任意）。
-// includes: ["..."]
-// excludes: ["..."]
-
-// 観測できる要件。番号（R-01、R-02、…）をキーにする。
-// title は必須。acceptance（観測できる受け入れの条件）は standard 以上で必須。
 requirements: {
-	// "R-01": {
-	// 	title: "利用者が〜できる"
-	// 	text:  "詳しい説明"
-	// 	acceptance: ["〜が観測できる"]
-	// }
+	"R-01": {title: "作業を続けている作業者の問いでは対応が必要にしない", acceptance: ["activity が working の Dispatch の ask・gate で頂点が対応が必要にならない"]}
+	"R-02": {title: "頂点の行に稼働中のメンバーの内訳と多段の構成を出す", acceptance: ["稼働中のメンバーが行の下に深さに沿って出る"]}
 }
 
-// 失敗・境界の条件。番号（F-01、…）をキーにする。
-// title は必須。impact（起きたときの影響）と recovery（回復のしかた）は strict 以上で必須。
-failures: {
-	// "F-01": {
-	// 	title:    "〜のときは、何も書かずに止まる"
-	// 	impact:   "〜"
-	// 	recovery: "〜"
-	// }
-}
-
-// 制約・前提、合意した判断、未解決事項（任意）。
-// constraints: ["..."]
-// decisions: ["..."]
-// questions: ["..."]
+decisions: ["利用者が 2026-11-26 に実際に使い、2つを Issue にして直すよう依頼した"]
