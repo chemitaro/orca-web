@@ -3,12 +3,27 @@ import { test } from 'node:test';
 import { buildApexList } from '../../src/apex/build.ts';
 import type { ApexListDocument } from '../../src/apex/model.ts';
 import type { AgentState, StateDocument } from '../../src/state/model.ts';
-import { apexesApiPath, apexesTitle, buildApexesView as buildView } from '../../web/apexes-view.js';
+import {
+  apexesApiPath,
+  apexesTitle,
+  buildPane as buildPaneView,
+  buildApexesView as buildView,
+  frameSrc,
+  initialSelection,
+  isUnseen,
+  pickSelection,
+  pruneSeen,
+  reduceSelection,
+  SWITCH_CONFIRM_TEXT,
+  selectionUrl,
+} from '../../web/apexes-view.js';
 import { agent, fact, input, NOW } from '../inbox/fixture.ts';
 
 // biome-ignore lint/suspicious/noExplicitAny: the view is an untyped JS object
 const buildApexesView = (doc: ApexListDocument, options: Parameters<typeof buildView>[1]): any =>
   buildView(doc, options);
+// biome-ignore lint/suspicious/noExplicitAny: the pane is an untyped JS object
+const buildPane = (...args: Parameters<typeof buildPaneView>): any => buildPaneView(...args);
 const HOUR = 3_600_000;
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
 
@@ -49,7 +64,7 @@ test('T-08: 段は開く3つと畳む3つの順で、見出しの数を持つ', 
   );
   assert.deepEqual(
     view.headline.map((h: { text: string }) => h.text),
-    ['対応が必要 1', '作業中 1', '完了 3'],
+    ['対応が必要 1', '作業中 1', '完了 1'],
   );
 });
 
@@ -103,4 +118,195 @@ test('T-09: 題名は対応が必要の数を先頭に出す', () => {
 test('API の道は project を符号にして付ける', () => {
   assert.equal(apexesApiPath(null), '/api/apexes');
   assert.equal(apexesApiPath('repo a'), '/api/apexes?project=repo%20a');
+});
+
+// biome-ignore lint/suspicious/noExplicitAny: the selection state is an untyped JS object
+type Selection = any;
+const needsDoc = () =>
+  documentOf([agent('w', {}), agent('n1', { state: fact('waiting') }), agent('n2', { state: fact('blocked') })]);
+
+test('T-04：pickSelection は要求の id（一覧になければ missing 付き）、autoPick なら対応が必要の先頭、なければ null', () => {
+  const doc = needsDoc();
+  assert.deepEqual([pickSelection(doc, 'w')?.id, pickSelection(doc, 'w')?.missing], ['w', false]);
+  const gone = pickSelection(doc, 'gone', { autoPick: true });
+  assert.equal(gone?.id, 'gone');
+  assert.equal(gone?.missing, true);
+  assert.equal(gone?.item, null);
+  const first = pickSelection(doc, null, { autoPick: true });
+  assert.equal(first?.id, doc.items.find((i) => i.group === 'needs_action')?.id);
+  assert.equal(pickSelection(doc, null, { autoPick: false }), null);
+  assert.equal(pickSelection(documentOf([agent('w')]), null, { autoPick: true }), null, '対応が必要がなければ選ばない');
+});
+
+test('T-04：広い幅で ?apex= なしに開くと、最初の文書で対応が必要の先頭を1回だけ選ぶ', () => {
+  let sel: Selection = initialSelection('', { wide: true });
+  assert.equal(sel.id, null);
+  sel = reduceSelection(sel, { type: 'document', doc: needsDoc() });
+  const picked = sel.id;
+  assert.ok(picked === 'n1' || picked === 'n2');
+  sel = reduceSelection(sel, { type: 'select', id: 'w' });
+  sel = reduceSelection(sel, { type: 'document', doc: needsDoc() });
+  assert.equal(sel.id, 'w', '以後は利用者が選んだときだけ変わる');
+  sel = reduceSelection(sel, { type: 'clear' });
+  sel = reduceSelection(sel, { type: 'document', doc: needsDoc() });
+  assert.equal(sel.id, null, '「← 一覧」の後の描き直しで選び直さない');
+  const none = reduceSelection(initialSelection('', { wide: true }), {
+    type: 'document',
+    doc: documentOf([agent('w')]),
+  });
+  assert.equal(none.id, null);
+  assert.equal(reduceSelection(none, { type: 'document', doc: needsDoc() }).id, null, '自動の選びは1回だけ');
+});
+
+test('T-04：狭い幅で開くと何も選ばない', () => {
+  let sel: Selection = initialSelection('?project=x', { wide: false });
+  sel = reduceSelection(sel, { type: 'document', doc: needsDoc() });
+  assert.equal(sel.id, null);
+});
+
+test('T-04：?apex= の id は選んだまま描き、stale か空の文書では待ち、最初の使える文書になければ外す', () => {
+  let sel: Selection = initialSelection('?apex=gone', { wide: true });
+  assert.equal(sel.id, 'gone');
+  sel = reduceSelection(sel, {
+    type: 'document',
+    doc: documentOf([agent('n1', { state: fact('waiting') })], { stale: true }),
+  });
+  assert.equal(sel.id, 'gone', 'stale の文書では外さない');
+  sel = reduceSelection(sel, { type: 'document', doc: documentOf([]) });
+  assert.equal(sel.id, 'gone', '空の文書では外さない');
+  sel = reduceSelection(sel, { type: 'document', doc: needsDoc() });
+  assert.equal(sel.id, null, '一覧にない id は選ばない（自動でも選ばない）');
+  let kept: Selection = initialSelection('?apex=w', { wide: true });
+  kept = reduceSelection(kept, { type: 'document', doc: needsDoc() });
+  assert.equal(kept.id, 'w');
+  kept = reduceSelection(kept, { type: 'document', doc: documentOf([agent('n1', { state: fact('waiting') })]) });
+  assert.equal(kept.id, 'w', '選んだ後に消えても外さない（missing になる）');
+});
+
+test('T-04：選んだ頂点の見出しは、一覧から消えても前の題名と「一覧にありません」を出す', () => {
+  const doc = needsDoc();
+  const sel: Selection = reduceSelection(initialSelection('', { wide: false }), { type: 'select', id: 'w' });
+  const shown = buildPane(doc, sel, { now: NOW, remembered: null });
+  assert.equal(shown.selected, true);
+  assert.equal(shown.header.missing, false);
+  assert.equal(shown.header.open.worktree, doc.items.find((i) => i.id === 'w')?.worktreeId);
+  assert.equal(shown.header.open.agent, 'w');
+  assert.equal(shown.guide, null);
+  const gone = buildPane(documentOf([agent('n1', { state: fact('waiting') })]), sel, {
+    now: NOW,
+    remembered: shown.remember,
+  });
+  assert.equal(gone.header.missing, true);
+  assert.equal(gone.header.missingLabel, '一覧にありません');
+  assert.equal(gone.header.title, shown.header.title);
+  const empty = buildPane(doc, initialSelection('', { wide: false }), { now: NOW, remembered: null });
+  assert.equal(empty.selected, false);
+  assert.equal(empty.header, null);
+  assert.match(empty.guide ?? '', /選ぶ/);
+  const waiting = buildPane(null, initialSelection('?apex=x', { wide: false }), { now: NOW, remembered: null });
+  assert.equal(waiting.header.missing, false, 'まだ確かめていない id は missing にしない');
+  assert.equal(waiting.header.open, null);
+});
+
+test('T-04：selectionUrl は apex を足す・替える・外し、ほかの引数を保つ。frameSrc は id を符号にする', () => {
+  assert.equal(selectionUrl('', 'a'), '?apex=a');
+  assert.equal(selectionUrl('?project=p', 'a b'), '?project=p&apex=a+b');
+  assert.equal(selectionUrl('?apex=a&project=p', 'b'), '?apex=b&project=p');
+  assert.equal(selectionUrl('?project=p&apex=a', null), '?project=p');
+  assert.equal(selectionUrl('?apex=a', null), '');
+  assert.equal(frameSrc('a b/&'), '/embed/agent?id=a%20b%2F%26');
+});
+
+test('T-06：切り替えの確かめの文', () => {
+  assert.equal(SWITCH_CONFIRM_TEXT, '送信の処理中か結果不明の表示があります。切り替えると表示を失います');
+});
+
+const DAY = 24 * HOUR;
+// biome-ignore lint/suspicious/noExplicitAny: hand-made items for the pure functions
+const item = (patch: Record<string, any>): any => ({
+  id: 'x',
+  group: 'done_recent',
+  status: 'done',
+  lastActivityAt: ago(HOUR),
+  ...patch,
+});
+
+test('T-07：isUnseen は完了と以前の完了で、見たことがないか、見た時刻より最後の活動が新しいときだけ真', () => {
+  assert.equal(isUnseen(item({}), {}), true, '見たことがない');
+  assert.equal(isUnseen(item({ group: 'done_older' }), {}), true);
+  assert.equal(isUnseen(item({}), { x: ago(2 * HOUR) }), true, '見た後でまた動いた');
+  assert.equal(isUnseen(item({}), { x: ago(HOUR - 1) }), false, '見た後に動いていない');
+  assert.equal(isUnseen(item({ group: 'working', status: 'working' }), {}), false);
+  assert.equal(isUnseen(item({ group: 'needs_action', status: 'needs_action' }), {}), false);
+  assert.equal(isUnseen(item({ group: 'sleeping' }), {}), false, '眠っている段の done には点を出さない');
+  assert.equal(isUnseen(item({ lastActivityAt: null }), {}), false, '最後の活動がなければ出さない');
+  assert.equal(isUnseen(item({}), null), false, '保存が使えなければ点を出さない');
+});
+
+test('T-07：pruneSeen は 14 日より古い記録を落とし、絞っていない・stale でない・空でない文書のときだけ一覧にない id を落とす', () => {
+  const doc = documentOf([agent('keep'), agent('fresh')]);
+  const seen = { keep: ago(HOUR), fresh: ago(13 * DAY), old: ago(15 * DAY), gone: ago(HOUR), bad: 'x' };
+  assert.deepEqual(pruneSeen(seen, doc, NOW), { keep: ago(HOUR), fresh: ago(13 * DAY) });
+  const kept = { keep: ago(HOUR), gone: ago(HOUR), old: ago(15 * DAY) };
+  assert.deepEqual(pruneSeen(kept, { ...doc, project: 'repo-a' }, NOW), { keep: ago(HOUR), gone: ago(HOUR) });
+  assert.deepEqual(pruneSeen(kept, { ...doc, stale: true }, NOW), { keep: ago(HOUR), gone: ago(HOUR) });
+  assert.deepEqual(pruneSeen(kept, { ...doc, items: [] }, NOW), { keep: ago(HOUR), gone: ago(HOUR) });
+});
+
+test('T-07：行の点と見出しの「新着 n」は完了と以前の完了の点の数。保存が使えなければ点も数も出さない', () => {
+  const doc = fullDocument();
+  const view = buildApexesView(doc, { now: NOW, seen: {} });
+  // biome-ignore lint/suspicious/noExplicitAny: the rows are untyped JS objects
+  const rows = new Map<string, any>(
+    view.sections.flatMap((s: { rows: { key: string }[] }) => s.rows).map((r: { key: string }) => [r.key, r]),
+  );
+  assert.equal(rows.get('recent').unseen, true);
+  assert.equal(rows.get('older').unseen, true);
+  assert.equal(rows.get('asleep').unseen, false);
+  assert.equal(rows.get('needs').unseen, false);
+  assert.deepEqual(
+    view.headline.map((h: { text: string }) => h.text),
+    ['対応が必要 1', '作業中 1', '完了 1', '新着 2'],
+  );
+  const seenRecent = buildApexesView(doc, { now: NOW, seen: { recent: new Date(NOW).toISOString() } });
+  assert.deepEqual(
+    seenRecent.headline.map((h: { text: string }) => h.text),
+    ['対応が必要 1', '作業中 1', '完了 1', '新着 1'],
+  );
+  const noStorage = buildApexesView(doc, { now: NOW, seen: null });
+  assert.equal(
+    noStorage.sections
+      .flatMap((s: { rows: { unseen: boolean }[] }) => s.rows)
+      .some((r: { unseen: boolean }) => r.unseen),
+    false,
+  );
+  assert.deepEqual(
+    noStorage.headline.map((h: { text: string }) => h.text),
+    ['対応が必要 1', '作業中 1', '完了 1'],
+  );
+});
+
+test('T-10：見出しの数は段の件数。確かめられず眠っているに入った作業中の頂点は作業中に数えない。対応が必要 0 は強調しない', () => {
+  // biome-ignore lint/suspicious/noExplicitAny: a hand-made apexes document
+  const doc: any = {
+    ...documentOf([]),
+    counts: { needs_action: 0, working: 3, done: 0 },
+    items: [
+      item({ id: 'w1', group: 'working', status: 'working' }),
+      item({ id: 'w2', group: 'working', status: 'working' }),
+      item({ id: 'z', group: 'sleeping', status: 'working', tags: ['unverified'] }),
+    ],
+  };
+  const view = buildApexesView(doc, { now: NOW });
+  const working = view.sections.find((s: { key: string }) => s.key === 'working');
+  const head = new Map(view.headline.map((h: { key: string; text: string; emphasis: boolean }) => [h.key, h]));
+  // biome-ignore lint/suspicious/noExplicitAny: the headline parts are untyped JS objects
+  const part = (key: string): any => head.get(key);
+  assert.equal(part('working').text, `作業中 ${working.count}`);
+  assert.equal(part('working').text, '作業中 2');
+  assert.equal(part('needs_action').text, '対応が必要 0');
+  assert.equal(part('needs_action').emphasis, false);
+  const needs = buildApexesView(fullDocument(), { now: NOW });
+  assert.equal(needs.headline[0].emphasis, true);
+  assert.equal(needs.title, '(1) 指揮 — orca-web', '題名の件数は counts.needs_action のまま');
 });

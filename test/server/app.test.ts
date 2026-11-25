@@ -449,6 +449,14 @@ test('状態の画面も frame-ancestors に SpecDock のオリジンだけを�
     assert.equal(index.status, 200);
     assert.match(String(index.headers['content-security-policy']), /frame-ancestors http:\/\/127\.0\.0\.1:47800(;|$)/);
     assert.equal(index.headers['referrer-policy'], 'same-origin');
+    for (const path of ['/apexes', '/settings']) {
+      const page = await h.send({ path });
+      assert.match(
+        String(page.headers['content-security-policy']),
+        /frame-ancestors http:\/\/127\.0\.0\.1:47800(;|$)/,
+        path,
+      );
+    }
     const writer = await h.send({ path: '/write.js' });
     assert.equal(writer.status, 200);
     assert.equal(writer.headers['content-type'], 'text/javascript; charset=utf-8');
@@ -457,7 +465,7 @@ test('状態の画面も frame-ancestors に SpecDock のオリジンだけを�
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   try {
-    for (const path of ['/', '/embed/open-button']) {
+    for (const path of ['/', '/apexes', '/settings', '/embed/open-button']) {
       const res = await fetch(`http://127.0.0.1:${port}${path}`);
       assert.match(res.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'(;|$)/, path);
       await res.arrayBuffer();

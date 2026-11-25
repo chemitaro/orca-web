@@ -2,8 +2,18 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { buildApexList } from '../../src/apex/build.ts';
-import { renderHeadline, renderSection, startApexPolling } from '../../web/apexes-dom.js';
-import { buildApexesView } from '../../web/apexes-view.js';
+import {
+  clearAgentFrame,
+  createSeenStore,
+  createSeenTracker,
+  mayLeaveFrame,
+  mountAgentFrame,
+  renderHeadline,
+  renderPaneHead,
+  renderSection,
+  startApexPolling,
+} from '../../web/apexes-dom.js';
+import { buildApexesView, SEEN_DWELL_MS, SEEN_STORAGE_KEY } from '../../web/apexes-view.js';
 import { agent, fact, input, NOW, repo, worktree } from '../inbox/fixture.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -21,6 +31,11 @@ class FakeElement {
   rel = '';
   target = '';
   open = false;
+  type = '';
+  src = '';
+  referrerPolicy = '';
+  ownerDocument: unknown = null;
+  parent: FakeElement | null = null;
   #text = '';
 
   constructor(tag: string, ns: string | null = null) {
@@ -49,9 +64,9 @@ class FakeElement {
     throw new Error('insertAdjacentHTML must not be used');
   }
 
-  /** 属性は SVG の要素だけに付ける。 */
+  /** 属性は SVG の要素と、HTML の要素の aria-label だけに付ける。 */
   setAttribute(name: string, value: string): void {
-    if (this.namespaceURI !== SVG_NS) throw new Error('setAttribute is not expected');
+    if (this.namespaceURI !== SVG_NS && name !== 'aria-label') throw new Error('setAttribute is not expected');
     if (name.toLowerCase().startsWith('on')) throw new Error(`event attribute ${name} must not be set`);
     this.attrs[name] = String(value);
   }
@@ -59,8 +74,21 @@ class FakeElement {
   append(...nodes: (FakeElement | string)[]): void {
     for (const node of nodes) {
       if (typeof node === 'string') throw new Error('append a string is not expected');
+      node.parent?.removeChild(node);
+      node.parent = this;
       this.children.push(node);
     }
+  }
+
+  removeChild(node: FakeElement): void {
+    const at = this.children.indexOf(node);
+    if (at >= 0) this.children.splice(at, 1);
+    node.parent = null;
+  }
+
+  replaceChildren(...nodes: FakeElement[]): void {
+    for (const child of [...this.children]) this.removeChild(child);
+    this.append(...nodes);
   }
 
   all(): FakeElement[] {
@@ -69,12 +97,30 @@ class FakeElement {
 }
 
 const fakeDocument = {
-  createElement: (tag: string) => new FakeElement(tag),
+  createElement: (tag: string) => {
+    const node = new FakeElement(tag);
+    node.ownerDocument = fakeDocument;
+    return node;
+  },
   createElementNS: (ns: string, tag: string) => new FakeElement(tag, ns),
 };
 
 const DANGER = '<script>alert(1)</script><img src=x onerror=alert(2)>';
-const ALLOWED = new Set(['SECTION', 'H2', 'DETAILS', 'SUMMARY', 'UL', 'LI', 'DIV', 'SPAN', 'P', 'A', 'svg', 'path']);
+const ALLOWED = new Set([
+  'SECTION',
+  'H2',
+  'DETAILS',
+  'SUMMARY',
+  'UL',
+  'LI',
+  'DIV',
+  'SPAN',
+  'P',
+  'A',
+  'BUTTON',
+  'svg',
+  'path',
+]);
 
 function dangerousView() {
   const doc = buildApexList({
@@ -91,7 +137,7 @@ function dangerousView() {
     now: NOW,
     project: null,
   });
-  return buildApexesView(doc, { now: NOW });
+  return { ...buildApexesView(doc, { now: NOW }), doc };
 }
 
 test('T-10: 題名などの <script> は文字のまま描かれ、決めた要素のほかを作らない', () => {
@@ -106,7 +152,7 @@ test('T-10: 題名などの <script> は文字のまま描かれ、決めた要�
   assert.ok(text.includes('バックグラウンドタスクを監視中'));
 });
 
-test('T-10: 行のリンクは /embed/agent?id= を _blank・noopener noreferrer で開く', () => {
+test('T-10: 行の「新しいタブで開く」と結べない行のリンクは /embed/agent?id= を _blank・noopener noreferrer で開く', () => {
   const view = dangerousView();
   const links = view.sections
     .flatMap((s: unknown) => (renderSection(fakeDocument, s) as FakeElement).all())
@@ -119,6 +165,116 @@ test('T-10: 行のリンクは /embed/agent?id= を _blank・noopener noreferrer
     assert.equal(a.target, '_blank');
     assert.equal(a.rel, 'noopener noreferrer');
   }
+});
+
+test('iss-00077 R-01：頂点の行は選ぶボタン（data-apex）と小さな「新しいタブで開く」、選んだ行に印', () => {
+  const view = buildApexesView(dangerousView().doc, { now: NOW, selectedId: 'm' });
+  const nodes = view.sections.flatMap((s: unknown) => (renderSection(fakeDocument, s) as FakeElement).all());
+  const buttons = nodes.filter((e: FakeElement) => e.tagName === 'BUTTON');
+  assert.deepEqual(
+    buttons.map((b: FakeElement) => b.dataset.apex),
+    ['a', 'm'],
+  );
+  for (const b of buttons) assert.equal(b.type, 'button');
+  const newTabs = nodes.filter((e: FakeElement) => e.className === 'apex-newtab');
+  assert.deepEqual(
+    newTabs.map((a: FakeElement) => [a.tagName, a.textContent, a.href]),
+    [
+      ['A', '新しいタブで開く', '/embed/agent?id=a'],
+      ['A', '新しいタブで開く', '/embed/agent?id=m'],
+    ],
+  );
+  const selected = nodes.filter((e: FakeElement) => e.tagName === 'LI' && e.dataset.selected === 'true');
+  assert.deepEqual(
+    selected.map((li: FakeElement) => li.dataset.key),
+    ['m'],
+  );
+});
+
+function slot(): FakeElement {
+  return fakeDocument.createElement('div');
+}
+
+test('T-05：mountAgentFrame を別の id で3回呼ぶと iframe は1つで src は最後の id。同じ id では作り直さない', () => {
+  const box = slot();
+  const first = mountAgentFrame(box, 'a') as FakeElement;
+  assert.equal(first.tagName, 'IFRAME');
+  assert.equal(first.src, '/embed/agent?id=a');
+  assert.equal(first.referrerPolicy, 'same-origin');
+  assert.ok(first.title.length > 0);
+  const second = mountAgentFrame(box, 'b c') as FakeElement;
+  const third = mountAgentFrame(box, 'd') as FakeElement;
+  assert.notEqual(first, second);
+  assert.notEqual(second, third);
+  assert.deepEqual(
+    box.children.map((c) => c.tagName),
+    ['IFRAME'],
+  );
+  assert.equal(box.children[0], third);
+  assert.equal(third.src, '/embed/agent?id=d');
+  assert.equal(second.src, '/embed/agent?id=b%20c', '外した枠の src は書き換えない');
+  assert.equal(mountAgentFrame(box, 'd'), third, '同じ id では作り直さない');
+  clearAgentFrame(box, '案内');
+  assert.deepEqual(
+    box.children.map((c) => [c.tagName, c.textContent]),
+    [['P', '案内']],
+  );
+});
+
+test('T-06：枠の body に data-unsettled があれば確かめ、取り消せば替えない。印がない・読めない・枠がないなら替える', () => {
+  const asked: string[] = [];
+  const confirmWith = (answer: boolean) => (text: string) => {
+    asked.push(text);
+    return answer;
+  };
+  const withFrame = (contentDocument: unknown) => {
+    const box = slot();
+    const frame = mountAgentFrame(box, 'a') as FakeElement & { contentDocument?: unknown };
+    Object.defineProperty(frame, 'contentDocument', {
+      get: () => {
+        if (contentDocument instanceof Error) throw contentDocument;
+        return contentDocument;
+      },
+    });
+    return box;
+  };
+  const marked = { body: { getAttribute: (name: string) => (name === 'data-unsettled' ? 'true' : null) } };
+  assert.equal(mayLeaveFrame(withFrame(marked), confirmWith(false)), false);
+  assert.deepEqual(asked, ['送信の処理中か結果不明の表示があります。切り替えると表示を失います']);
+  assert.equal(mayLeaveFrame(withFrame(marked), confirmWith(true)), true);
+  asked.length = 0;
+  assert.equal(mayLeaveFrame(withFrame({ body: { getAttribute: () => null } }), confirmWith(false)), true);
+  assert.equal(mayLeaveFrame(withFrame(new Error('blocked')), confirmWith(false)), true);
+  assert.equal(mayLeaveFrame(slot(), confirmWith(false)), true);
+  assert.deepEqual(asked, [], '印がなければ聞かない');
+});
+
+test('R-01：右のペインの見出しに「← 一覧」・題名・状態の印・「一覧にありません」・開く部品の置き場', () => {
+  const openRoot = fakeDocument.createElement('span');
+  const head = renderPaneHead(
+    fakeDocument,
+    {
+      id: 'a',
+      title: DANGER,
+      mark: 'waiting',
+      markLabel: '入力待ち',
+      monitoring: false,
+      missing: true,
+      missingLabel: '一覧にありません',
+      newTab: '/embed/agent?id=a',
+      open: null,
+    },
+    { openRoot },
+  ) as FakeElement;
+  const all = head.all();
+  const back = all.find((e) => e.tagName === 'BUTTON' && e.dataset.action === 'back');
+  assert.equal(back?.textContent, '← 一覧');
+  assert.equal(back?.type, 'button');
+  assert.ok(head.textContent.includes(DANGER));
+  assert.ok(head.textContent.includes('入力待ち'));
+  assert.ok(head.textContent.includes('一覧にありません'));
+  assert.ok(all.includes(openRoot));
+  for (const tag of new Set(all.map((e) => e.tagName))) assert.ok(ALLOWED.has(tag), tag);
 });
 
 test('T-10: 畳む段は details で、expanded なら開く。空の段は「なし」', () => {
@@ -227,4 +383,165 @@ test('T-10: 入口は startApexPolling で読み、題名を view から付け�
     const text = await readFile(new URL(`../../web/${path}`, import.meta.url), 'utf8');
     assert.doesNotMatch(text, /\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML\(|document\.write\(/, path);
   }
+});
+
+test('T-07：新着の行は題名の前に点（apex-unseen、aria-label 新着）を出し、見出しの強調は対応が必要が 1 以上のときだけ', () => {
+  const doc = buildApexList({
+    state: input({ agents: [agent('d', { state: fact('done') }), agent('w')] }).state,
+    now: NOW,
+    project: null,
+  });
+  const view = buildApexesView(doc, { now: NOW, seen: {} });
+  const done = view.sections.find((s: { key: string }) => s.key === 'done_recent');
+  const node = renderSection(fakeDocument, done) as FakeElement;
+  const head = node.all().find((e) => e.className === 'apex-head') as FakeElement;
+  const classes = head.children.map((c) => c.className);
+  assert.ok(classes.indexOf('apex-unseen') >= 0 && classes.indexOf('apex-unseen') < classes.indexOf('apex-title'));
+  assert.equal(head.children.find((c) => c.className === 'apex-unseen')?.attrs['aria-label'], '新着');
+  const quiet = renderHeadline(fakeDocument, view.headline) as FakeElement;
+  assert.equal(quiet.textContent, '対応が必要 0作業中 1完了 1新着 1');
+  assert.deepEqual(
+    quiet.children.map((c) => c.className),
+    ['count', 'count', 'count', 'count'],
+    '対応が必要 0 は普通の色',
+  );
+  const loud = renderHeadline(fakeDocument, [
+    { key: 'needs_action', text: '対応が必要 2', emphasis: true },
+  ]) as FakeElement;
+  assert.equal(loud.children[0]?.className, 'count count--alert');
+});
+
+test('T-07：見た時刻の保存は決めた鍵と形で読み書きし、例外や壊れた値でも止まらない', () => {
+  const data = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => void data.set(key, value),
+  };
+  const store = createSeenStore(() => storage);
+  assert.deepEqual(store.load(), {});
+  assert.equal(store.save({ a: '2026-01-02T12:00:00.000Z' }), true);
+  assert.deepEqual(JSON.parse(data.get(SEEN_STORAGE_KEY) ?? ''), { v: 1, seen: { a: '2026-01-02T12:00:00.000Z' } });
+  assert.deepEqual(store.load(), { a: '2026-01-02T12:00:00.000Z' });
+  data.set(SEEN_STORAGE_KEY, '{broken');
+  assert.deepEqual(store.load(), {}, '壊れた値は空として読む');
+  data.set(SEEN_STORAGE_KEY, JSON.stringify({ v: 2, seen: { a: 'x' } }));
+  assert.deepEqual(store.load(), {}, '知らない版は空');
+  data.set(SEEN_STORAGE_KEY, JSON.stringify({ v: 1, seen: { a: 1, b: '2026-01-02T12:00:00.000Z' } }));
+  assert.deepEqual(store.load(), { b: '2026-01-02T12:00:00.000Z' }, '文字でない時刻は捨てる');
+  const throwing = createSeenStore(() => {
+    throw new Error('SecurityError');
+  });
+  assert.equal(throwing.load(), null, '使えなければ null（点を出さない）');
+  assert.equal(throwing.save({}), false);
+  const failing = createSeenStore(() => ({
+    getItem: () => {
+      throw new Error('denied');
+    },
+    setItem: () => {
+      throw new Error('quota');
+    },
+  }));
+  assert.equal(failing.load(), null);
+  assert.equal(failing.save({ a: 'x' }), false);
+});
+
+function trackerHarness() {
+  let now = 0;
+  let visible = true;
+  let next = 1;
+  const timers = new Map<number, { at: number; fn: () => void }>();
+  const seen: [string, string][] = [];
+  const tracker = createSeenTracker({
+    dwellMs: SEEN_DWELL_MS,
+    now: () => now,
+    isVisible: () => visible,
+    schedule: (fn: () => void, ms: number) => {
+      const id = next++;
+      timers.set(id, { at: now + ms, fn });
+      return id;
+    },
+    cancel: (id: number | null) => {
+      if (id !== null) timers.delete(id);
+    },
+    onSeen: (id: string, at: string) => seen.push([id, at]),
+  });
+  const advance = (ms: number) => {
+    now += ms;
+    for (const [id, t] of [...timers]) {
+      if (t.at <= now) {
+        timers.delete(id);
+        t.fn();
+      }
+    }
+  };
+  const setVisible = (value: boolean) => {
+    visible = value;
+    tracker.visibility();
+  };
+  return { tracker, seen, timers, advance, setVisible };
+}
+
+test('T-07：選んだ頂点を 10 秒続けて出すと見た時刻を書き、9 秒で別の頂点に替えると書かない', () => {
+  assert.equal(SEEN_DWELL_MS, 10_000);
+  const h = trackerHarness();
+  h.tracker.show('a');
+  h.advance(9_000);
+  h.tracker.show('b');
+  h.advance(9_000);
+  assert.deepEqual(h.seen, [], '9 秒では書かない');
+  h.advance(1_000);
+  assert.deepEqual(h.seen, [['b', new Date(19_000).toISOString()]]);
+  h.tracker.show('b');
+  h.advance(30_000);
+  assert.equal(h.seen.length, 1, '同じ頂点を出し続けても重ねて書かない');
+  h.tracker.show(null);
+  assert.equal(h.timers.size, 0);
+});
+
+test('T-07：出し続けている頂点の最後の活動が変わると、もう一度 10 秒数えて見た時刻を書き直す', () => {
+  const h = trackerHarness();
+  h.tracker.show('a', 't1');
+  h.advance(10_000);
+  assert.equal(h.seen.length, 1);
+  h.tracker.show('a', 't1');
+  h.advance(30_000);
+  assert.equal(h.seen.length, 1, '同じ活動なら書き直さない');
+  h.tracker.show('a', 't2');
+  h.advance(9_000);
+  assert.equal(h.seen.length, 1);
+  h.advance(1_000);
+  assert.deepEqual(h.seen[1], ['a', new Date(50_000).toISOString()]);
+  h.tracker.show('a', 't3');
+  h.advance(5_000);
+  h.tracker.show('b', 't3');
+  h.advance(5_000);
+  assert.equal(h.seen.length, 2, '数えている途中に替えると書かない');
+  assert.equal(h.timers.size, 1);
+});
+
+test('T-07：タブが隠れると数えるのをやめ、見えたら初めから数える', () => {
+  const h = trackerHarness();
+  h.tracker.show('a');
+  h.advance(5_000);
+  h.setVisible(false);
+  h.advance(30_000);
+  assert.deepEqual(h.seen, []);
+  h.setVisible(true);
+  h.advance(9_000);
+  assert.deepEqual(h.seen, []);
+  h.advance(1_000);
+  assert.equal(h.seen.length, 1);
+  const hidden = trackerHarness();
+  hidden.setVisible(false);
+  hidden.tracker.show('a');
+  hidden.advance(20_000);
+  assert.deepEqual(hidden.seen, [], '隠れている間に選んでも数えない');
+});
+
+test('T-07：入口は見た時刻を保存の口で読み書きし、選びを数える口に渡す', async () => {
+  const entry = await readFile(new URL('../../web/apexes.js', import.meta.url), 'utf8');
+  assert.match(entry, /createSeenStore\(\(\) => window\.localStorage\)/);
+  assert.match(entry, /pruneSeen\(/);
+  assert.match(entry, /seenTracker\.show\(selection\.id, pane\.remember\?\.lastActivityAt \?\? null\)/);
+  assert.match(entry, /seen: seenMap/);
 });

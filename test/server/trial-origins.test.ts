@@ -87,7 +87,10 @@ test('試しの環境の許しは47900だけ。拒否した書き込みは送信
       assert.equal(reads, config.readOrigins.length);
       assert.equal(sends, 0);
       assert.equal(opens, 0);
-      for (const route of ['/embed/agent?id=example', '/embed/open-button']) {
+      for (const [route, prefix] of [
+        ['/embed/agent?id=example', "'self' "],
+        ['/embed/open-button', ''],
+      ]) {
         const reply = await fetch(`${base}${route}`);
         assert.equal(reply.status, 200);
         const ancestors = reply.headers
@@ -95,7 +98,7 @@ test('試しの環境の許しは47900だけ。拒否した書き込みは送信
           ?.split(';')
           .find((s) => s.trim().startsWith('frame-ancestors'))
           ?.trim();
-        assert.equal(ancestors, `frame-ancestors ${config.readOrigins.join(' ')}`);
+        assert.equal(ancestors, `frame-ancestors ${prefix}${config.readOrigins.join(' ')}`, route);
         await reply.text();
       }
       assert.equal((await fetch(`${base}/trial/index.html`)).status, 404);

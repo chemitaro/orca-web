@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <title>指揮 — orca-web</title>
+    <link rel="stylesheet" href="/embed/open-control.css" />
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body class="inbox apexes-page">
@@ -20,7 +21,13 @@
       </div>
       <div id="freshness" role="status" aria-live="polite"><p>読み込み中…</p></div>
     </header>
-    <main id="sections"></main>
+    <div class="apex-layout">
+      <main id="sections" class="apex-list"></main>
+      <section id="pane" class="apex-pane" aria-label="選んだ頂点">
+        <div id="pane-head" class="apex-pane-head"></div>
+        <div id="pane-frame" class="apex-pane-frame"></div>
+      </section>
+    </div>
     <script type="module" src="/apexes.js"></script>
   </body>
 </html>

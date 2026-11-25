@@ -479,7 +479,7 @@ test('SSE の購読者の上限でも busy を送って接続を閉じる', { ti
   );
 });
 
-test('/embed/agent は inline を許さない CSP と、読み取りのオリジンだけの frame-ancestors で配る', async () => {
+test('/embed/agent は inline を許さない CSP と、自分と読み取りのオリジンだけの frame-ancestors で配る', async () => {
   await withApp(async (h) => {
     const page = await h.get('/embed/agent?id=x');
     assert.equal(page.status, 200);
@@ -488,7 +488,7 @@ test('/embed/agent は inline を許さない CSP と、読み取りのオリジ
     assert.match(csp, /script-src 'self'(;|$)/);
     assert.match(csp, /style-src 'self'(;|$)/);
     assert.match(csp, /connect-src 'self'(;|$)/);
-    assert.match(csp, /frame-ancestors http:\/\/127\.0\.0\.1:47800(;|$)/);
+    assert.match(csp, /frame-ancestors 'self' http:\/\/127\.0\.0\.1:47800(;|$)/);
     assert.ok(!csp.includes('unsafe-inline'));
     for (const path of [
       '/embed/agent-frame.js',
@@ -513,7 +513,7 @@ test('会話の道を持たないサーバーは 503 を返す', async () => {
     await res.arrayBuffer();
     const embed = await fetch(`http://127.0.0.1:${port}/embed/agent?id=x`);
     assert.equal(embed.status, 200);
-    assert.match(embed.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'(;|$)/);
+    assert.match(embed.headers.get('content-security-policy') ?? '', /frame-ancestors 'self'(;|$)/);
     await embed.arrayBuffer();
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
