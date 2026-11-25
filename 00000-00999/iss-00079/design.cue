@@ -1,23 +1,6 @@
 package spec
 
-// 設計（Issue）。型 specdock/v1。
-
-// 設計目標、今の状態と、この Issue の後の状態（任意）。
-// goals: ["..."]
-// current: "..."
-// target:  "..."
-
-// 設計の単位（責務、interface、data など）。番号（D-01、…）をキーにする。
-// title と satisfies（満たす要件・失敗の条件の番号）が必須。
-// standard 以上では、すべての要件に、それを満たす設計が要る。
 design: {
-	// "D-01": {
-	// 	title:     "〜の部品"
-	// 	text:      "責務と interface"
-	// 	satisfies: ["R-01"]
-	// }
+	"D-01": {title: "チームの節（`src/apex/team.ts`）", text: "iss-00078 の束と生きた辺のメンバーから R-01 の節を作る純粋な関数。`buildApexList` が各頂点の `team` に入れる。Dispatch の status は workerState から（生きていれば live、failed は failed、終わりは done）、エージェントの status は agentMark から。", satisfies: ["R-01"]}
+	"D-02": {title: "チームの帯（`web/apexes-team-view.js` 純粋な関数、`web/apexes-team-dom.js`）", text: "数の要約、表示する節の選び（動いている・待ち・24 時間以内の失敗と、その祖先。ほかは親ごとのまとめ）、履歴の帯の四角の並び。DOM は textContent と createElementNS（四角は SVG の rect か span）。開閉は `<details>`。", satisfies: ["R-02"]}
 }
-
-// 移行・互換性、リスク（任意）。
-// compatibility: "..."
-// risks: ["..."]

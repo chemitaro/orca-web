@@ -1,41 +1,40 @@
 package spec
 
-// 計画（Issue）。型 specdock/v1。
-// 作業しながら、手順の追加、変更、status の更新を、このファイルに直接書く。
+goal: "対応のカードが出て、メンバーの許可待ちに同じ枠で答えられ、質問・判断が頂点の下書きになることが、テストで確かめられている。"
 
-// 目標（任意）。
-// goal: "..."
-
-// 実装の手順。番号（S-01、…）をキーにし、番号の順に並べる。
-// title と realizes（満たす要件・失敗の条件の番号）が必須。
-// status は todo（既定）、doing、done、dropped。after は先に済ませる手順の番号。
-// 1手順を1行に書き、status は title と realizes のすぐ後に置く。status の位置がそろうので一括で書き換えやすく、
-// 同じ手順に status を2つ書く誤りも防げる（同じ値の2つは CUE が黙ってまとめ、違う値なら誤りになる）。
-// すべての要件に、それを満たす手順が要る（dropped の手順は数えない）。
-// strict 以上では、dropped でない手順のすべてが、いずれかの番号に結び付く。
 steps: {
-	// "S-01": {title: "〜を作る", realizes: ["R-01"], status: "todo", after: ["..."], session: "impl"}
+	"S-01": {title: "compose=off と下書きの口（D-03、D-04）", text: "対象：`web/embed/agent-frame.js`、新しい `web/embed/draft-receiver.js`、STATIC_FILES、テスト（agent-navigation のテストが新しいファイルを読むなら合わせる）。確かめ：T-01・T-02", realizes: ["R-02", "R-03", "F-01"], session: "impl"}
+	"S-02": {title: "カードとメンバーの枠（D-01、D-02）", text: "対象：新しい `web/apexes-cards-view.js`、`web/apexes.js`・`apexes-dom.js`・`style.css`、必要なら `src/apex/` の文書に Dispatch ごとの attention と題名、テスト、README。確かめ：T-03〜T-05。実装担当の最後の手順。区切りのレビュー：あり（cp1）", realizes: ["R-01", "R-02", "R-03"], after: ["S-01"], session: "impl"}
 }
 
-// テスト。番号（T-01、…）をキーにする。title と verifies（確かめる要件・失敗の条件の番号）が必須。
-// standard 以上では、すべての要件に、strict 以上では、すべての失敗の条件に、確かめるテストが要る。
 tests: {
-	// "T-01": {title: "〜を確かめる", verifies: ["R-01"]}
+	"T-01": {title: "compose=off：送る欄の要素が hidden で pollSend が始まらない。承認・質問のカードの答えの既存のテストが通る", verifies: ["R-02", "F-01"]}
+	"T-02": {title: "acceptDraft：同じオリジン・親から・composeOn・phase が idle か ready・入力欄が空のときだけ text を返す。別のオリジン・親でない source・compose off・sending・書きかけ、のどれでも null。返しても送信の関数は呼ばない", verifies: ["R-03", "F-01"]}
+	"T-03": {title: "カード：member_blocked のメンバー → 見て答える、attention input → 質問、approval → 判断、apex_waiting → 会話へ。対応がなければ空", verifies: ["R-01"]}
+	"T-04": {title: "見て答える：枠が `/embed/agent?id=<メンバー>&compose=off` に作り直され、帯と頂点に戻るが出る。頂点に戻るで頂点の枠に戻る", verifies: ["R-02"]}
+	"T-05": {title: "頂点に伝える：buildDraftText が決めた型の文と Dispatch の id を作り、postMessage の宛先のオリジンが自分のオリジン", verifies: ["R-03"]}
 }
 
-// 検証のしかた、戻し方、終わりの条件（任意）。critical では、手順があれば rollback が要る。
-// verification: "..."
-// rollback:     "..."
-// exit:         "..."
+verification: """
+	最後に `npm run lint`、`npm test`、`npm run build`（Node 24）。
+	関門：
+	- merge：agent
+	- merge_permission：本人「ユーザーの許可なくマージする権限を付与します」（2026-11-25、利用者との Claude Code の会話。orca-web の PR を、最終品質ゲートと CI の合格を条件にエージェントがマージしてよいという許し。全文は公開しない）
+	- 区切りのレビュー：cp1。最後の手順 S-02、code-reviewer（Opus 5.5 / medium）
+	- 最終品質ゲート：範囲 `<開始のコミット>..HEAD`。追加の観点：security-baseline（postMessage の受け口、送る経路を足さない）。second_opinion：none
+	- test_commands：`npm run lint`、`npm test`、`npm run build`
+	- record_paths：なし
+	"""
+exit: "最終品質ゲートが合格し、PR の CI が通り、merge.md の条件でエージェントがマージした状態。"
 
-// 実行の割り当て（任意）。手順の session は、実装のセッション（impl）を指す。
-// セッションのモデルと推論は起動のときに決まるので、計画で選べるのは、計画の後に起動するセッション（実装担当）の値。
-// 計画を書いたセッション（spec）の値は、事実として記録する。
-// レビューの after は、どの手順の後かを指す。モデルと推論の名前は、どんな文字列でもよい。
-// execution: {
-// 	sessions: {
-// 		spec: {task: "仕様化（起動した側が選んだ値の記録）", model: "...", effort: "...", rationale: "<起動した側と根拠>"}
-// 		impl: {task: "実装", model: "...", effort: "...", rationale: "..."}
-// 	}
-// 	reviews: code: {role: "コードのレビュー", after: "S-01", model: "...", effort: "..."}
-// }
+execution: {
+	sessions: {
+		spec: {task: "仕様化（タスク担当）", model: "opus", effort: "high", rationale: "利用者が会話で起動したセッションの値の記録"}
+		impl: {task: "実装（S-01・S-02。Claude の実装担当、Orca の worker）", model: "opus", effort: "medium", rationale: "provider: claude。本人の指示（Codex を使わず Opus 5.5）。方針 §2 フロントエンドの実装担当 standard"}
+	}
+	reviews: {
+		spec: {role: "仕様のレビュー（spec-reviewer）", model: "opus", effort: "high"}
+		cp1: {role: "区切りのレビュー（code-reviewer）", after: "S-02", model: "opus", effort: "medium"}
+		gate: {role: "最終品質ゲート（quality-gate-reviewer）", after: "S-02", model: "opus", effort: "medium"}
+	}
+}
