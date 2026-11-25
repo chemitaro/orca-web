@@ -3,7 +3,7 @@ package spec
 goal: "頂点の行に稼働中のメンバーの内訳が多段の木で出ることがテストで確かめられ、常駐の orca-web に入っている。"
 
 steps: {
-	"S-01": {title: "稼働中の内訳の木（D-01、D-02）", text: "対象：`web/apexes-view.js`（または新しい `web/apexes-live-view.js` と STATIC_FILES）、`web/apexes-dom.js`、`web/style.css`、テスト、README。確かめ：T-01〜T-03。完了：`npm run lint`、`npm test`、`npm run build`。実装担当の最後の手順", realizes: ["R-01", "R-02"], session: "impl"}
+	"S-01": {status: "done", title: "稼働中の内訳の木（D-01、D-02）", text: "対象：`web/apexes-view.js`（または新しい `web/apexes-live-view.js` と STATIC_FILES）、`web/apexes-dom.js`、`web/style.css`、テスト、README。確かめ：T-01〜T-03。完了：`npm run lint`、`npm test`、`npm run build`。実装担当の最後の手順", realizes: ["R-01", "R-02"], session: "impl"}
 }
 
 tests: {
