@@ -1,6 +1,7 @@
 import type { AgentMark } from '../inbox/classify.ts';
 import type { AgentKind, Connection, StateDocument } from '../state/model.ts';
 import type { OrchestrationExtras } from './extras.ts';
+import type { ApexVerdictMemo } from './memo.ts';
 import type { BundleOwners } from './owners.ts';
 
 export const APEXES_SCHEMA = 'orca-web.apexes/v1';
@@ -13,13 +14,27 @@ export type ApexReason =
   | 'apex_waiting'
   | 'member_blocked'
   | 'member_waiting'
+  | 'question'
+  | 'decision'
+  | 'stalled'
+  | 'apex_closed'
+  | 'failed'
   | 'working'
   | 'monitoring'
   | 'members_working'
+  | 'live_work'
   | 'member_grace'
+  | 'grace'
   | 'done'
   | 'sleeping';
 export type ApexTag = 'unverified';
+export type ApexBadgeKind = 'merge_pending' | 'ci_failed' | 'failed_members' | 'remaining_tasks';
+
+/** 完了の頂点の残りの札（R-05）。count は worktree・Dispatch・task の数。毎回データから出す。 */
+export interface ApexBadge {
+  kind: ApexBadgeKind;
+  count: number;
+}
 export type UnlinkedReason = 'parent_missing' | 'worker_without_parent' | 'cycle';
 
 export interface ApexProject {
@@ -54,6 +69,8 @@ export interface ApexItem {
   group: ApexGroup;
   reasons: ApexReason[];
   tags: ApexTag[];
+  /** 完了の頂点だけに付ける。並びは merge_pending、ci_failed、failed_members、remaining_tasks。 */
+  badges: ApexBadge[];
   /** 頂点とメンバーの stateStartedAt の最大、なければ worktree の lastActivityAt。 */
   lastActivityAt: string | null;
   stateStartedAt: string | null;
@@ -110,4 +127,6 @@ export interface BuildApexListInput {
   extras?: OrchestrationExtras;
   /** 束 → 頂点の対応表。app の生存の間に1つ。 */
   owners?: BundleOwners | null;
+  /** 鮮度が偽の間に使う最後の A3〜A6 の判定。app の生存の間に1つ。 */
+  memo?: ApexVerdictMemo | null;
 }
