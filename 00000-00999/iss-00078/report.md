@@ -36,3 +36,4 @@ ID: "iss-00078"
   - 合格した文書の sha256：requirement.cue `107b0e60d2a3b54050dce3c9145226a8389be75716cdd0f6154d05b253d8ff56`、design.cue `b72d192cce518e2fd618398a01bf4eb0b025685d1968c877cf0ccab7617b6a56`、plan.cue `7a5b1f03aa9e29d89bbf8e0d57f678f0b0bf2d5812a102f0fbb69ae33b103924`
   - 基準のコード：main 1da3c6c。結果：タスク担当の Workbench `.workbench/spec-review/iss-00078/round-1〜3.json`、応答 `review-response.md`
 - 最終品質ゲート：合格（2026-11-25）。合格のコミット 802e7f4、キャンペーン iss-00078-fqg-1。レビュー pass（P3 1：A4 の解釈）、テスト lint・test・build すべて 0（Node 24.14.0）。
+- マージ：PR #85 を merge.md の条件でタスク担当がマージした（2026-11-25、マージのコミット 89279d9、head 802e7f4、CI OBSERVED_CI_PASS・READY）。
