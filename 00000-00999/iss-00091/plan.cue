@@ -3,7 +3,7 @@ package spec
 goal: "作業を続けている作業者の問いでは対応が必要にならず、答えを待つ作業者の問いでは今のとおり対応が必要になることがテストで確かめられ、常駐の orca-web に入っている。"
 
 steps: {
-	"S-01": {title: "activity を読み、A3 と理由・カードを直す（D-01〜D-03）", text: "対象：`src/orca/read-state.ts`、`src/apex/extras.ts`・`build.ts`・`model.ts`、`web/apexes-view.js`・`web/apexes-cards-view.js`、テスト、README・AGENTS.md の該当の文。確かめ：T-01〜T-04。完了：`npm run lint`、`npm test`、`npm run build`。実装担当の最後の手順", realizes: ["R-01", "R-02", "F-01"], session: "impl"}
+	"S-01": {status: "done", title: "activity を読み、A3 と理由・カードを直す（D-01〜D-03）", text: "対象：`src/orca/read-state.ts`、`src/apex/extras.ts`・`build.ts`・`model.ts`、`web/apexes-view.js`・`web/apexes-cards-view.js`、テスト、README・AGENTS.md の該当の文。確かめ：T-01〜T-04。完了：`npm run lint`、`npm test`、`npm run build`。実装担当の最後の手順", realizes: ["R-01", "R-02", "F-01"], session: "impl"}
 }
 
 tests: {
