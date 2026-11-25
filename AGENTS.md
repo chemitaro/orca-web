@@ -62,12 +62,12 @@ node src/tools/service.ts install --dry-run   # LaunchAgent の定義と命令�
 
 ## 守ること
 
-- Git：コミットは `git-commit` スキル（`git add -- <パス>` の後に `git-autocommit`）。日本語の Conventional Commits。`git config user.name`／`user.email` が `chemitaro`／`84865385+chemitaro@users.noreply.github.com` であることを確かめる。`--no-verify`、強制 push、履歴の書き換え、マージ、`main` への直接の push、タグの作成をしない。PR は `Refs #<番号>`（自動で閉じる語は使わない）。
+- Git：コミットは `git-commit` スキル（`git add -- <パス>` の後に `git-autocommit`）。日本語の Conventional Commits。`git config user.name`／`user.email` が `chemitaro`／`84865385+chemitaro@users.noreply.github.com` であることを確かめる。`--no-verify`、強制 push、履歴の書き換え、（下の条件の外の）マージ、`main` への直接の push、タグの作成をしない。PR は `Refs #<番号>`（自動で閉じる語は使わない）。
 - リポジトリは公開。秘密、トークン、`.env`、利用者の私的なプロンプトの文、絶対パスの個人の情報を、コミット、録画、ログに入れない。
 - 利用者の環境（`~/.claude/settings.json`、`~/.codex/config.toml`、`~/.agents/`、`~/.local/state/spec-dock/`、launchd の登録と `~/Library/LaunchAgents`、Orca の設定）とほかのリポジトリを変えない。Orca には、許された操作のほかは読む要求だけを送る。開く口の実機の確かめ（`open:live`）は、このリポジトリの worktree だけを対象にする。送信の実機の確かめ（`send:live`）は、統括か利用者が用意した検証用の宛先だけに送り、業務中のエージェントには送らない。
 - Orca を止めて確かめない（ほかのエージェントが止まる）。Orca に届かないときは、`ORCA_BIN` を存在しないパスにした一時の起動で確かめる。
 - Orca の authToken とペアリングのコードを、記録、URL、画面、ログ、録画に出さない。
-- 判断に迷ったら、統括（Orca の `ask`）か利用者に聞く。PR のマージは利用者が行う。
+- 判断に迷ったら、統括（Orca の `ask`）か利用者に聞く。PR のマージは、利用者の許し（2026-11-25）により、coding-task の merge.md の条件（最終品質ゲートの合格、CI の合格、保証レベルが standard 以下で計画に merge_permission がある）を満たせばエージェントが行ってよい。strict 以上は利用者が行う。
 - 裏で走らせた処理を待つときも、自分の番を終えて止まらず、終わったらそのまま次の手順に進む。
 
 ## 仕様の扱い
