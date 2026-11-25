@@ -7,7 +7,7 @@ steps: {
 }
 
 tests: {
-	"T-01": {title: "state null・paneKey null の chat-tab → done・sleeping・札なし。terminal-tab で terminal が null でも attached でもない → 同じ。untabbed → unknown", verifies: ["R-01"]}
+	"T-01": {title: "state null・paneKey null の chat-tab（worktreePs が新しい）→ status done・理由 sleeping・段 sleeping（最後の活動が 1 時間前でも）・札なし・新着の点の対象外。terminal-tab で terminal が null でも attached でもない（tabs が新しい）→ 同じ。worktreePs が stale か lastSuccessAt なし → 段 unknown・札 unverified。untabbed → unknown", verifies: ["R-01"]}
 	"T-02": {title: "state null・paneKey ありの chat-tab → 段 unknown・札 unverified、30 時間後も unknown。メンバーが working → working の段", verifies: ["R-02"]}
 	"T-03": {title: "画面の段の順と畳み、見出しの作業中の数に unknown が入らない", verifies: ["R-03"]}
 	"T-04": {title: "完了の判定の既存のテスト（done の 7 日、awaiting-restore）が今のまま通る", verifies: ["R-01", "R-02"]}

@@ -30,10 +30,12 @@ requirements: {
 		title: "プロセスのない、状態の分からない頂点は眠っているにする"
 		text: """
 			頂点の印が unknown で、チームに動いている・待っている・猶予の中のものがなく（今の「静か」の条件）、頂点のプロセスがないとき、status を done、理由を `sleeping`、段を `sleeping` にし、札 unverified を付けない。
-			プロセスがない：kind が `chat-tab` で `paneKey` が null（ps の行と対応しない）、または kind が `terminal-tab` で `terminal` が null でも `attached` でもない。kind が `untabbed`（ps の行から作った頂点）はプロセスがある。
+			プロセスがない：kind が `chat-tab` で `paneKey` が null（ps の行と対応しない）で、かつ状態の文書の取得元 `worktreePs` が一度は読めていて（`lastSuccessAt` がある）stale でない。または kind が `terminal-tab` で `terminal` が null でも `attached` でもなく、取得元 `tabs` が stale でない。kind が `untabbed`（ps の行から作った頂点）はプロセスがある。取得元が古い・読めていないときは「判定できない」とし、R-02 の不明にする。
+			段は `sleeping`（完了（最近）・以前の完了には入れず、新着の点も付かない）。
 			"""
 		acceptance: [
-			"state null・paneKey null の chat-tab の単独の頂点は、段 sleeping・status done・理由 sleeping で、札 unverified がない",
+			"state null・paneKey null の chat-tab の単独の頂点は、worktreePs が新しく読めていれば、最後の活動が 1 時間前でも段 sleeping・status done・理由 sleeping で、札 unverified がなく、新着の点が付かない",
+			"worktreePs が stale か一度も読めていなければ、同じ頂点は段 unknown・札 unverified",
 		]
 	}
 	"R-02": {
@@ -52,4 +54,7 @@ requirements: {
 }
 
 constraints: ["AGENTS.md の守ること", "`orca-web.state/v1` を変えない"]
-decisions: ["眠っているは眠っている、完了は完了、不明は不明（利用者、2026-11-26、会話）。Epic epic-00075 R-03 の「unverified で 24 時間動きがなければ眠っている」をこの Issue で置き換える"]
+decisions: [
+	"眠っているは眠っている、完了は完了、不明は不明（利用者、2026-11-26、会話）",
+	"この Issue は次の上位の決まりを置き換える：epic-00075 R-03（状態が不明の頂点は完了にせず確かめられないの札、unverified で 24 時間動きがなければ眠っている）、iss-00076 R-02 の規則 3 と「頂点の印が unknown なら札 unverified」、iss-00076 R-03（頂点の印が unknown なら完了にしない）。置き換えた後：プロセスがないと新しい取得元で分かる unknown の頂点は眠っている（status done・札なし）、それ以外の静かな unknown は不明の段（status working・札 unverified）、時間で移さない（タスク担当、利用者の判断に基づく、2026-11-26）",
+]
