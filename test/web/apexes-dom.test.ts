@@ -498,6 +498,27 @@ test('T-07：選んだ頂点を 10 秒続けて出すと見た時刻を書き、
   assert.equal(h.timers.size, 0);
 });
 
+test('T-07：出し続けている頂点の最後の活動が変わると、もう一度 10 秒数えて見た時刻を書き直す', () => {
+  const h = trackerHarness();
+  h.tracker.show('a', 't1');
+  h.advance(10_000);
+  assert.equal(h.seen.length, 1);
+  h.tracker.show('a', 't1');
+  h.advance(30_000);
+  assert.equal(h.seen.length, 1, '同じ活動なら書き直さない');
+  h.tracker.show('a', 't2');
+  h.advance(9_000);
+  assert.equal(h.seen.length, 1);
+  h.advance(1_000);
+  assert.deepEqual(h.seen[1], ['a', new Date(50_000).toISOString()]);
+  h.tracker.show('a', 't3');
+  h.advance(5_000);
+  h.tracker.show('b', 't3');
+  h.advance(5_000);
+  assert.equal(h.seen.length, 2, '数えている途中に替えると書かない');
+  assert.equal(h.timers.size, 1);
+});
+
 test('T-07：タブが隠れると数えるのをやめ、見えたら初めから数える', () => {
   const h = trackerHarness();
   h.tracker.show('a');
@@ -521,6 +542,6 @@ test('T-07：入口は見た時刻を保存の口で読み書きし、選びを�
   const entry = await readFile(new URL('../../web/apexes.js', import.meta.url), 'utf8');
   assert.match(entry, /createSeenStore\(\(\) => window\.localStorage\)/);
   assert.match(entry, /pruneSeen\(/);
-  assert.match(entry, /seenTracker\.show\(/);
+  assert.match(entry, /seenTracker\.show\(selection\.id, pane\.remember\?\.lastActivityAt \?\? null\)/);
   assert.match(entry, /seen: seenMap/);
 });

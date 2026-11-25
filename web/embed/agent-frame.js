@@ -35,7 +35,7 @@ import {
 } from './question-view.js';
 import { renderSendPanel } from './send-dom.js';
 import { buildSendView, composerKeyAction, createSendFlow } from './send-view.js';
-import { isUnsettled, markUnsettled } from './unsettled.js';
+import { isUnsettled, markUnsettled, pendingPhases } from './unsettled.js';
 import { createVisibilityGate, HIDDEN_PAUSE_MS } from './visibility-gate.js';
 
 const STATE_POLL_MS = 5_000;
@@ -139,14 +139,14 @@ const approvalBoard = createApprovalBoard({
 function renderCardRows() {
   for (const key of [...questionRows.keys(), ...approvalRows.keys()]) renderQuestionRow(key);
 }
-/** 送る欄・質問・承認の今の段から、body の印を付け直す（読むだけで、流れは変えない）。 */
+/** 送る欄・質問・承認の今の段から、body の印を付け直す（読むだけで、流れは変えない。閉じたカードは数えない）。 */
 function syncUnsettled() {
   markUnsettled(
     document.body,
     isUnsettled({
       sendPhase: sendFlow.getState().phase,
-      questionPhases: [...questionRows.keys()].map((key) => questionBoard.flow(key).phase),
-      approvalPhases: [...approvalRows.keys()].map((key) => approvalBoard.state(key).flow.phase),
+      questionPhases: pendingPhases(questionRows, (key) => questionBoard.flow(key).phase),
+      approvalPhases: pendingPhases(approvalRows, (key) => approvalBoard.state(key).flow.phase),
     }),
   );
 }

@@ -1,7 +1,13 @@
 // 送信の処理中か結果不明の印（web/embed/unsettled.js、iss-00077 D-04、T-03 の印の条件、T-06 の読み）。
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { frameUnsettled, isUnsettled, markUnsettled, UNSETTLED_ATTRIBUTE } from '../../web/embed/unsettled.js';
+import {
+  frameUnsettled,
+  isUnsettled,
+  markUnsettled,
+  pendingPhases,
+  UNSETTLED_ATTRIBUTE,
+} from '../../web/embed/unsettled.js';
 
 test('印の属性の名前は data-unsettled の1つ', () => {
   assert.equal(UNSETTLED_ATTRIBUTE, 'data-unsettled');
@@ -49,4 +55,27 @@ test('T-06：frameUnsettled は枠の body の印を読み、印がない・文�
     },
   };
   assert.equal(frameUnsettled(throwing), false);
+});
+
+test('pendingPhases は part.state が pending のカードの段だけを返す（答え済み・取り消しで閉じたカードは数えない）', () => {
+  const rows = new Map([
+    ['open', { part: { state: 'pending' } }],
+    ['answered', { part: { state: 'answered' } }],
+    ['cancelled', { part: { state: 'cancelled' } }],
+    ['broken', { part: null }],
+  ]);
+  const phases: Record<string, string> = { open: 'idle', answered: 'unknown', cancelled: 'partial', broken: 'sending' };
+  assert.deepEqual(
+    pendingPhases(rows, (key: string) => phases[key] ?? ''),
+    ['idle'],
+  );
+  assert.equal(
+    isUnsettled({ sendPhase: 'compose', questionPhases: pendingPhases(rows, (key: string) => phases[key] ?? '') }),
+    false,
+  );
+  phases.open = 'sending';
+  assert.deepEqual(
+    pendingPhases(rows, (key: string) => phases[key] ?? ''),
+    ['sending'],
+  );
 });

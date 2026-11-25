@@ -219,13 +219,15 @@ export function createSeenStore(getStorage) {
 
 /**
  * 選んだ頂点を、別の頂点を選ばず、タブが見えたまま dwellMs 続けて出したら、onSeen(id, ISO 時刻) を1回呼ぶ。
- * show は選びが変わるたびに（同じ id でも）、visibility は visibilitychange で呼ぶ。隠れたら数え直す。
+ * show は描くたびに（同じ id でも）、その頂点の最後の活動（version）と一緒に呼ぶ。出し続けている間に version が
+ * 変われば（また動いた）、もう一度 dwellMs 数えて書き直す。visibility は visibilitychange で呼ぶ。隠れたら数え直す。
  * @param {{ dwellMs: number, now: () => number, isVisible: () => boolean,
  *   schedule: (fn: () => void, ms: number) => any, cancel: (timer: any) => void,
  *   onSeen: (id: string, at: string) => void }} options
  */
 export function createSeenTracker({ dwellMs, now, isVisible, schedule, cancel, onSeen }) {
   let current = null;
+  let version = null;
   let timer = null;
   let done = false;
   const clear = () => {
@@ -244,9 +246,14 @@ export function createSeenTracker({ dwellMs, now, isVisible, schedule, cancel, o
     }, dwellMs);
   };
   return {
-    show(id) {
-      if (id === current) return;
+    /**
+     * @param {string | null} id
+     * @param {string | null} [nextVersion]
+     */
+    show(id, nextVersion = null) {
+      if (id === current && nextVersion === version) return;
       current = id;
+      version = nextVersion;
       done = false;
       arm();
     },

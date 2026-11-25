@@ -99,8 +99,8 @@ test('iss-00077 T-03：body の印は送る欄・質問・承認の段を読む�
   const sync = /function syncUnsettled\(\) \{([\s\S]*?)\n\}/.exec(frame)?.[1] ?? '';
   assert.match(sync, /markUnsettled\(\s*document\.body,/);
   assert.match(sync, /sendPhase: sendFlow\.getState\(\)\.phase/);
-  assert.match(sync, /questionBoard\.flow\(key\)\.phase/);
-  assert.match(sync, /approvalBoard\.state\(key\)\.flow\.phase/);
+  assert.match(sync, /pendingPhases\(questionRows, \(key\) => questionBoard\.flow\(key\)\.phase\)/);
+  assert.match(sync, /pendingPhases\(approvalRows, \(key\) => approvalBoard\.state\(key\)\.flow\.phase\)/);
   assert.doesNotMatch(sync, /submit|confirm|query|dismiss|adopt|choose/, '読むだけ');
   // 印は、送る欄を描くたび、カードの段が変わるたび、会話を描くたびに付け直す。
   assert.match(frame, /renderSendPanel\(document, view\)\);\s*syncUnsettled\(\);/);

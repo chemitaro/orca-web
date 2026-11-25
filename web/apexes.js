@@ -103,7 +103,7 @@ function syncOpen() {
 function renderPane() {
   const pane = buildPane(lastDoc, selection, { now: Date.now(), remembered });
   remembered = pane.remember;
-  seenTracker.show(selection.id);
+  seenTracker.show(selection.id, pane.remember?.lastActivityAt ?? null);
   document.body.classList.toggle('apexes--selected', pane.selected);
   if (!pane.selected) {
     openTarget = null;

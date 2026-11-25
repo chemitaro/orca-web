@@ -22,6 +22,18 @@ export function isUnsettled({ sendPhase = null, questionPhases = [], approvalPha
 }
 
 /**
+ * 開いている（part.state が pending の）カードの段だけを返す。答え済み・取り消しで閉じたカードは、帯を出さないので数えない。
+ * @param {Map<string, { part?: any }>} rows key ごとのカードの行
+ * @param {(key: string) => string} phaseOf その key の流れの段
+ * @returns {string[]}
+ */
+export function pendingPhases(rows, phaseOf) {
+  const phases = [];
+  for (const [key, row] of rows) if (row?.part?.state === 'pending') phases.push(phaseOf(key));
+  return phases;
+}
+
+/**
  * 印を付けるか外す。
  * @param {{ setAttribute: (name: string, value: string) => void, removeAttribute: (name: string) => void }} body
  * @param {boolean} unsettled
