@@ -142,3 +142,28 @@ test('T-07: Host・Origin・GET を守り、部品がなければ 503 apexes_una
     assert.equal(reply.headers['access-control-allow-origin'], undefined);
   });
 });
+
+test('R-05: /apexes を index と同じ CSP で配り、部品の JS を配り、ほかの画面の見出しからリンクする', async () => {
+  await withApp({}, async (send) => {
+    const index = await send('/');
+    const page = await send('/apexes');
+    assert.equal(page.status, 200);
+    assert.equal(page.headers['content-type'], 'text/html; charset=utf-8');
+    assert.equal(page.headers['content-security-policy'], index.headers['content-security-policy']);
+    assert.ok(page.text.includes('<title>指揮 — orca-web</title>'));
+    assert.match(page.text, /src="\/apexes\.js"/);
+    assert.ok(!/<script>[^<]/.test(page.text), 'no inline script');
+    assert.ok(!/\sstyle=/.test(page.text), 'no inline style');
+    assert.equal((await send('/apexes', 'POST')).status, 405);
+    for (const path of ['/apexes.js', '/apexes-view.js', '/apexes-dom.js']) {
+      const res = await send(path);
+      assert.equal(res.status, 200, path);
+      assert.equal(res.headers['content-type'], 'text/javascript; charset=utf-8');
+      assert.equal(res.headers['access-control-allow-origin'], undefined);
+    }
+    assert.equal((await send('/apexes.html')).status, 404);
+    for (const path of ['/', '/runs', '/settings']) {
+      assert.match((await send(path)).text, /<a href="\/apexes">指揮<\/a>/, path);
+    }
+  });
+});

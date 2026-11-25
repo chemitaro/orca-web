@@ -434,3 +434,90 @@ a {
     --indent: 12px;
   }
 }
+
+/* 指揮の画面（/apexes）。行の全体が新しいタブで開くリンク。 */
+.apexes-page .apex-counts {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+
+.apexes-page .apex-counts .count[data-key="needs_action"] {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.apexes-page .apex-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.apexes-page .apex-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.apexes-page .apex-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.apexes-page .apex-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  border-radius: 4px;
+  padding: 0 4px;
+  background: var(--head);
+}
+
+.apexes-page .apex-mark .state-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.apexes-page .apex-mark--working {
+  color: var(--ok);
+}
+
+.apexes-page .apex-mark--blocked,
+.apexes-page .apex-mark--waiting {
+  color: var(--bad);
+}
+
+.apexes-page .apex-mark--done,
+.apexes-page .apex-mark--sleeping,
+.apexes-page .apex-mark--unknown {
+  color: var(--muted);
+}
+
+.apexes-page .apex-title {
+  font-weight: 600;
+  min-width: 0;
+}
+
+.apexes-page .apex-link:hover .apex-title,
+.apexes-page .apex-link:focus-visible .apex-title {
+  text-decoration: underline;
+}
+
+.apexes-page .reason .chip {
+  background: var(--head);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.apexes-page .reason .chip.tag {
+  color: var(--warn);
+}
+
+.apexes-page .empty {
+  color: var(--muted);
+}
