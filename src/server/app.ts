@@ -123,66 +123,70 @@ export const OPEN_ERROR_STATUS: Record<OpenErrorCode, number> = {
   device_unknown: 503,
 };
 
-/** 配るファイル（道 → web/ の中の固定のファイルと型）。利用者のパスを受けない。page は CSP を付ける画面。 */
-const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?: 'index' | 'embed'; cors?: 'read' }>> =
-  {
-    '/': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
-    '/index.html': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
-    '/inbox.js': { file: 'inbox.js', type: 'text/javascript; charset=utf-8' },
-    '/inbox-view.js': { file: 'inbox-view.js', type: 'text/javascript; charset=utf-8' },
-    '/inbox-dom.js': { file: 'inbox-dom.js', type: 'text/javascript; charset=utf-8' },
-    '/runs': { file: 'runs.html', type: 'text/html; charset=utf-8', page: 'index' },
-    '/runs.js': { file: 'runs.js', type: 'text/javascript; charset=utf-8' },
-    '/run.js': { file: 'run.js', type: 'text/javascript; charset=utf-8' },
-    '/project.js': { file: 'project.js', type: 'text/javascript; charset=utf-8' },
-    '/runs-view.js': { file: 'runs-view.js', type: 'text/javascript; charset=utf-8' },
-    '/runs-dom.js': { file: 'runs-dom.js', type: 'text/javascript; charset=utf-8' },
-    '/poll-loop.js': { file: 'poll-loop.js', type: 'text/javascript; charset=utf-8' },
-    '/apexes': { file: 'apexes.html', type: 'text/html; charset=utf-8', page: 'index' },
-    '/apexes.js': { file: 'apexes.js', type: 'text/javascript; charset=utf-8' },
-    '/apexes-view.js': { file: 'apexes-view.js', type: 'text/javascript; charset=utf-8' },
-    '/apexes-dom.js': { file: 'apexes-dom.js', type: 'text/javascript; charset=utf-8' },
-    '/settings': { file: 'settings.html', type: 'text/html; charset=utf-8', page: 'index' },
-    '/main.js': { file: 'main.js', type: 'text/javascript; charset=utf-8' },
-    '/view.js': { file: 'view.js', type: 'text/javascript; charset=utf-8' },
-    '/write.js': { file: 'write.js', type: 'text/javascript; charset=utf-8' },
-    '/style.css': { file: 'style.css', type: 'text/css; charset=utf-8' },
-    '/embed/open-button': { file: 'embed/open-button.html', type: 'text/html; charset=utf-8', page: 'embed' },
-    '/embed/open-button.js': { file: 'embed/open-button.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/open-button-frame.js': { file: 'embed/open-button-frame.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/open-button.css': { file: 'embed/open-button.css', type: 'text/css; charset=utf-8' },
-    // 開くボタンの部品。同じオリジンの画面と iframe だけが読む（CORS を付けない）。
-    '/embed/open-control.js': { file: 'embed/open-control.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/open-control-view.js': { file: 'embed/open-control-view.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/open-control.css': { file: 'embed/open-control.css', type: 'text/css; charset=utf-8' },
-    '/embed/agent': { file: 'embed/agent.html', type: 'text/html; charset=utf-8', page: 'embed' },
-    '/embed/agent-frame.js': { file: 'embed/agent-frame.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/agent-view.js': { file: 'embed/agent-view.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/agent-dom.js': { file: 'embed/agent-dom.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/markdown.js': { file: 'embed/markdown.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/markdown-dom.js': { file: 'embed/markdown-dom.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/send-view.js': { file: 'embed/send-view.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/send-dom.js': { file: 'embed/send-dom.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/question-view.js': { file: 'embed/question-view.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/question-dom.js': { file: 'embed/question-dom.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/approval-view.js': { file: 'embed/approval-view.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/approval-dom.js': { file: 'embed/approval-dom.js', type: 'text/javascript; charset=utf-8' },
-    '/embed/agent-marks.js': { file: 'embed/agent-marks.js', type: 'text/javascript; charset=utf-8', cors: 'read' },
-    '/embed/agent-marks-view.js': {
-      file: 'embed/agent-marks-view.js',
-      type: 'text/javascript; charset=utf-8',
-      cors: 'read',
-    },
-    '/embed/agent-marks-icons.js': {
-      file: 'embed/agent-marks-icons.js',
-      type: 'text/javascript; charset=utf-8',
-      cors: 'read',
-    },
-    '/embed/agent-marks.css': { file: 'embed/agent-marks.css', type: 'text/css; charset=utf-8', cors: 'read' },
-    // 印の組み立てが import する経過の表記。別のオリジンからも import されるので同じ読み取りの CORS。
-    '/embed/elapsed.js': { file: 'embed/elapsed.js', type: 'text/javascript; charset=utf-8', cors: 'read' },
-    '/embed/agent.css': { file: 'embed/agent.css', type: 'text/css; charset=utf-8' },
-  };
+/**
+ * 配るファイル（道 → web/ の中の固定のファイルと型）。利用者のパスを受けない。page は CSP を付ける画面。
+ * frameSelf は、自分の画面（指揮の画面）にも埋め込ませる画面（frame-ancestors の先頭に 'self'）。
+ */
+const STATIC_FILES: Readonly<
+  Record<string, { file: string; type: string; page?: 'index' | 'embed'; cors?: 'read'; frameSelf?: true }>
+> = {
+  '/': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
+  '/index.html': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
+  '/inbox.js': { file: 'inbox.js', type: 'text/javascript; charset=utf-8' },
+  '/inbox-view.js': { file: 'inbox-view.js', type: 'text/javascript; charset=utf-8' },
+  '/inbox-dom.js': { file: 'inbox-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/runs': { file: 'runs.html', type: 'text/html; charset=utf-8', page: 'index' },
+  '/runs.js': { file: 'runs.js', type: 'text/javascript; charset=utf-8' },
+  '/run.js': { file: 'run.js', type: 'text/javascript; charset=utf-8' },
+  '/project.js': { file: 'project.js', type: 'text/javascript; charset=utf-8' },
+  '/runs-view.js': { file: 'runs-view.js', type: 'text/javascript; charset=utf-8' },
+  '/runs-dom.js': { file: 'runs-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/poll-loop.js': { file: 'poll-loop.js', type: 'text/javascript; charset=utf-8' },
+  '/apexes': { file: 'apexes.html', type: 'text/html; charset=utf-8', page: 'index' },
+  '/apexes.js': { file: 'apexes.js', type: 'text/javascript; charset=utf-8' },
+  '/apexes-view.js': { file: 'apexes-view.js', type: 'text/javascript; charset=utf-8' },
+  '/apexes-dom.js': { file: 'apexes-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/settings': { file: 'settings.html', type: 'text/html; charset=utf-8', page: 'index' },
+  '/main.js': { file: 'main.js', type: 'text/javascript; charset=utf-8' },
+  '/view.js': { file: 'view.js', type: 'text/javascript; charset=utf-8' },
+  '/write.js': { file: 'write.js', type: 'text/javascript; charset=utf-8' },
+  '/style.css': { file: 'style.css', type: 'text/css; charset=utf-8' },
+  '/embed/open-button': { file: 'embed/open-button.html', type: 'text/html; charset=utf-8', page: 'embed' },
+  '/embed/open-button.js': { file: 'embed/open-button.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/open-button-frame.js': { file: 'embed/open-button-frame.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/open-button.css': { file: 'embed/open-button.css', type: 'text/css; charset=utf-8' },
+  // 開くボタンの部品。同じオリジンの画面と iframe だけが読む（CORS を付けない）。
+  '/embed/open-control.js': { file: 'embed/open-control.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/open-control-view.js': { file: 'embed/open-control-view.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/open-control.css': { file: 'embed/open-control.css', type: 'text/css; charset=utf-8' },
+  '/embed/agent': { file: 'embed/agent.html', type: 'text/html; charset=utf-8', page: 'embed', frameSelf: true },
+  '/embed/agent-frame.js': { file: 'embed/agent-frame.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/agent-view.js': { file: 'embed/agent-view.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/agent-dom.js': { file: 'embed/agent-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/markdown.js': { file: 'embed/markdown.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/markdown-dom.js': { file: 'embed/markdown-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/send-view.js': { file: 'embed/send-view.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/send-dom.js': { file: 'embed/send-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/question-view.js': { file: 'embed/question-view.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/question-dom.js': { file: 'embed/question-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/approval-view.js': { file: 'embed/approval-view.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/approval-dom.js': { file: 'embed/approval-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/agent-marks.js': { file: 'embed/agent-marks.js', type: 'text/javascript; charset=utf-8', cors: 'read' },
+  '/embed/agent-marks-view.js': {
+    file: 'embed/agent-marks-view.js',
+    type: 'text/javascript; charset=utf-8',
+    cors: 'read',
+  },
+  '/embed/agent-marks-icons.js': {
+    file: 'embed/agent-marks-icons.js',
+    type: 'text/javascript; charset=utf-8',
+    cors: 'read',
+  },
+  '/embed/agent-marks.css': { file: 'embed/agent-marks.css', type: 'text/css; charset=utf-8', cors: 'read' },
+  // 印の組み立てが import する経過の表記。別のオリジンからも import されるので同じ読み取りの CORS。
+  '/embed/elapsed.js': { file: 'embed/elapsed.js', type: 'text/javascript; charset=utf-8', cors: 'read' },
+  '/embed/agent.css': { file: 'embed/agent.css', type: 'text/css; charset=utf-8' },
+};
 
 type Headers = Record<string, string>;
 
@@ -384,7 +388,10 @@ function parseOpenRequest(text: string): OpenRequest | null {
   return { worktree: parsed.worktree, agent: parsed.agent };
 }
 
-/** 画面の CSP。埋め込みは SpecDock のオリジンだけに許す（なければ 'none'）。inline の script と style は許さない。 */
+/**
+ * 画面の CSP。埋め込みは SpecDock のオリジンだけに許す（なければ 'none'）。inline の script と style は許さない。
+ * frameAncestors は、呼び手が画面ごとに決めた値（frameSelf の画面は 'self' を先頭に足した値）。
+ */
 function pagePolicy(page: 'index' | 'embed', frameAncestors: string): string {
   const common = ["base-uri 'none'", `frame-ancestors ${frameAncestors}`];
   if (page === 'index') return ["default-src 'self'", "form-action 'self'", ...common].join('; ');
@@ -402,6 +409,7 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
   const readOrigins = new Set(options.readOrigins ?? []);
   const firstSeen = new FirstSeenStartTimes();
   const frameAncestors = readOrigins.size > 0 ? [...readOrigins].join(' ') : "'none'";
+  const frameAncestorsWithSelf = ["'self'", ...readOrigins].join(' ');
   const webDir = options.webDir ?? DEFAULT_WEB_DIR;
   const tokens = options.tokens ?? new TokenStore();
 
@@ -911,7 +919,10 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
     const content = await readFile(path.join(webDir, asset.file));
     const headers = baseHeaders({ ...access, 'content-type': asset.type, 'content-length': String(content.length) });
     if (asset.page) {
-      headers['content-security-policy'] = pagePolicy(asset.page, frameAncestors);
+      headers['content-security-policy'] = pagePolicy(
+        asset.page,
+        asset.frameSelf ? frameAncestorsWithSelf : frameAncestors,
+      );
       // no-referrer だと、Fetch の仕様では同じオリジンの POST の Origin が null になりうる（守りが拒む）。
       headers['referrer-policy'] = 'same-origin';
     }
