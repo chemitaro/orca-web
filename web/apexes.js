@@ -7,6 +7,8 @@
 // 新着の点：選んだ頂点を 10 秒続けて出したら、見た時刻を localStorage に覚える（id と時刻だけ。使えなければ点を出さない）。
 // 対応が必要の知らせ（iss-00081）：favicon を印付きに替え、通知を許可したタブでは、隠れている間も 30 秒ごとに読み、
 // 対応が必要に入った頂点を1回だけデスクトップに通知する（判断は apexes-notify.js、出す口は apexes-dom.js）。
+// チームの帯（iss-00079）：見出しの下、会話の上に、選んだ頂点の team の畳める帯を出す（組み立ては apexes-team-view.js、
+// 描くのは apexes-team-dom.js）。描き直しても、同じ頂点の間は開いた帯とまとめを開いたままにする。
 import {
   clearAgentFrame,
   createApexNotifier,
@@ -20,6 +22,8 @@ import {
   startApexPolling,
 } from './apexes-dom.js';
 import { createNotifyTracker } from './apexes-notify.js';
+import { readTeamState, renderTeamBand, revealTeamNode } from './apexes-team-dom.js';
+import { buildTeamBand } from './apexes-team-view.js';
 import {
   apexesApiPath,
   apexesFavicon,
@@ -62,6 +66,8 @@ let selection = initialSelection(location.search, {
 let remembered = null;
 /** 今の見出しの開く先（押したときに読む）。 */
 let openTarget = null;
+/** 今のチームの帯の頂点の id（替われば帯を閉じて描く）。 */
+let teamApexId = null;
 
 // 見た時刻。読めなければ null で、点を出さない（一覧と会話はそのまま動く）。
 const seenStore = createSeenStore(() => window.localStorage);
@@ -121,7 +127,14 @@ function renderPane() {
   }
   openTarget = pane.header.open;
   syncOpen();
-  els.paneHead.replaceChildren(renderPaneHead(document, pane.header, { openRoot: openControl.root }));
+  const previous = els.paneHead.querySelector('details[data-team-band]');
+  const teamState = teamApexId === pane.header.id ? readTeamState(previous) : {};
+  teamApexId = pane.header.id;
+  const team = renderTeamBand(document, buildTeamBand(pane.remember, Date.now()), teamState);
+  els.paneHead.replaceChildren(
+    renderPaneHead(document, pane.header, { openRoot: openControl.root }),
+    ...(team ? [team] : []),
+  );
   mountAgentFrame(els.paneFrame, pane.header.id);
 }
 
@@ -177,6 +190,18 @@ els.sections.addEventListener('click', (event) => {
   const button = /** @type {HTMLElement | null} */ (event.target)?.closest?.('button[data-apex]');
   if (!button) return;
   changeSelection({ type: 'select', id: button.dataset.apex ?? '' });
+});
+// 履歴の帯の四角を押すと、その節のまとめを開いて見せる。
+els.paneHead.addEventListener('click', (event) => {
+  const cell = /** @type {HTMLElement | null} */ (event.target)?.closest?.('button[data-team-target]');
+  if (!cell) return;
+  const band = els.paneHead.querySelector('details[data-team-band]');
+  const found = revealTeamNode(band, cell.dataset.teamTarget ?? '');
+  if (!found) return;
+  for (const marked of els.paneHead.querySelectorAll('.team-node--target'))
+    marked.classList.remove('team-node--target');
+  found.classList.add('team-node--target');
+  found.scrollIntoView({ block: 'nearest' });
 });
 els.paneHead.addEventListener('click', (event) => {
   const button = /** @type {HTMLElement | null} */ (event.target)?.closest?.('button[data-action="back"]');

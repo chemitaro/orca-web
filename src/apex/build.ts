@@ -16,6 +16,7 @@ import type {
 } from './model.ts';
 import { APEXES_SCHEMA } from './model.ts';
 import { SETTLED_TASK_STATES } from './owners.ts';
+import { buildTeam } from './team.ts';
 
 /** メンバーの許可待ち・入力待ちを対応が必要にするまでの猶予。自動の承認で一瞬だけ出る表示を拾わない。 */
 export const MEMBER_GRACE_MS = 20_000;
@@ -477,6 +478,14 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
       stateStartedAt: agent.stateStartedAt.value,
       members: orderMembers(agent.id, team.map(memberEntry)),
       counts: countTeam(team, links.dispatches.get(agent.id) ?? []),
+      team: buildTeam({
+        apexId: agent.id,
+        members: team,
+        promoted: links.promoted,
+        dispatches: links.dispatches.get(agent.id) ?? [],
+        workers: state.workers,
+        tasks,
+      }),
     });
   }
   items.sort(compareItems);

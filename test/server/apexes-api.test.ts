@@ -157,7 +157,14 @@ test('R-05: /apexes を index と同じ CSP で配り、部品の JS を配り�
     assert.ok(!/<script>[^<]/.test(page.text), 'no inline script');
     assert.ok(!/\sstyle=/.test(page.text), 'no inline style');
     assert.equal((await send('/apexes', 'POST')).status, 405);
-    for (const path of ['/apexes.js', '/apexes-view.js', '/apexes-dom.js', '/apexes-notify.js']) {
+    for (const path of [
+      '/apexes.js',
+      '/apexes-view.js',
+      '/apexes-dom.js',
+      '/apexes-notify.js',
+      '/apexes-team-view.js',
+      '/apexes-team-dom.js',
+    ]) {
       const res = await send(path);
       assert.equal(res.status, 200, path);
       assert.equal(res.headers['content-type'], 'text/javascript; charset=utf-8');

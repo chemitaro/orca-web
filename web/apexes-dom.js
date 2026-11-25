@@ -28,7 +28,8 @@ export function renderHeadline(doc, headline) {
   return box;
 }
 
-function newTabLink(doc, href, text, className) {
+/** 新しいタブで開くリンク（_blank、noopener noreferrer）。チームの帯（apexes-team-dom.js）も使う。 */
+export function newTabLink(doc, href, text, className) {
   const a = make(doc, 'a', text, className);
   a.href = href;
   a.target = '_blank';
