@@ -25,6 +25,7 @@ const worker = (runId: string, patch: Partial<OrcaWorker> = {}): OrcaWorker => (
   worktreeId: null,
   structuredSessionId: null,
   attentionCategories: [],
+  activity: null,
   ...patch,
 });
 

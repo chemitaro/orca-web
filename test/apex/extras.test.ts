@@ -35,6 +35,7 @@ const worker = (o: Partial<OrcaWorker> & { dispatchId: string }): OrcaWorker => 
   worktreeId: null,
   structuredSessionId: null,
   attentionCategories: [],
+  activity: null,
   ...o,
 });
 
@@ -42,13 +43,17 @@ test('生の読みから、Run の世代、task の作成者の paneKey と世�
   const extras = buildOrchestrationExtras({
     runs: [run({ id: 'r1', consumerGeneration: 2 }), run({ id: 'r2' })],
     tasks: [task({ id: 't1', createdByPaneKey: 'p:1', createdByRunGeneration: 2 }), task({ id: 't2' })],
-    workers: [worker({ dispatchId: 'd1', workerState: 'running', attentionCategories: ['input'] })],
+    workers: [
+      worker({ dispatchId: 'd1', workerState: 'running', attentionCategories: ['input'], activity: 'working' }),
+      worker({ dispatchId: 'd2' }),
+    ],
   });
   assert.deepEqual(extras.runs.get('r1'), { generation: 2 });
   assert.deepEqual(extras.runs.get('r2'), { generation: null });
   assert.deepEqual(extras.tasks.get('t1'), { paneKey: 'p:1', generation: 2 });
   assert.deepEqual(extras.tasks.get('t2'), { paneKey: null, generation: null });
-  assert.deepEqual(extras.workers.get('d1'), { workerState: 'running', attention: ['input'] });
+  assert.deepEqual(extras.workers.get('d1'), { workerState: 'running', attention: ['input'], activity: 'working' });
+  assert.deepEqual(extras.workers.get('d2'), { workerState: null, attention: [], activity: null });
 });
 
 test('読めていない取得元は空の表にする', () => {

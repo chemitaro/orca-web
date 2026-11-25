@@ -378,6 +378,7 @@ const worker = (o: {
   terminalState: string | null;
   liveness: string;
   attention?: string[];
+  activity?: string;
 }) => ({
   dispatchId: o.dispatchId,
   taskId: o.taskId,
@@ -393,6 +394,7 @@ const worker = (o: {
     liveness: { verdict: o.liveness, source: 'terminal', observedAt: ms(30) },
     nextAction: { kind: 'none', argv: ['text-910'] },
     attention: { requiresAction: (o.attention ?? []).length > 0, categories: o.attention ?? [] },
+    ...(o.activity === undefined ? {} : { stage: { activity: o.activity } }),
   },
 });
 
@@ -408,6 +410,7 @@ export const workerPage1 = {
       terminalState: 'retained',
       liveness: 'live',
       attention: ['input'],
+      activity: 'working',
     }),
   ],
   page: { limit: 100, total: 2, hasMore: true, nextCursor: 'cursor-2' },

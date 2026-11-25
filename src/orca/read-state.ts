@@ -195,6 +195,8 @@ export interface OrcaWorker {
   structuredSessionId: string | null;
   /** `projection.attention.categories`（知らない値も文字列のまま）。頂点の一覧だけが使い、状態の文書には出さない。 */
   attentionCategories: string[];
+  /** `projection.stage.activity`（working・done・idle など。知らない値も文字列のまま）。頂点の一覧だけが使い、状態の文書には出さない。 */
+  activity: string | null;
 }
 
 export interface OrcaLaunchValues {
@@ -425,6 +427,7 @@ function pickWorker(r: Rec): OrcaWorker | null {
     worktreeId: str(rec(p?.workspace)?.id) ?? str(resource?.worktreeId),
     structuredSessionId: structuredSessionId(resource?.endpointIncarnation),
     attentionCategories: strings(rec(p?.attention)?.categories) ?? [],
+    activity: str(rec(p?.stage)?.activity),
   };
 }
 

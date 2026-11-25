@@ -401,6 +401,8 @@ const NEW_KEYS = [
   'created_by_run_generation',
   'attentionCategories',
   'attention',
+  'activity',
+  'stage',
 ];
 
 function keysOf(value: unknown, into = new Set<string>()): Set<string> {
@@ -413,7 +415,7 @@ function keysOf(value: unknown, into = new Set<string>()): Set<string> {
   return into;
 }
 
-test('状態の文書に、内部の値（世代、作成者の paneKey、attention）の鍵が出ない（T-02）', async () => {
+test('状態の文書に、内部の値（世代、作成者の paneKey、attention、activity）の鍵が出ない（T-02）', async () => {
   const { reader } = replayReader();
   const doc = JSON.parse(JSON.stringify(await poller(reader).snapshot()));
   const keys = keysOf(doc);
@@ -429,7 +431,11 @@ test('snapshotWithExtras は、同じ読みの状態の文書と内部の値と�
   assert.deepEqual(JSON.parse(JSON.stringify(first.state)), expectedState);
   assert.deepEqual(first.extras.runs.get('run_hex-3'), { generation: 2 });
   assert.deepEqual(first.extras.tasks.get('task_hex-2'), { paneKey: 'uuid-10:uuid-11', generation: 2 });
-  assert.deepEqual(first.extras.workers.get('ctx_hex-1'), { workerState: 'ready', attention: ['input'] });
+  assert.deepEqual(first.extras.workers.get('ctx_hex-1'), {
+    workerState: 'ready',
+    attention: ['input'],
+    activity: 'working',
+  });
   const again = await p.snapshotWithExtras();
   assert.equal(again.generation, first.generation);
   clock.advance(60);

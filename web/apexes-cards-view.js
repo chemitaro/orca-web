@@ -12,6 +12,8 @@ export const APEX_CARD_NOTE = '会話のカードで答えてください';
 export const ANSWER_LABEL = '見て答える';
 export const TELL_LABEL = '頂点に伝える';
 export const BACK_TO_APEX_LABEL = '頂点に戻る';
+/** 作業者が作業を続けながら出した問い（questions の working）のカードの添え書き（iss-00091）。 */
+export const WORKING_QUESTION_NOTE = '作業を続けながらの質問';
 
 /** 下書きの結果の言葉（reason ごと）。ok は案内、ほかは入れなかった理由。 */
 export const DRAFT_RESULT_TEXTS = {
@@ -33,7 +35,7 @@ const str = (value) => (typeof value === 'string' && value !== '' ? value : null
  * @returns {Array<
  *   | { kind: 'apex', key: string, text: string, note: string }
  *   | { kind: 'member', key: string, text: string, memberId: string, memberTitle: string, action: { type: 'answer', label: string } }
- *   | { kind: 'question', key: string, text: string, dispatchId: string, taskTitle: string, questionKind: 'ask' | 'gate', action: { type: 'tell', label: string } }
+ *   | { kind: 'question', key: string, text: string, dispatchId: string, taskTitle: string, questionKind: 'ask' | 'gate', note?: string, action: { type: 'tell', label: string } }
  * >}
  */
 export function buildApexCards(item) {
@@ -70,6 +72,7 @@ export function buildApexCards(item) {
       dispatchId,
       taskTitle,
       questionKind: question.kind,
+      ...(question.working === true ? { note: WORKING_QUESTION_NOTE } : {}),
       action: { type: 'tell', label: TELL_LABEL },
     });
   }

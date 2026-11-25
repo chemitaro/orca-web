@@ -21,6 +21,8 @@ export interface DispatchSpec {
   run?: string;
   state?: string;
   attention?: string[];
+  /** worker-list の `projection.stage.activity`。既定は null（読めない）。 */
+  activity?: string | null;
   worktree?: string;
 }
 
@@ -51,7 +53,11 @@ export function orchestration(o: {
   });
   const workers = (o.dispatches ?? []).map((spec) => {
     const state = spec.state ?? 'working';
-    extras.workers.set(spec.id, { workerState: state, attention: spec.attention ?? [] });
+    extras.workers.set(spec.id, {
+      workerState: state,
+      attention: spec.attention ?? [],
+      activity: spec.activity ?? null,
+    });
     return worker({
       dispatchId: spec.id,
       taskId: spec.task,
