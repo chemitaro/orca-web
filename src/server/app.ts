@@ -185,6 +185,8 @@ const STATIC_FILES: Readonly<
   '/embed/approval-dom.js': { file: 'embed/approval-dom.js', type: 'text/javascript; charset=utf-8' },
   '/embed/visibility-gate.js': { file: 'embed/visibility-gate.js', type: 'text/javascript; charset=utf-8' },
   '/embed/unsettled.js': { file: 'embed/unsettled.js', type: 'text/javascript; charset=utf-8' },
+  // 親の画面からの下書きの口（iss-00080 D-04）。
+  '/embed/draft-receiver.js': { file: 'embed/draft-receiver.js', type: 'text/javascript; charset=utf-8' },
   '/embed/agent-marks.js': { file: 'embed/agent-marks.js', type: 'text/javascript; charset=utf-8', cors: 'read' },
   '/embed/agent-marks-view.js': {
     file: 'embed/agent-marks-view.js',

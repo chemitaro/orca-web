@@ -11,6 +11,8 @@
 // 見えない状態が 30 秒続いたら会話の SSE を閉じ、状態の読みの予約をやめる。見えたら状態をすぐ読み、SSE をつなぎ直す
 // （会話は snapshot から描き直す。送る欄の書きかけの文は触らない）。門は visibility-gate.js（iss-00077 D-05）。
 // 送る欄・質問・承認のどれかが処理中か結果不明の間は、body に印（unsettled.js）を付け、外の画面が切り替えの前に確かめる（D-04）。
+// `compose=off`（iss-00080 D-03）は送る欄の要素を隠すだけで、送信の状態の読みとカードは今のまま。
+// 親の画面からの下書き（D-04）は draft-receiver.js の口で受け、入力欄に入れるだけで送らない。
 // 文字はすべて textContent で入れる（会話の本文、ツールの出力、題名、送る本文、質問と選択肢は信頼しないデータ）。
 
 import { createPollLoop } from '../poll-loop.js';
@@ -25,6 +27,7 @@ import {
   createTerminalApprover,
   readOnlyApprover,
 } from './approval-view.js';
+import { createDraftReceiver, isComposeOff } from './draft-receiver.js';
 import { createOpenBoard, createOpenControl, runOpen } from './open-control.js';
 import {
   buildQuestionCard,
@@ -45,6 +48,8 @@ const TIME_REFRESH_MS = 30_000;
 const SEND_STATUS_POLL_MS = 15_000;
 const params = new URLSearchParams(location.search);
 const agentId = params.get('id') ?? '';
+/** 送る欄を出すか（compose=off の枠は答えるだけ）。 */
+const composeOn = !isComposeOff(params);
 const theme = params.get('theme');
 if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
 
@@ -469,6 +474,17 @@ openControl.button.addEventListener('click', () => {
 });
 
 const sendFlow = createSendFlow({ agentId, writer, read, onChange: () => renderSend() });
+if (!composeOn) els.send.hidden = true;
+// 親の画面からの下書きの口。入れるのは流れの input だけで、送らない（F-01）。
+const draftReceiver = createDraftReceiver({
+  win: window,
+  parent: window.parent === window ? null : window.parent,
+  selfOrigin: location.origin,
+  composeOn,
+  sendPhase: () => sendFlow.getState().phase,
+  currentText: () => els.sendText.value,
+  input: (text) => sendFlow.input(text),
+});
 
 // タッチが主の端末では Enter で改行し、送るボタンで送る（D-04）。変われば描き直す。
 const touch = window.matchMedia('(hover: none) and (pointer: coarse)');
@@ -554,7 +570,8 @@ if (!agentId) {
   });
   document.addEventListener('visibilitychange', () => gate.update());
   gate.update();
-  void pollSend();
+  // 送信の状態の読みは compose に関わらず始める（質問・承認のカードが答えられるかに要る）。最初の読みの後に親へ準備を知らせる。
+  void pollSend().then(() => draftReceiver.ready());
   // 詳細の見出しの印。要約を同じオリジンで読む（10 秒ごと、見えない間は読まない）。読めなければ置き場を空にする。
   watchWorktreeSummary('', {
     onDocument: (summary) => renderDetailMark(els.detailMark, summary, agentId, { now: Date.now() }),
