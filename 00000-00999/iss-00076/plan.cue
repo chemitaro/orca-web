@@ -4,12 +4,14 @@ goal: "`/apexes` を開くと、頂点だけが対応が必要・作業中・完
 
 steps: {
 	"S-01": {
+		status:   "done"
 		title:    "頂点の一覧の純粋な関数と型（D-01〜D-04）"
 		text:     "対象：新しい `src/apex/model.ts`・`src/apex/build.ts`、新しい `test/apex/build.test.ts`（状態の文書の仮の組み立ては `test/inbox/fixture.ts` を使うか、同じ形の小さな fixture を `test/apex/fixture.ts` に作る）。`src/inbox/classify.ts` は変えない（`agentMark`・`agentWorkingMode`・`findIssue` を import する）。確かめ：T-01〜T-06。完了：`npm run lint`、`npm test`、`npm run build` が通る。コミットして次へ"
 		realizes: ["R-01", "R-02", "R-03", "R-04", "F-02"]
 		session:  "impl"
 	}
 	"S-02": {
+		status:   "done"
 		title:    "API `GET /api/apexes`（D-05）"
 		text:     "対象：`src/server/app.ts`（同じオリジンだけの道の組に足す）、新しい `test/server/apexes-api.test.ts`（既存の `test/server/` の受け箱・Run の API のテストの組み立てに倣う）。確かめ：T-07。完了：lint・test・build が通る。コミットして次へ"
 		realizes: ["R-06", "F-01"]
@@ -17,6 +19,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-03": {
+		status:   "done"
 		title:    "画面 `/apexes` とリンク（D-06）"
 		text:     "対象：新しい `web/apexes.html`・`web/apexes.js`・`web/apexes-view.js`・`web/apexes-dom.js`、`web/style.css`（要るだけ）、`src/server/app.ts` の `STATIC_FILES`、受け箱・Run の一覧・状態の表の見出しのリンク（`web/index.html`、`web/runs.html`、`web/settings.html` などの見出しの nav だけ）、新しい `test/web/apexes-view.test.ts`・`test/web/apexes-dom.test.ts`（既存の `inbox-view`・`inbox-dom` のテストに倣う）、配るファイルの一覧を確かめる既存のテストがあれば更新。innerHTML を使わない。確かめ：T-08〜T-10。完了：lint・test・build が通る。実装担当 impl の最後の手順。止まって HEAD を報告する。区切りのレビュー：あり（cp1、開始のコミット..HEAD）"
 		realizes: ["R-05", "R-07"]
@@ -24,6 +27,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-04": {
+		status:   "done"
 		title:    "README・AGENTS.md と試しの orca-web での確かめ（タスク担当。D-07）"
 		text:     "タスク担当が行う。README の画面と API の節、AGENTS.md の地図に追記する。別のポートで起動した試しの orca-web（この worktree のコード、送信は無効の既定のまま）で `GET /api/apexes` の集計（頂点・メンバー・結べないもの・段ごとの数、stale）と、ブラウザで `/apexes` が描けることを確かめ、report.md に集計だけを記録する（題名・パス・会話を書かない）。この Mac の負荷が高く Orca が timeout するときは、stale の帯が出ることの確かめとして記録する。確かめ：T-11。完了：lint・test・build が通り、report.md に結論がある"
 		realizes: ["R-06"]
@@ -49,14 +53,15 @@ tests: {
 verification: """
 	各手順で、その手順のテストを通す。最後に `npm run lint`、`npm test`、`npm run build` を通す。
 	関門（coding-task の `## 関門`。CUE に専用の項目がないので、ここに書く）：
-	- merge：owner（AGENTS.md「PR のマージは利用者が行う」。standard の既定）
+	- merge：agent
+	- merge_permission：本人「ユーザーの許可なくマージする権限を付与します」（2026-11-25、利用者との Claude Code の会話。orca-web の PR を、最終品質ゲートと CI の合格を条件にエージェントがマージしてよいという許し。全文は公開しない）
 	- 区切りのレビュー：cp1。最後の手順 S-03、範囲 `<開始のコミット>..<S-03 の HEAD>`、レビュアー code-reviewer（Opus 5.5 / medium、方針の standard）。理由：判定の規則と画面がまとまってから、文書の前に一度見る
 	- 最終品質ゲート：範囲 `<開始のコミット>..HEAD` の全体（`src/`、`web/`、`test/`、`README.md`、`AGENTS.md`）。PR の直前に `origin/main` を取り込んだときは、取り込んだ後のコミットでやり直す。追加の観点：privacy（文書に本文・パス・paneKey を出さない）、frontend-safety（innerHTML を足さない、リンクの rel）。second_opinion：none（standard の既定）
 	- test_commands：`npm run lint`、`npm test`、`npm run build`（結合のテストは `npm test` の中の `test/server/*.test.ts`）
 	- record_paths：なし（report.md は Git の外で SpecDock が保存する）
 	"""
 rollback: "PR を戻せば、新しい道と画面がなくなるだけで、既存の画面と API は今のまま。"
-exit:     "最終品質ゲートが合格し、試しの orca-web での確かめが report.md にあり、PR の CI が通って、利用者がマージできる状態。"
+exit:     "最終品質ゲートが合格し、試しの orca-web での確かめが report.md にあり、PR の CI が通り、merge.md の条件でエージェントがマージした状態。"
 
 execution: {
 	sessions: {
