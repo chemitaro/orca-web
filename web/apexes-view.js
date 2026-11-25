@@ -27,15 +27,30 @@ export const REASON_LABELS = {
   apex_waiting: '入力待ち',
   member_blocked: '配下が許可待ち',
   member_waiting: '配下が入力待ち',
+  question: '未回答の質問',
+  decision: '未解決の判断',
+  stalled: '仕事が止まった',
+  apex_closed: '統括のタブが閉じたのに仕事が残る',
+  failed: '新しい失敗',
   working: '作業中',
   monitoring: STATE_ICONS.monitoring.label,
   members_working: '配下が作業中',
+  live_work: '仕事が残っている',
   member_grace: '配下が待ち（様子見）',
+  grace: '様子見',
   done: '完了',
   sleeping: 'スリープ',
 };
 
 export const TAG_LABELS = { unverified: '確かめられない' };
+
+/** 完了の頂点の残りの札。count を付けるものは関数。 */
+export const BADGE_LABELS = {
+  merge_pending: () => 'マージ待ち',
+  ci_failed: () => 'CI が失敗',
+  failed_members: (count) => `失敗した作業者 ${count}`,
+  remaining_tasks: (count) => `残りの task ${count}`,
+};
 
 export const UNLINKED_LABELS = {
   parent_missing: '親が見つからない',
@@ -62,6 +77,7 @@ export const UNSEEN_LABEL = '新着';
 const UNSEEN_GROUPS = new Set(['done_recent', 'done_older']);
 
 const DETAIL_PREFIX = '/embed/agent?id=';
+const RUN_PREFIX = '/runs/';
 const BASE_TITLE = '指揮 — orca-web';
 
 const str = (value) => (typeof value === 'string' && value !== '' ? value : null);
@@ -135,6 +151,12 @@ export function pruneSeen(seen, doc, now) {
   return out;
 }
 
+function badgeLabels(badges) {
+  return list(badges)
+    .filter((badge) => Object.hasOwn(BADGE_LABELS, badge?.kind))
+    .map((badge) => BADGE_LABELS[badge.kind](num(badge.count)));
+}
+
 function apexRow(item, now, selectedId = null, seen = null) {
   const reasons = list(item.reasons);
   const counts = item.counts ?? {};
@@ -147,14 +169,45 @@ function apexRow(item, now, selectedId = null, seen = null) {
     monitoring: reasons.includes('monitoring'),
     reasons: reasons.map((r) => REASON_LABELS[r] ?? String(r)),
     tags: list(item.tags).map((t) => TAG_LABELS[t] ?? String(t)),
-    // 配下がなければ出さない。
+    badges: badgeLabels(item.badges),
+    // 配下（生きた辺のメンバーと束の Dispatch）の「動いている/全体」。配下がなければ出さない。
     members: total > 0 ? `${num(counts.working)}/${total}` : null,
     membersLabel: total > 0 ? `配下 ${total} のうち ${num(counts.working)} が作業中` : null,
     elapsed: formatElapsed(item.lastActivityAt, now, { clampFuture: true }),
   };
 }
 
+/** 結べない束の行。Run の目的、生きた数、問いの数。行の全体が /runs/<id> を新しいタブで開くリンク。 */
+function bundleRow(item) {
+  const live = num(item.live);
+  const questions = num(item.questions);
+  const mark = live > 0 ? 'working' : 'waiting';
+  const runId = String(item.runId);
+  return {
+    key: String(item.id),
+    icon: iconKey(null),
+    agentType: null,
+    mark,
+    markLabel: MARK_LABELS[mark],
+    title: str(item.objective) ?? `Run ${runId}`,
+    project: null,
+    issue: null,
+    href: `${RUN_PREFIX}${encodeURIComponent(runId)}`,
+    selectable: false,
+    selected: false,
+    unseen: false,
+    monitoring: false,
+    reasons: [...(live > 0 ? [`生きた仕事 ${live}`] : []), ...(questions > 0 ? [`問い ${questions}`] : [])],
+    tags: [],
+    badges: [],
+    members: null,
+    membersLabel: null,
+    elapsed: null,
+  };
+}
+
 function unlinkedRow(item) {
+  if (item?.kind === 'bundle') return bundleRow(item);
   return {
     ...baseRow(item),
     selectable: false,
@@ -163,6 +216,7 @@ function unlinkedRow(item) {
     monitoring: false,
     reasons: [UNLINKED_LABELS[item.reason] ?? String(item.reason)],
     tags: [],
+    badges: [],
     members: null,
     membersLabel: null,
     elapsed: null,

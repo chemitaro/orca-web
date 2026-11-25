@@ -159,10 +159,16 @@ export interface OrcaRun {
   updatedAt: string | null;
   id: string;
   objective: string | null;
+  /** `consumer_generation`（整数）。頂点の一覧だけが使い、状態の文書には出さない。 */
+  consumerGeneration: number | null;
 }
 
 export interface OrcaTask {
   createdByTerminalHandle: string | null;
+  /** `created_by_pane_key`。頂点の一覧だけが使い、状態の文書には出さない。 */
+  createdByPaneKey: string | null;
+  /** `created_by_run_generation`（整数）。頂点の一覧だけが使い、状態の文書には出さない。 */
+  createdByRunGeneration: number | null;
   id: string;
   runId: string | null;
   parentId: string | null;
@@ -187,6 +193,8 @@ export interface OrcaWorker {
   worktreeId: string | null;
   /** 構造化 Chat の作業者のセッション（`resource.endpointIncarnation` の `structured:<S>` の S）。内部だけに持ち、状態の文書に出さない。 */
   structuredSessionId: string | null;
+  /** `projection.attention.categories`（知らない値も文字列のまま）。頂点の一覧だけが使い、状態の文書には出さない。 */
+  attentionCategories: string[];
 }
 
 export interface OrcaLaunchValues {
@@ -219,6 +227,7 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
 const bool = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null);
 const rec = (v: unknown): Rec | null => (isRecord(v) ? v : null);
 const records = (v: unknown): Rec[] => (Array.isArray(v) ? v.filter(isRecord) : []);
+const int = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) ? v : null);
 const strings = (v: unknown): string[] | null =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null;
 
@@ -380,6 +389,8 @@ function pickTask(r: Rec): OrcaTask | null {
     runId: str(r.run_id),
     parentId: str(r.parent_id),
     createdByTerminalHandle: str(r.created_by_terminal_handle),
+    createdByPaneKey: str(r.created_by_pane_key),
+    createdByRunGeneration: int(r.created_by_run_generation),
     title: str(r.task_title),
     displayName: str(r.display_name),
     status: str(r.status),
@@ -413,6 +424,7 @@ function pickWorker(r: Rec): OrcaWorker | null {
     terminalState: str(r.terminalState),
     worktreeId: str(rec(p?.workspace)?.id) ?? str(resource?.worktreeId),
     structuredSessionId: structuredSessionId(resource?.endpointIncarnation),
+    attentionCategories: strings(rec(p?.attention)?.categories) ?? [],
   };
 }
 
@@ -504,6 +516,7 @@ export function createStateReader(cli: ReadOnlyOrcaCli, rpc: RpcTransport): Stat
                 objective: str(r.objective),
                 updatedAt: str(r.updated_at),
                 coordinatorHandle: str(r.coordinator_handle),
+                consumerGeneration: int(r.consumer_generation),
               }
             : null;
         },

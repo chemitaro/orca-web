@@ -10,7 +10,9 @@ const NOW = Date.parse('2026-11-13T00:00:00Z');
 const ok = <T>(data: T): SourceRead<T> => ({ ok: true, data, truncated: false });
 const fail = { ok: false, error: { kind: 'timeout', message: 'fake timeout' } } as const;
 
-async function harness(runs: OrcaRun[] = [{ id: 'r1', coordinatorHandle: null, objective: null, updatedAt: null }]) {
+async function harness(
+  runs: OrcaRun[] = [{ id: 'r1', coordinatorHandle: null, objective: null, consumerGeneration: null, updatedAt: null }],
+) {
   let now = NOW;
   let connected = true;
   const reader = await staticReader();
@@ -61,6 +63,7 @@ test('Run は7日以内の新しい順、null はid順で後ろ、上限50、同
     updatedAt,
     coordinatorHandle: null,
     objective: null,
+    consumerGeneration: null,
   });
   const h = await harness([
     run('null-z', null),
@@ -97,7 +100,13 @@ test('Run は7日以内の新しい順、null はid順で後ろ、上限50、同
 
 test('失敗したRunの前の連絡と門を残し、部分成功はerrorなし、全失敗はerrorとstaleになる', async () => {
   const h = await harness(
-    ['r1', 'r2'].map((id) => ({ id, coordinatorHandle: null, objective: null, updatedAt: null })),
+    ['r1', 'r2'].map((id) => ({
+      id,
+      coordinatorHandle: null,
+      objective: null,
+      consumerGeneration: null,
+      updatedAt: null,
+    })),
   );
   h.mailReader.readGates = async (id) =>
     ok([{ id: `g:${id}`, taskId: null, status: 'pending', question: '仮の門', createdAt: null }]);
@@ -222,9 +231,21 @@ test('Orcaに届かなければ連絡を呼ばず最後の内容をstaleとunrea
 
 test('Run の7日境界は SQLite UTC と ISO を同じ時刻として含める', async () => {
   const h = await harness([
-    { id: 'sql', coordinatorHandle: null, objective: null, updatedAt: '2026-11-06 00:00:00' },
-    { id: 'iso', coordinatorHandle: null, objective: null, updatedAt: '2026-11-06T00:00:00Z' },
-    { id: 'expired', coordinatorHandle: null, objective: null, updatedAt: '2026-11-05T23:59:59.999Z' },
+    { id: 'sql', coordinatorHandle: null, objective: null, consumerGeneration: null, updatedAt: '2026-11-06 00:00:00' },
+    {
+      id: 'iso',
+      coordinatorHandle: null,
+      objective: null,
+      consumerGeneration: null,
+      updatedAt: '2026-11-06T00:00:00Z',
+    },
+    {
+      id: 'expired',
+      coordinatorHandle: null,
+      objective: null,
+      consumerGeneration: null,
+      updatedAt: '2026-11-05T23:59:59.999Z',
+    },
   ]);
   h.p.noteInboxViewer();
   await h.p.inboxSnapshot();
@@ -283,6 +304,7 @@ test('updatedAt が8日前でも生きている worker の Run の連絡を読�
       id: 'old-active',
       coordinatorHandle: null,
       objective: null,
+      consumerGeneration: null,
       updatedAt: new Date(NOW - 8 * 86400000).toISOString(),
     },
   ]);
@@ -299,6 +321,7 @@ test('updatedAt が8日前でも生きている worker の Run の連絡を読�
         terminalState: 'attached',
         worktreeId: null,
         structuredSessionId: null,
+        attentionCategories: [],
       },
     ]);
   h.p.noteInboxViewer();

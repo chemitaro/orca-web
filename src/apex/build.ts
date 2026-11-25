@@ -1,6 +1,9 @@
 import { type AgentMark, agentMark, agentWorkingMode, findIssue } from '../inbox/classify.ts';
-import type { AgentState, StateDocument } from '../state/model.ts';
+import type { AgentState, StateDocument, WorkerState } from '../state/model.ts';
+import { type Bundle, isLiveDispatch, type LinkedMember, linkApexes, type Placement } from './bundles.ts';
+import { emptyExtras, type OrchestrationExtras } from './extras.ts';
 import type {
+  ApexBadge,
   ApexGroup,
   ApexItem,
   ApexListDocument,
@@ -10,14 +13,23 @@ import type {
   ApexStatus,
   BuildApexListInput,
   UnlinkedItem,
-  UnlinkedReason,
 } from './model.ts';
 import { APEXES_SCHEMA } from './model.ts';
+import { SETTLED_TASK_STATES } from './owners.ts';
 
 /** メンバーの許可待ち・入力待ちを対応が必要にするまでの猶予。自動の承認で一瞬だけ出る表示を拾わない。 */
 export const MEMBER_GRACE_MS = 20_000;
 const RECENT_MS = 24 * 3_600_000;
 const SLEEP_MS = 7 * 24 * 3_600_000;
+/** 問い・止まった仕事・新しい失敗を対応が必要にするまでの猶予 G（R-03）。時刻はデータの値から測る。 */
+export const APEX_GRACE_MS = 90_000;
+
+const OBJECTIVE_MAX = 200;
+
+/** 未回答の ask（input）か未解決の gate（approval）。 */
+function asksOrGates(worker: { attention: readonly string[] } | undefined): boolean {
+  return worker !== undefined && (worker.attention.includes('input') || worker.attention.includes('approval'));
+}
 
 const GROUPS: readonly ApexGroup[] = ['needs_action', 'working', 'done_recent', 'done_older', 'sleeping'];
 const REASONS: readonly ApexReason[] = [
@@ -25,18 +37,41 @@ const REASONS: readonly ApexReason[] = [
   'apex_waiting',
   'member_blocked',
   'member_waiting',
+  'question',
+  'decision',
+  'stalled',
+  'apex_closed',
+  'failed',
   'working',
   'monitoring',
   'members_working',
+  'live_work',
   'member_grace',
+  'grace',
   'done',
   'sleeping',
 ];
-
-type Placement =
-  | { kind: 'apex' }
-  | { kind: 'member'; apexId: string; parentId: string; depth: number }
-  | { kind: 'unlinked'; reason: UnlinkedReason };
+const NEEDS_ACTION: ReadonlySet<ApexReason> = new Set([
+  'apex_blocked',
+  'apex_waiting',
+  'member_blocked',
+  'member_waiting',
+  'question',
+  'decision',
+  'stalled',
+  'apex_closed',
+  'failed',
+]);
+const WORKING: ReadonlySet<ApexReason> = new Set([
+  'working',
+  'monitoring',
+  'members_working',
+  'live_work',
+  'member_grace',
+  'grace',
+]);
+/** 鮮度が偽の間は memo から引き継ぐ理由（A3〜A6）。 */
+const FRESH_ONLY: ReadonlySet<ApexReason> = new Set(['question', 'decision', 'stalled', 'apex_closed', 'failed']);
 
 /** 親は「parentPaneKey に一致する、自分でない今あるエージェントがちょうど1つ」のときだけ。 */
 function parents(agents: readonly AgentState[]): Map<string, AgentState | null> {
@@ -126,7 +161,95 @@ function inGrace(agent: AgentState, now: number): boolean {
   return started !== null && now - started < MEMBER_GRACE_MS;
 }
 
-function judge(apex: AgentState, members: readonly AgentState[], now: number) {
+/** 頂点に結んだ Dispatch と束。判定 A3〜A6 の材料。 */
+interface Work {
+  dispatches: readonly WorkerState[];
+  bundles: readonly Bundle[];
+  extras: OrchestrationExtras;
+  /** 鮮度 F：tasks と workers の取得元がどちらも stale でない。 */
+  fresh: boolean;
+  /** 鮮度が偽の間に使う、最後の鮮度が真の判定の A3〜A6 の理由。 */
+  remembered: readonly ApexReason[];
+  tasks: ReadonlyMap<string, StateDocument['tasks'][number]>;
+}
+
+const moving = (agent: AgentState) => agentMark(agent) === 'working';
+const maxTime = (values: readonly (string | null)[]): number | null => {
+  const times = values.map(time).filter((value): value is number => value !== null);
+  return times.length === 0 ? null : Math.max(...times);
+};
+
+/** A3〜A6（R-03）。found に理由を足す。 */
+function judgeWork(apex: AgentState, members: readonly AgentState[], work: Work, now: number, found: Set<ApexReason>) {
+  const live = work.dispatches.filter(isLiveDispatch);
+  if (live.length > 0) found.add('live_work');
+  const asks = work.dispatches.filter((worker) =>
+    work.extras.workers.get(worker.dispatchId)?.attention.includes('input'),
+  );
+  const gates = work.dispatches.filter((worker) =>
+    work.extras.workers.get(worker.dispatchId)?.attention.includes('approval'),
+  );
+  if (!work.fresh) {
+    for (const reason of work.remembered) found.add(reason);
+    return;
+  }
+  const apexStart = apex.stateStartedAt.value;
+  const apexMoving = moving(apex);
+  const hit = (origin: number | null, reason: ApexReason) => {
+    if (origin !== null && now - origin < APEX_GRACE_MS) found.add('grace');
+    else found.add(reason);
+  };
+  // A3 問い：ask は頂点が動いていない、gate は頂点が monitoring を除く working でない。
+  const busy = apexMoving && agentWorkingMode(apex) !== 'monitoring';
+  for (const [list, reason, blocked] of [
+    [asks, 'question', apexMoving],
+    [gates, 'decision', busy],
+  ] as const) {
+    if (blocked) continue;
+    for (const worker of list) {
+      const created = worker.taskId === null ? null : (work.tasks.get(worker.taskId)?.createdAt.value ?? null);
+      hit(maxTime([apexStart, created]), reason);
+    }
+  }
+  // A4 止まった仕事：誰も動いていない。起点が読めなければ当てない。問いを待つ Dispatch は A3 が扱うので数えない。
+  const waitsOnUs = new Set([...asks, ...gates].map((worker) => worker.dispatchId));
+  const unattended = live.filter((worker) => !waitsOnUs.has(worker.dispatchId));
+  if (unattended.length > 0 && !apexMoving && !members.some(moving)) {
+    const origin = maxTime([apexStart, ...members.map((member) => member.stateStartedAt.value)]);
+    if (origin !== null) hit(origin, 'stalled');
+  }
+  // A5 統括のタブ：端末のタブで、attached でない（復元待ちを含む）。
+  const terminal = apex.terminal.value;
+  if (apex.kind === 'terminal-tab' && terminal !== null && terminal !== 'attached') {
+    if (live.length > 0 || asks.length > 0 || gates.length > 0) found.add('apex_closed');
+  }
+  // A6 新しい失敗：task ごとに最後の Dispatch が failed で、頂点の状態が始まった後に終わった。
+  // Run の今の世代でなく生きた Dispatch もない古い世代の束は、終わった履歴なので見ない（R-04。札には使う）。
+  const started = time(apexStart);
+  if (started !== null && !apexMoving) {
+    for (const bundle of work.bundles) {
+      const current = work.extras.runs.get(bundle.runId)?.generation ?? null;
+      if (current !== null && bundle.generation !== current && !bundle.dispatches.some(isLiveDispatch)) continue;
+      for (const { task } of lastFailed(bundle)) {
+        const completed = time(task.completedAt.value);
+        if (completed === null || completed <= started) continue;
+        hit(completed, 'failed');
+      }
+    }
+  }
+}
+
+/** task ごとに最後の Dispatch（worker-list の並び）が failed のもの。再実行で直った task の古い失敗は含まない。 */
+function lastFailed(bundle: Bundle): { task: Bundle['tasks'][number]; worker: WorkerState }[] {
+  const result: { task: Bundle['tasks'][number]; worker: WorkerState }[] = [];
+  for (const task of bundle.tasks) {
+    const last = bundle.dispatches.filter((worker) => worker.taskId === task.id).at(-1);
+    if (last?.state.value?.toLowerCase() === 'failed') result.push({ task, worker: last });
+  }
+  return result;
+}
+
+function judge(apex: AgentState, members: readonly AgentState[], work: Work, now: number) {
   const mark = agentMark(apex);
   const found = new Set<ApexReason>();
   if (mark === 'blocked') found.add('apex_blocked');
@@ -138,10 +261,11 @@ function judge(apex: AgentState, members: readonly AgentState[], now: number) {
   }
   if (mark === 'working') found.add(agentWorkingMode(apex) === 'monitoring' ? 'monitoring' : 'working');
   else if (members.some((member) => agentMark(member) === 'working')) found.add('members_working');
+  judgeWork(apex, members, work, now, found);
   let status: ApexStatus;
-  if (['apex_blocked', 'apex_waiting', 'member_blocked', 'member_waiting'].some((r) => found.has(r as ApexReason))) {
+  if ([...found].some((reason) => NEEDS_ACTION.has(reason))) {
     status = 'needs_action';
-  } else if (['working', 'monitoring', 'members_working', 'member_grace'].some((r) => found.has(r as ApexReason))) {
+  } else if ([...found].some((reason) => WORKING.has(reason))) {
     status = 'working';
   } else if (mark === 'unknown') {
     status = 'working';
@@ -149,12 +273,45 @@ function judge(apex: AgentState, members: readonly AgentState[], now: number) {
     status = 'done';
     found.add(mark === 'sleeping' ? 'sleeping' : 'done');
   }
+  const reasons = REASONS.filter((reason) => found.has(reason));
   return {
     mark,
     status,
-    reasons: REASONS.filter((reason) => found.has(reason)),
+    reasons,
+    fresh: reasons.filter((reason) => FRESH_ONLY.has(reason)),
+    /** 生きた仕事か問いがある。眠っているにしない。 */
+    active: found.has('live_work') || found.has('question') || found.has('decision') || found.has('grace'),
     tags: mark === 'unknown' ? (['unverified'] as const) : ([] as const),
   };
+}
+
+/** 完了の頂点の札（R-05）。PR と CI は頂点とメンバーの worktree から（同じ worktree は1回）。 */
+function badgesOf(
+  apex: AgentState,
+  members: readonly AgentState[],
+  bundles: readonly Bundle[],
+  state: StateDocument,
+): ApexBadge[] {
+  let merge = 0;
+  let ciFailed = 0;
+  for (const worktreeId of new Set([apex, ...members].map((agent) => agent.worktreeId))) {
+    const worktree = state.worktrees.find((entry) => entry.id === worktreeId);
+    if (worktree?.pr.value?.state?.toLowerCase() !== 'open') continue;
+    const ci = worktree.ci.value?.status?.toLowerCase() ?? null;
+    if (ci === 'failure') ciFailed++;
+    else if (ci === null || ci === 'success') merge++;
+  }
+  const failed = bundles.flatMap(lastFailed).map(({ worker }) => worker);
+  const remaining = bundles
+    .flatMap((bundle) => bundle.tasks)
+    .filter((task) => task.status.value === null || !SETTLED_TASK_STATES.has(task.status.value));
+  const badges: ApexBadge[] = [
+    { kind: 'merge_pending', count: merge },
+    { kind: 'ci_failed', count: ciFailed },
+    { kind: 'failed_members', count: new Set(failed.map((w) => w.dispatchId)).size },
+    { kind: 'remaining_tasks', count: remaining.length },
+  ];
+  return badges.filter((badge) => badge.count > 0);
 }
 
 function lastActivity(apex: AgentState, members: readonly AgentState[], state: StateDocument): string | null {
@@ -173,12 +330,12 @@ function lastActivity(apex: AgentState, members: readonly AgentState[], state: S
 
 function groupOf(
   apex: AgentState,
-  judged: { status: ApexStatus; reasons: readonly ApexReason[] },
+  judged: { status: ApexStatus; reasons: readonly ApexReason[]; active: boolean },
   last: string | null,
   now: number,
 ): ApexGroup {
   if (judged.status === 'needs_action') return 'needs_action';
-  const quiet = judged.status === 'done' || judged.reasons.length === 0;
+  const quiet = !judged.active && (judged.status === 'done' || judged.reasons.length === 0);
   const at = time(last);
   if (quiet) {
     if (apex.terminal.value === 'awaiting-restore') return 'sleeping';
@@ -189,11 +346,11 @@ function groupOf(
   return at !== null && at < now - RECENT_MS ? 'done_older' : 'done_recent';
 }
 
-function memberEntry(agent: AgentState, placement: Placement & { kind: 'member' }): ApexMember {
+function memberEntry({ agent, parentId, depth }: LinkedMember): ApexMember {
   return {
     id: agent.id,
-    parentId: placement.parentId,
-    depth: placement.depth,
+    parentId,
+    depth,
     mark: agentMark(agent),
     agentType: agent.agentType.value,
     title: agent.title.value,
@@ -228,6 +385,19 @@ function compareItems(a: ApexItem, b: ApexItem): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+/** メンバーの印と、メンバーと重ならない束の Dispatch（生きていれば working、終わっていれば done）を数える。 */
+function countTeam(team: readonly LinkedMember[], dispatches: readonly WorkerState[]): ApexItem['counts'] {
+  const covered = new Set(team.map(({ agent }) => agent.worker?.dispatchId).filter((id) => id !== undefined));
+  const marks: AgentMark[] = team.map(({ agent }) => agentMark(agent));
+  const seen = new Set<string>();
+  for (const worker of dispatches) {
+    if (covered.has(worker.dispatchId) || seen.has(worker.dispatchId)) continue;
+    seen.add(worker.dispatchId);
+    marks.push(isLiveDispatch(worker) ? 'working' : 'done');
+  }
+  return countMarks(marks);
+}
+
 function countMarks(marks: readonly AgentMark[]): ApexItem['counts'] {
   return {
     total: marks.length,
@@ -242,15 +412,26 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
   const stale = state.stale || state.connection.state !== 'connected';
   const agents = state.connection.state === 'starting' ? [] : state.agents;
   const placements = place(agents);
-  const membersOf = new Map<string, { agent: AgentState; entry: ApexMember }[]>();
+  const extras = input.extras ?? emptyExtras();
+  const links = linkApexes({ state, agents, placements, extras, owners: input.owners ?? null, now });
+  const fresh = !state.sources.tasks.stale && !state.sources.workers.stale;
+  const tasks = new Map(state.tasks.map((task) => [task.id, task]));
+  // 判定はいつも全部の頂点について行う。project は出す文書を絞るだけ（memo の上書きにも使わない）。
+  const verdicts = new Map<string, ReturnType<typeof judge>>();
   for (const agent of agents) {
-    const placement = placements.get(agent.id);
-    if (placement?.kind !== 'member') continue;
-    membersOf.set(placement.apexId, [
-      ...(membersOf.get(placement.apexId) ?? []),
-      { agent, entry: memberEntry(agent, placement) },
-    ]);
+    if (placements.get(agent.id)?.kind !== 'apex') continue;
+    const members = (links.members.get(agent.id) ?? []).map((member) => member.agent);
+    const work: Work = {
+      dispatches: links.dispatches.get(agent.id) ?? [],
+      bundles: links.bundles.get(agent.id) ?? [],
+      extras,
+      fresh,
+      remembered: input.memo?.recall(agent.id) ?? [],
+      tasks,
+    };
+    verdicts.set(agent.id, judge(agent, members, work, now));
   }
+  if (fresh && input.memo) input.memo.replace(new Map([...verdicts].map(([id, verdict]) => [id, verdict.fresh])));
   const inProject = (repoId: string | null) => input.project === null || repoId === input.project;
   const items: ApexItem[] = [];
   const unlinked: UnlinkedItem[] = [];
@@ -258,7 +439,7 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
     const placement = placements.get(agent.id);
     const where = location(state, agent.worktreeId);
     if (!inProject(where.repoId)) continue;
-    if (placement?.kind === 'unlinked') {
+    if (placement?.kind === 'unlinked' && !links.promoted.has(agent.id)) {
       unlinked.push({
         id: agent.id,
         kind: agent.kind,
@@ -273,9 +454,9 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
       continue;
     }
     if (placement?.kind !== 'apex') continue;
-    const team = membersOf.get(agent.id) ?? [];
+    const team = links.members.get(agent.id) ?? [];
     const memberAgents = team.map((member) => member.agent);
-    const judged = judge(agent, memberAgents, now);
+    const judged = verdicts.get(agent.id) as ReturnType<typeof judge>;
     const last = lastActivity(agent, memberAgents, state);
     items.push({
       id: agent.id,
@@ -291,16 +472,33 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
       group: groupOf(agent, judged, last, now),
       reasons: judged.reasons,
       tags: [...judged.tags],
+      badges: judged.status === 'done' ? badgesOf(agent, memberAgents, links.bundles.get(agent.id) ?? [], state) : [],
       lastActivityAt: last,
       stateStartedAt: agent.stateStartedAt.value,
-      members: orderMembers(
-        agent.id,
-        team.map((member) => member.entry),
-      ),
-      counts: countMarks(team.map((member) => member.entry.mark)),
+      members: orderMembers(agent.id, team.map(memberEntry)),
+      counts: countTeam(team, links.dispatches.get(agent.id) ?? []),
     });
   }
   items.sort(compareItems);
+  for (const bundle of links.unlinkedBundles) {
+    const live = bundle.dispatches.filter(isLiveDispatch).length;
+    const questions = bundle.dispatches.filter((worker) => asksOrGates(extras.workers.get(worker.dispatchId))).length;
+    if (live === 0 && questions === 0) continue;
+    if (input.project !== null) {
+      const repos = bundle.dispatches.map((worker) => location(state, worker.worktreeId.value ?? '').repoId);
+      if (!repos.includes(input.project)) continue;
+    }
+    const objective = state.runs.find((run) => run.id === bundle.runId)?.title.value ?? null;
+    unlinked.push({
+      id: bundle.key,
+      kind: 'bundle',
+      runId: bundle.runId,
+      objective: objective === null ? null : objective.slice(0, OBJECTIVE_MAX),
+      generation: bundle.generation,
+      live,
+      questions,
+    });
+  }
   return {
     schema: APEXES_SCHEMA,
     generatedAt: new Date(now).toISOString(),

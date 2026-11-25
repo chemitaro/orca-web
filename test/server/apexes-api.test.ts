@@ -5,6 +5,8 @@ import { test } from 'node:test';
 import type { ApexListDocument } from '../../src/apex/model.ts';
 import { type AppOptions, createAppServer } from '../../src/server/app.ts';
 import type { StateDocument } from '../../src/state/model.ts';
+import type { StateWithExtras } from '../../src/state/poller.ts';
+import { orchestration, tabbedWorker } from '../apex/fixture.ts';
 import { agent, fact, input, repo, worktree } from '../inbox/fixture.ts';
 
 type Reply = { status: number; headers: IncomingHttpHeaders; text: string; json: <T>() => T };
@@ -166,4 +168,78 @@ test('R-05: /apexes を index と同じ CSP で配り、部品の JS を配り�
       assert.match((await send(path)).text, /<a href="\/apexes">指揮<\/a>/, path);
     }
   });
+});
+
+test('T-11: snapshotWithExtras があれば、内部の値で束を結び、対応表と memo を要求の間で保つ', async () => {
+  const chat = agent('chat', { kind: 'chat-tab', paneKey: 'pane-chat', terminal: fact(null), state: fact('done') });
+  const kid = tabbedWorker('kid', 'd1', 't-1', { parentPaneKey: fact('pane-chat') });
+  const o = orchestration({
+    tasks: [{ id: 't-root' }, { id: 't-1', parent: 't-root' }, { id: 't-2', parent: 't-root' }],
+    dispatches: [
+      { id: 'd1', task: 't-1', state: 'working' },
+      { id: 'd2', task: 't-2', state: 'blocked', attention: ['input'] },
+    ],
+  });
+  const reads: StateWithExtras[] = [
+    {
+      state: input({ agents: [chat, kid], tasks: o.tasks, workers: o.workers }).state,
+      extras: o.extras,
+      generation: 1,
+    },
+    { state: input({ agents: [chat], tasks: o.tasks, workers: o.workers }).state, extras: o.extras, generation: 2 },
+  ];
+  const staleRead = (): StateWithExtras => {
+    const base = input({ agents: [chat], tasks: o.tasks, workers: o.workers }).state;
+    return {
+      state: { ...base, sources: { ...base.sources, workers: { ...base.sources.workers, stale: true } } },
+      extras: o.extras,
+      generation: 3,
+    };
+  };
+  let plainReads = 0;
+  await withApp(
+    {
+      runs: {
+        noteViewer() {},
+        async snapshot() {
+          plainReads++;
+          return reads[0]?.state as StateDocument;
+        },
+        async snapshotWithExtras() {
+          return reads.shift() ?? staleRead();
+        },
+      },
+    },
+    async (send) => {
+      const first = (await send()).json<ApexListDocument>();
+      assert.deepEqual(first.items[0]?.counts, { total: 2, working: 2, waiting: 0, done: 0 });
+      const second = (await send()).json<ApexListDocument>();
+      assert.deepEqual(second.items[0]?.counts, { total: 2, working: 2, waiting: 0, done: 0 }, 'タブが閉じた後も結ぶ');
+      assert.equal(second.items[0]?.status, 'needs_action');
+      assert.ok(second.items[0]?.reasons.includes('question'));
+      const third = (await send()).json<ApexListDocument>();
+      assert.equal(third.items[0]?.status, 'needs_action', '鮮度が偽の間は memo の理由を使う');
+      assert.equal(plainReads, 0);
+    },
+  );
+});
+
+test('T-11: /api/state の口には内部の値を出さない（snapshot だけを使う）', async () => {
+  const o = orchestration({ runs: { 'run-a': 2 }, tasks: [{ id: 't-root', paneKey: 'pane-c', generation: 2 }] });
+  await withApp(
+    {
+      poller: {
+        noteViewer() {},
+        snapshot: async () => input({ tasks: o.tasks }).state,
+        snapshotWithExtras: async () => ({ state: input({ tasks: o.tasks }).state, extras: o.extras, generation: 1 }),
+      },
+    },
+    async (send) => {
+      const reply = await send('/api/state');
+      assert.equal(reply.status, 200);
+      for (const key of ['generation', 'paneKey":"pane-c', 'attention', 'consumerGeneration']) {
+        assert.ok(!reply.text.includes(key), key);
+      }
+    },
+  );
 });

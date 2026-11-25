@@ -308,7 +308,7 @@ export const tabsAll = {
 };
 
 export const runPage1 = {
-  runs: [{ id: 'run_hex-3', objective: 'text-8', coordinator_handle: 'term_uuid-12' }],
+  runs: [{ id: 'run_hex-3', objective: 'text-8', coordinator_handle: 'term_uuid-12', consumer_generation: 2 }],
   nextCursor: 'cursor-1',
 };
 export const runPage2 = { runs: [{ id: 'run_hex-4', objective: 'text-9' }] };
@@ -319,6 +319,8 @@ export const tasksRun3 = {
     {
       id: 'task_hex-2',
       created_by_terminal_handle: 'term_uuid-12',
+      created_by_pane_key: 'uuid-10:uuid-11',
+      created_by_run_generation: 2,
       run_id: 'run_hex-3',
       parent_id: null,
       task_title: 'text-5',
@@ -375,6 +377,7 @@ const worker = (o: {
   terminal: string | null;
   terminalState: string | null;
   liveness: string;
+  attention?: string[];
 }) => ({
   dispatchId: o.dispatchId,
   taskId: o.taskId,
@@ -389,6 +392,7 @@ const worker = (o: {
     workspace: { id: WT1, kind: 'worktree' },
     liveness: { verdict: o.liveness, source: 'terminal', observedAt: ms(30) },
     nextAction: { kind: 'none', argv: ['text-910'] },
+    attention: { requiresAction: (o.attention ?? []).length > 0, categories: o.attention ?? [] },
   },
 });
 
@@ -403,6 +407,7 @@ export const workerPage1 = {
       terminal: 'term_uuid-52',
       terminalState: 'retained',
       liveness: 'live',
+      attention: ['input'],
     }),
   ],
   page: { limit: 100, total: 2, hasMore: true, nextCursor: 'cursor-2' },

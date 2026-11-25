@@ -69,6 +69,7 @@ function orcaWorker(dispatchId: string, patch: Partial<OrcaWorker> = {}): OrcaWo
     terminalState: null,
     worktreeId: 'wt-a',
     structuredSessionId: SESSION,
+    attentionCategories: [],
     ...patch,
   };
 }

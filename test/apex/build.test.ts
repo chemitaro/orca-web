@@ -60,14 +60,17 @@ test('T-02: 親のない子、worker があり親のない子、輪は結べな�
     child('loop-kid', 'loop-a'),
   ]);
   assert.deepEqual(result.items, []);
-  assert.deepEqual(Object.fromEntries(result.unlinked.map((item) => [item.id, item.reason])), {
-    orphan: 'parent_missing',
-    'orphan-kid': 'parent_missing',
-    worker: 'worker_without_parent',
-    'loop-a': 'cycle',
-    'loop-b': 'cycle',
-    'loop-kid': 'cycle',
-  });
+  assert.deepEqual(
+    Object.fromEntries(result.unlinked.map((item) => [item.id, 'reason' in item ? item.reason : null])),
+    {
+      orphan: 'parent_missing',
+      'orphan-kid': 'parent_missing',
+      worker: 'worker_without_parent',
+      'loop-a': 'cycle',
+      'loop-b': 'cycle',
+      'loop-kid': 'cycle',
+    },
+  );
 });
 
 test('T-02: 同じ paneKey が2つあるとき、その paneKey を親にする子は結べないもの', () => {
@@ -77,7 +80,7 @@ test('T-02: 同じ paneKey が2つあるとき、その paneKey を親にする�
     ['a', 'b'],
   );
   assert.deepEqual(
-    result.unlinked.map(({ id, reason }) => ({ id, reason })),
+    result.unlinked.map((item) => ({ id: item.id, reason: 'reason' in item ? item.reason : null })),
     [{ id: 'kid', reason: 'parent_missing' }],
   );
 });

@@ -310,3 +310,114 @@ test('T-10：見出しの数は段の件数。確かめられず眠っている�
   assert.equal(needs.headline[0].emphasis, true);
   assert.equal(needs.title, '(1) 指揮 — orca-web', '題名の件数は counts.needs_action のまま');
 });
+
+test('T-11: 新しい理由と札に日本語の言葉が付き、配下の数は束の Dispatch を含む', async () => {
+  const { BundleOwners } = await import('../../src/apex/owners.ts');
+  const { orchestration } = await import('../apex/fixture.ts');
+  const { ci, pr, worktree } = await import('../inbox/fixture.ts');
+  const o = orchestration({
+    tasks: [
+      { id: 't-root', paneKey: 'pane-c', status: 'completed' },
+      { id: 't-1', parent: 't-root', status: 'blocked' },
+      { id: 't-2', parent: 't-root', status: 'failed', completedAt: ago(2 * HOUR) },
+    ],
+    dispatches: [
+      { id: 'd1', task: 't-1', state: 'working' },
+      { id: 'd2', task: 't-2', state: 'failed' },
+    ],
+  });
+  const doc = buildApexList({
+    state: input({
+      agents: [agent('coord', { paneKey: 'pane-c', state: fact('working') })],
+      tasks: o.tasks,
+      workers: o.workers,
+    }).state,
+    now: NOW,
+    project: null,
+    extras: o.extras,
+    owners: new BundleOwners(),
+  });
+  const row = buildApexesView(doc, { now: NOW }).sections[1].rows[0];
+  assert.deepEqual(row.reasons, ['作業中', '仕事が残っている']);
+  assert.equal(row.members, '1/2');
+  assert.equal(row.membersLabel, '配下 2 のうち 1 が作業中');
+  const done = buildApexList({
+    state: input({
+      agents: [agent('coord', { paneKey: 'pane-c', state: fact('done') })],
+      tasks: o.tasks,
+      workers: o.workers.map((w) => ({ ...w, state: fact('succeeded') })),
+      worktrees: [worktree({ pr: pr('open'), ci: ci('failure') })],
+    }).state,
+    now: NOW,
+    project: null,
+    extras: o.extras,
+    owners: new BundleOwners(),
+  });
+  const doneRow = buildApexesView(done, { now: NOW }).sections[2].rows[0];
+  assert.deepEqual(doneRow.badges, ['CI が失敗', '残りの task 1']);
+});
+
+test('T-11: 理由と札の言葉の表は、文書のすべての値に言葉を持つ', async () => {
+  const { BADGE_LABELS, REASON_LABELS } = await import('../../web/apexes-view.js');
+  const labels: Record<string, unknown> = REASON_LABELS;
+  for (const reason of ['question', 'decision', 'stalled', 'apex_closed', 'failed', 'live_work', 'grace']) {
+    assert.equal(typeof labels[reason], 'string', reason);
+  }
+  assert.deepEqual(Object.keys(BADGE_LABELS).sort(), [
+    'ci_failed',
+    'failed_members',
+    'merge_pending',
+    'remaining_tasks',
+  ]);
+  const view = buildApexesView(
+    {
+      ...documentOf([agent('coord', { state: fact('done') })]),
+      items: [
+        {
+          ...documentOf([agent('coord', { state: fact('done') })]).items[0],
+          badges: [
+            { kind: 'merge_pending', count: 1 },
+            { kind: 'failed_members', count: 3 },
+          ],
+        },
+      ] as ApexListDocument['items'],
+    },
+    { now: NOW },
+  );
+  assert.deepEqual(view.sections[2].rows[0].badges, ['マージ待ち', '失敗した作業者 3']);
+});
+
+test('T-11: 結べない束の行は Run の目的と生きた数・問いの数を出し、/runs/<id> にリンクする', () => {
+  const doc = documentOf([]);
+  const view = buildApexesView(
+    {
+      ...doc,
+      unlinked: [
+        {
+          id: 'run-b#2',
+          kind: 'bundle',
+          runId: 'run b/1',
+          objective: '仮の目的',
+          generation: 2,
+          live: 2,
+          questions: 1,
+        },
+        { id: 'run-c#?', kind: 'bundle', runId: 'run-c', objective: null, generation: null, live: 0, questions: 1 },
+      ],
+    },
+    { now: NOW },
+  );
+  const rows = view.sections.find((s: { key: string }) => s.key === 'unlinked').rows;
+  assert.deepEqual(
+    rows.map((row: { title: string; href: string; reasons: string[]; selectable: boolean }) => [
+      row.title,
+      row.href,
+      row.reasons,
+      row.selectable,
+    ]),
+    [
+      ['仮の目的', '/runs/run%20b%2F1', ['生きた仕事 2', '問い 1'], false],
+      ['Run run-c', '/runs/run-c', ['問い 1'], false],
+    ],
+  );
+});

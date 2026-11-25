@@ -552,6 +552,11 @@ a {
   color: var(--warn);
 }
 
+.apexes-page .reason .chip.badge {
+  border: 1px solid var(--line);
+  background: transparent;
+}
+
 .apexes-page .empty {
   color: var(--muted);
 }
