@@ -77,3 +77,24 @@ test('T-08：900px 未満は選択の class で一覧と右のペインの片方
   assert.match(entry, /document\.body\.classList\.toggle\('apexes--selected', pane\.selected\)/);
   assert.match(entry, /changeSelection\(\{ type: 'clear' \}\)/, '「← 一覧」は ?apex= を外す clear');
 });
+
+test('R-06：900px 未満のメディアクエリに、見出しの nav・行の題名・右のペインの見出しの帯の折り返しの規則がある', () => {
+  const css = readFileSync(new URL('../../web/style.css', import.meta.url), 'utf8');
+  const narrow = mediaBlock(css, '(max-width: 899.98px)');
+  const rule = (selector: string): string => {
+    const at = narrow.indexOf(selector);
+    assert.ok(at >= 0, selector);
+    return narrow.slice(at, narrow.indexOf('}', at));
+  };
+  const wraps = rule('.apexes-page .bar,');
+  assert.match(wraps, /\.apexes-page \.links,/);
+  assert.match(wraps, /\.apexes-page \.apex-pane-bar \{/);
+  assert.match(wraps, /flex-wrap: wrap;/);
+  assert.match(wraps, /min-width: 0;/);
+  const words = rule('.apexes-page .links a,');
+  assert.match(words, /\.apexes-page \.apex-title \{/);
+  assert.match(words, /min-width: 0;/);
+  assert.match(words, /overflow-wrap: anywhere;/);
+  const title = rule('.apexes-page .apex-head .apex-title {');
+  assert.match(title, /flex: 1 1 0;/, '行の題名は残りの幅に収まって折り返す');
+});

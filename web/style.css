@@ -645,6 +645,24 @@ a {
 }
 
 @media (max-width: 899.98px) {
+  /* 狭い幅でも横に流れない：見出しの nav、右のペインの見出しの帯は折り返し、行の題名は残りの幅で折り返す。 */
+  .apexes-page .bar,
+  .apexes-page .links,
+  .apexes-page .apex-pane-bar {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .apexes-page .links a,
+  .apexes-page .apex-title {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .apexes-page .apex-head .apex-title {
+    flex: 1 1 0;
+  }
+
   body.apexes-page:not(.apexes--selected) .apex-pane {
     display: none;
   }
