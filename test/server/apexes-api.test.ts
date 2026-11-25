@@ -157,7 +157,7 @@ test('R-05: /apexes を index と同じ CSP で配り、部品の JS を配り�
     assert.ok(!/<script>[^<]/.test(page.text), 'no inline script');
     assert.ok(!/\sstyle=/.test(page.text), 'no inline style');
     assert.equal((await send('/apexes', 'POST')).status, 405);
-    for (const path of ['/apexes.js', '/apexes-view.js', '/apexes-dom.js']) {
+    for (const path of ['/apexes.js', '/apexes-view.js', '/apexes-dom.js', '/apexes-notify.js']) {
       const res = await send(path);
       assert.equal(res.status, 200, path);
       assert.equal(res.headers['content-type'], 'text/javascript; charset=utf-8');
@@ -167,6 +167,19 @@ test('R-05: /apexes を index と同じ CSP で配り、部品の JS を配り�
     for (const path of ['/', '/runs', '/settings']) {
       assert.match((await send(path)).text, /<a href="\/apexes">指揮<\/a>/, path);
     }
+  });
+});
+
+test('T-01: favicon の2つの SVG を image/svg+xml で配り、/apexes が普通の favicon を参照する', async () => {
+  await withApp({}, async (send) => {
+    for (const path of ['/favicon.svg', '/favicon-alert.svg']) {
+      const res = await send(path);
+      assert.equal(res.status, 200, path);
+      assert.equal(res.headers['content-type'], 'image/svg+xml', path);
+      assert.match(res.text, /^<svg[\s\S]*<\/svg>\s*$/, path);
+      assert.ok(!/<script/i.test(res.text), path);
+    }
+    assert.match((await send('/apexes')).text, /<link rel="icon" id="favicon" href="\/favicon\.svg"/);
   });
 });
 

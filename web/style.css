@@ -614,6 +614,10 @@ a {
   font: inherit;
 }
 
+.apexes-page .apex-notify {
+  font: inherit;
+}
+
 .apexes-page .apex-pane-frame {
   flex: 1 1 auto;
   min-height: 0;

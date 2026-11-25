@@ -269,8 +269,11 @@ export function createSeenTracker({ dwellMs, now, isVisible, schedule, cancel, o
 
 /**
  * 間隔ごとに load を呼ぶ輪（poll-loop.js）。画面が隠れたら予約を取り消し、隠れている間は次を予約しない。
- * 見えたらすぐ読み直す。最初から隠れていれば、見えるまで読まない。
+ * ただし keepAliveWhenHidden()（呼ぶたびに読む。通知の許可が granted か）が真なら、隠れている間も
+ * hiddenDelayMs ごとに読む（iss-00081 D-04）。見えたらすぐ読み直し、今の間隔に戻る。予約はいつも1つだけ。
+ * 最初から隠れていれば、見えるまで（keepAliveWhenHidden が真なら hiddenDelayMs の後まで）読まない。
  * @param {{ doc: any, load: (isCurrent: () => boolean) => Promise<void>, delayMs: number,
+ *   keepAliveWhenHidden?: () => boolean, hiddenDelayMs?: number,
  *   setTimer?: (fn: () => void, ms: number) => any, clearTimer?: (id: any) => void }} options
  * @returns {{ restart: () => void, stop: () => void }}
  */
@@ -278,6 +281,8 @@ export function startApexPolling({
   doc,
   load,
   delayMs,
+  keepAliveWhenHidden = () => false,
+  hiddenDelayMs = delayMs,
   setTimer = globalThis.setTimeout,
   clearTimer = globalThis.clearTimeout,
 }) {
@@ -287,25 +292,44 @@ export function startApexPolling({
     if (timer !== null) clearTimer(timer);
     timer = null;
   };
+  const keepAlive = () => {
+    try {
+      return keepAliveWhenHidden() === true;
+    } catch {
+      return false;
+    }
+  };
+  /** 予約を1つにして fn を ms の後に呼ぶ。 */
+  const arm = (fn, ms) => {
+    clear();
+    timer = setTimer(() => {
+      timer = null;
+      fn();
+    }, ms);
+    return timer;
+  };
   const loop = createPollLoop({
     load,
     schedule: (fn, ms) => {
-      if (stopped || doc.hidden) return null;
-      timer = setTimer(() => {
-        timer = null;
-        fn();
-      }, ms);
-      return timer;
+      if (stopped) return null;
+      if (!doc.hidden) return arm(fn, ms);
+      return keepAlive() ? arm(fn, hiddenDelayMs) : null;
     },
     cancel: clear,
     delayMs,
   });
+  /** 隠れたとき：予約を取り消し、読み続けるなら hiddenDelayMs の後に読み直す。 */
+  const hide = () => {
+    clear();
+    if (!stopped && keepAlive()) arm(() => loop.restart(), hiddenDelayMs);
+  };
   const onVisibility = () => {
-    if (doc.hidden) clear();
+    if (doc.hidden) hide();
     else if (!stopped) loop.restart();
   };
   doc.addEventListener('visibilitychange', onVisibility);
-  if (!doc.hidden) loop.restart();
+  if (doc.hidden) hide();
+  else loop.restart();
   return {
     restart() {
       if (!stopped) loop.restart();
@@ -314,6 +338,74 @@ export function startApexPolling({
       stopped = true;
       clear();
       doc.removeEventListener('visibilitychange', onVisibility);
+    },
+  };
+}
+
+export const NOTIFY_BUTTON_TEXT = '通知を許可';
+const REASON_SEPARATOR = '・';
+
+/**
+ * デスクトップの通知の口（iss-00081 D-03）。Notification があり、isSecureContext が真のときだけ使う
+ * （Tailscale の http などでは使わず、題名と favicon だけで知らせる）。どの呼び出しも try/catch で包む。
+ * - renderControl(onChange)：permission が default のときだけ「通知を許可」のボタン（なければ null）。
+ *   押したときだけ requestPermission を呼び、済んだら onChange。
+ * - keepAliveWhenHidden()：permission が granted か（隠れている間も読み続けるか）。
+ * - deliver(candidates, markShown)：granted で doc.hidden が真のときだけ、候補ごとに題名と理由の言葉だけで出し、
+ *   出せたものを markShown(key)。押すと窓を前に出し、onOpen(頂点の id)。
+ * @param {{ doc: any, env: { Notification?: any, isSecureContext?: boolean, focus?: () => void },
+ *   onOpen: (id: string) => void }} options
+ */
+export function createApexNotifier({ doc, env, onOpen }) {
+  const permission = () => {
+    try {
+      if (typeof env.Notification !== 'function' || env.isSecureContext !== true) return 'unsupported';
+      return String(env.Notification.permission);
+    } catch {
+      return 'unsupported';
+    }
+  };
+  return {
+    keepAliveWhenHidden: () => permission() === 'granted',
+    renderControl(onChange) {
+      if (permission() !== 'default') return null;
+      const button = make(doc, 'button', NOTIFY_BUTTON_TEXT, 'apex-notify');
+      button.type = 'button';
+      button.addEventListener('click', () => {
+        let asked;
+        try {
+          asked = Promise.resolve(env.Notification.requestPermission());
+        } catch {
+          asked = Promise.resolve();
+        }
+        asked.then(
+          () => onChange(),
+          () => onChange(),
+        );
+      });
+      return button;
+    },
+    deliver(candidates, markShown) {
+      if (permission() !== 'granted' || doc.hidden !== true) return;
+      for (const candidate of candidates) {
+        try {
+          const shown = new env.Notification(candidate.title, {
+            body: candidate.reasons.join(REASON_SEPARATOR),
+            tag: candidate.key,
+          });
+          shown.onclick = () => {
+            try {
+              env.focus?.();
+            } catch {
+              // 前に出せなくても、選びは移す。
+            }
+            onOpen(candidate.id);
+          };
+          markShown(candidate.key);
+        } catch {
+          // 出せなければ K に入れない（次の読みで出せれば出す）。
+        }
+      }
     },
   };
 }
