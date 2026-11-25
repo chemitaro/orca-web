@@ -44,10 +44,12 @@ requirements: {
 	}
 	"R-03": {
 		title: "Run の木の根を頂点の結びで決める"
-		text:  "Run の木の統括の節は、今の `coordinatorAgent` で結べなければ、頂点の結び（Run の今の世代の束の頂点。iss-00078 の `src/apex/` の部品を使う）で結ぶ。結び方の規則を2か所に持たない（`src/runs/links.ts` は `src/apex/` の束の解決を呼ぶ）。"
+		text:  "Run の木の統括の節は、今の `coordinatorAgent` で結べなければ（`activeCoordinatorHandle` があってもその端末のエージェントがないときを含む）、生きた作業者の `parentPaneKey` の方法を試し、それでも結べなければ、頂点の結び（Run の今の世代の束の頂点。iss-00078 の `src/apex/` の部品を使う）で結ぶ。結び方の規則を2か所に持たない（`src/runs/links.ts` は `src/apex/` の束の解決を呼ぶ）。"
 		acceptance: [
 			"子のタブが閉じた端末の統括の Run で、木の根が頂点のエージェントに結ばれる（今は結べない場面）",
 			"今の `coordinatorAgent` で結べる Run の結果は変わらない",
+			"`activeCoordinatorHandle` に古い handle が残り、その端末がない Run でも、根が頂点に結ばれる",
+			"Run の一覧（`/api/runs`）とプロジェクトの画面の統括のプロジェクト・別のプロジェクトの札・絞り込みが、木と同じ根の結びで決まる",
 		]
 	}
 	"R-04": {

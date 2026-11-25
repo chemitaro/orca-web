@@ -60,9 +60,9 @@ requirements: {
 	"R-03": {
 		title: "質問・判断は、頂点の入力欄に決めた型の下書きを入れるだけ"
 		text: """
-			［頂点に伝える］を押すと、右のペインが頂点の枠でなければ（メンバーの枠を出していれば）、頂点の枠に作り直す（iss-00077 の切り替えの確かめを通す）。親は頂点の iframe から準備の知らせ `{ type: 'orca-web:ready' }`（受け口を登録し、送る欄の状態が読めた後に1回）を受けてから、postMessage で `{ type: 'orca-web:draft', text }` を送る。10 秒以内に準備の知らせが来なければ送らず、帯「下書きを入れられませんでした」を出す。
+			［頂点に伝える］を押すと、右のペインが頂点の枠でなければ（メンバーの枠を出していれば）、頂点の枠に作り直す（iss-00077 の切り替えの確かめを通す）。親は枠を作った時から、その枠（`event.source` が今の iframe の `contentWindow` で、`event.origin` が自分のオリジン）の準備の知らせ `{ type: 'orca-web:ready' }`（受け口を登録し、送る欄の状態が読めた後に1回）を枠ごとに覚える。押した時に今の頂点の枠が既に準備できていればすぐ、まだなら準備の知らせを待ってから、postMessage で `{ type: 'orca-web:draft', text }` を送る。10 秒以内に準備の知らせが来なければ送らず、帯「下書きを入れられませんでした」を出す。
 			text は決めた型：「メンバー〈task の題名〉の質問（ask）に答えてください。」または「…の判断（gate）を決めてください。」に、改行と `（Dispatch <dispatchId>）` を付けたもの。
-			`/embed/agent` は、`event.origin` が自分のオリジンで、`event.source` が `window.parent` で、送る欄が出ていて（compose=off でない）、送る欄の phase が `compose` か `changed` で（disabled・sending・checking・unknown でない）、入力欄が空のときだけ、入力欄にその文を入れる（自動では送らない）。結果を `{ type: 'orca-web:draft-result', ok, reason }`（reason は not_empty・busy・disabled・compose_off）で親に返す。親は ok でなければ帯で理由を示す。
+			`/embed/agent` は、`event.origin` が自分のオリジンで、`event.source` が `window.parent` で、送る欄が出ていて（compose=off でない）、送る欄の phase が `compose` か `changed` で（disabled・sending・checking・unknown でない）、入力欄が空のときだけ、入力欄にその文を入れる（自動では送らない）。結果を `{ type: 'orca-web:draft-result', ok, reason }`（reason は not_empty・busy・disabled・compose_off・too_long）で親に返す。親は ok でなければ帯で理由を示す。
 			"""
 		acceptance: [
 			"［頂点に伝える］で、頂点の入力欄に決めた型の文が入り、送信の呼び出しは0回",

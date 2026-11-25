@@ -8,12 +8,12 @@ design: {
 	}
 	"D-02": {
 		title:     "リンク"
-		text:      "各画面の見出しの nav と `web/runs-view.js` の `inboxLinks`、`web/apexes-view.js` の受け箱へのリンクを、指揮 `/`、受け箱 `/inbox` に直す。受け箱の画面の見出しに「指揮」を足す。"
+		text:      "各画面の HTML の見出しの nav（`web/apexes.html`・`project.html`・`run.html`・`runs.html`・`settings.html`・受け箱の HTML）で、受け箱へのリンク（今は `/`）を `/inbox` に、指揮へのリンク（今は `/apexes`）を `/` に直す。`web/*.js` の中に `/` や `/apexes` を受け箱・指揮として作るリンクがあれば同じく直す（実装の時点の main で `rg` で確かめる）。"
 		satisfies: ["R-02"]
 	}
 	"D-03": {
 		title:     "Run の木の根"
-		text:      "`src/runs/links.ts` の `coordinatorAgent` が、今の2つの方法で結べなければ、`src/apex/` の束の解決（Run の今の世代の束の頂点。iss-00078 の `bundles.ts`・`owners.ts`）を呼ぶ。`/api/runs/<id>/tree` は、頂点の一覧と同じ内部の値と対応表を渡す。"
+		text:      "`src/runs/links.ts` の `coordinatorAgent` は、`activeCoordinatorHandle` があってもその端末のエージェントが見つからなければ、生きた作業者の `parentPaneKey` の方法に進み、それでも結べなければ `src/apex/` の束の解決（Run の今の世代 `consumerGeneration` の束の持ち主の頂点。なければ最も新しい世代の束の頂点。iss-00078 の `bundles.ts`・`owners.ts`）を呼ぶ。`buildRunTree` と `buildRunList` は内部の値と対応表を引数に受け、`/api/runs/<id>/tree` と `/api/runs`（Run の一覧とプロジェクトの画面が読む）は、頂点の一覧と同じ内部の値と対応表を渡す。"
 		satisfies: ["R-03"]
 	}
 	"D-04": {

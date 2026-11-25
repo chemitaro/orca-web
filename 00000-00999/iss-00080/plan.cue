@@ -9,7 +9,7 @@ steps: {
 
 tests: {
 	"T-01": {title: "compose=off：送る欄の要素が hidden で、/api/send/status は今のとおり読まれ（注入した fetch で数える）、承認のカードの view が status を受けて押せる状態になる", verifies: ["R-02", "F-01"]}
-	"T-06": {title: "ready と結果：agent-frame（ソースの確かめか注入）が受け口の登録と最初の状態の読みの後に orca-web:ready を1回、受けた下書きごとに orca-web:draft-result を返す。createDraftSender が ready の前は送らず、10 秒で帯、not_empty で帯", verifies: ["R-03"]}
+	"T-06": {title: "ready と結果：agent-frame（ソースの確かめか注入）が受け口の登録と最初の状態の読みの後に orca-web:ready を1回、受けた下書きごとに orca-web:draft-result を返す。createDraftSender が ready の前は送らず、10 秒で帯、not_empty で帯。枠が前から ready を送り終えていれば押した時にすぐ送る。別の枠（前の枠や別の窓）からの ready は覚えない", verifies: ["R-03"]}
 	"T-07": {title: "文書の追加：waitingMembers は attached でない端末のタブと猶予の中のメンバーを含まず、member_blocked の判定と一致する。questions は attention input→ask、approval→gate で、問いのない頂点では空", verifies: ["R-01"]}
 	"T-08": {title: "配るファイル：/apexes-cards-view.js と /embed/draft-receiver.js が STATIC_FILES から配られる（200）", verifies: ["R-01", "R-03"]}
 	"T-02": {title: "acceptDraft：同じオリジン・親から・composeOn・phase が compose か changed・入力欄が空のときだけ ok と text（改行は残し、ほかの制御文字は除く）。別のオリジン・親でない source・compose off・disabled・sending・checking・unknown・書きかけ・1,000 字超は ok 偽と理由。返しても送信の関数は呼ばない", verifies: ["R-03", "F-01"]}

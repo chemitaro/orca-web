@@ -4,15 +4,16 @@ goal: "`/` が指揮の画面になり、受け箱が `/inbox` で動き、Run �
 
 steps: {
 	"S-01": {title: "道とリンク（D-01、D-02）", text: "対象：`src/server/app.ts`、`web/*.html` の見出し、`web/runs-view.js`・`web/apexes-view.js`、`test/server/`・`test/web/` の道とリンクのテスト。確かめ：T-01〜T-03。コミットして次へ", realizes: ["R-01", "R-02", "F-01"], session: "impl"}
-	"S-02": {title: "Run の木の根（D-03）", text: "対象：`src/runs/links.ts`・`src/runs/tree.ts`、`src/server/app.ts`（木の道に内部の値を渡す）、`test/runs/`。確かめ：T-04・T-05。実装担当の最後の手順。区切りのレビュー：あり（cp1）", realizes: ["R-03"], after: ["S-01"], session: "impl"}
+	"S-02": {title: "Run の木の根（D-03）", text: "対象：`src/runs/links.ts`・`src/runs/tree.ts`（`buildRunTree`・`buildRunList` の引数）、`src/server/app.ts`（`/api/runs/<id>/tree` と `/api/runs` に内部の値と対応表を渡す）、`test/runs/`・`test/server/`。確かめ：T-04・T-05・T-07。実装担当の最後の手順。区切りのレビュー：あり（cp1）", realizes: ["R-03"], after: ["S-01"], session: "impl"}
 	"S-03": {title: "README・AGENTS.md、要望の下書き、試しの orca-web（タスク担当。D-04）", text: "タスク担当が行う。README・AGENTS.md の道と画面の節を直す。要望の下書きを report.md に書く。試しの orca-web で `/`・`/inbox`・`/apexes`・`/runs/<id>` を開き、木の根が結べた Run の数を前後で比べて report.md に記録する。確かめ：T-06", realizes: ["R-04"], after: ["S-02"], session: "doc"}
 }
 
 tests: {
 	"T-01": {title: "道：`/`・`/index.html`・`/apexes` が指揮の画面、`/inbox` が受け箱。CSP は今の index の画面の値", verifies: ["R-01"]}
 	"T-02": {title: "`/embed/agent`・`/embed/open-button`・`/api/state`・`/api/worktrees/summary` の応答の形と見出しが今のまま", verifies: ["F-01"]}
-	"T-03": {title: "リンク：inboxLinks と各画面の見出しが `/` と `/inbox` を指す。受け箱へのリンクが `/` を指していない", verifies: ["R-02"]}
+	"T-03": {title: "リンク：各画面の HTML の見出しで、受け箱は `/inbox`、指揮は `/` を指す。受け箱へのリンクが `/` を指していない（HTML を読んで確かめる）", verifies: ["R-02"]}
 	"T-04": {title: "木の根：activeCoordinatorHandle もなく生きた作業者もいない Run で、根の task の createdByPaneKey が頂点の paneKey と一致すれば、根がその頂点のエージェントに結ばれる", verifies: ["R-03"]}
+	"T-07": {title: "古い handle と世代と一覧：activeCoordinatorHandle の端末がない Run で、生きた作業者の parentPaneKey か束の頂点で根が結ばれる。consumerGeneration が 2 の Run では世代 2 の束の頂点を選ぶ。buildRunList の coordinatorProject と fromOtherProject と ?project= の絞り込みが、新しい根の結びで決まる", verifies: ["R-03"]}
 	"T-05": {title: "今の coordinatorAgent で結べる Run（handle あり、生きた作業者の parentPaneKey）の結果が変わらない", verifies: ["R-03"]}
 	"T-06": {title: "試しの orca-web：4つの画面が開き、木の根が結べた Run の数が今以上。要望の下書きに私的な値がない", verifies: ["R-04", "R-03"]}
 }
