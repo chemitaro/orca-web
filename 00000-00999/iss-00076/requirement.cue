@@ -1,48 +1,134 @@
 package spec
 
-// 要件（Issue）。型 specdock/v1。書き方は spec-dock/docs/authoring/ のガイドにある。
-// 文章の項目には Markdown を書いてよい。型にない項目は、必要に応じて足してよい。
-
-// 型の版。消さない。
 schema: "specdock/v1"
 
-// 保証レベル（light、standard、strict、critical）と、その理由。
-// 失敗したときの影響と回復の難しさで選ぶ（工数や作業の難しさでは選ばない）。
-// 具体化や作業の途中で、上げても下げてもよい。正本はここだけで、ほかの場所に写さない。
 assurance: {
 	level:  "standard"
-	reason: "読み取りの新しい API と画面を足すだけで、Orca の状態も送信も変えない"
+	reason: "読み取りの新しい API と画面を足すだけで、Orca の状態も送信も変えない。誤判定は表示に留まり、PR を戻せば元に戻る"
 }
 
-// 目的と背景（任意）。
-// purpose:    "この Issue が実現する価値"
-// background: "解く問題と、関係者"
+purpose: "親のない頂点のエージェントだけを、3つの状態（対応が必要・作業中・完了）で並べた一覧の API と画面を出す。今の状態の文書にある項目だけで作り、Orca から読む項目は足さない。"
 
-// 対象と対象外（任意）。
-// includes: ["..."]
-// excludes: ["..."]
+background: """
+	Epic epic-00075 の最初の切り分け（R-01〜R-03）。設計の根拠は Epic の requirement.cue の decisions と、タスク担当の Workbench `.workbench/orchestrator-ui/proposal-v2.md`。
+	2026-11-25 の実データ：エージェント 79、`parentPaneKey` を持つもの 4（親はどれも見つかる）、頂点 74、state が null の 8、端末のタブ 55 のうち復元待ち 54、状態の始まりが 7 日以上前の頂点 49。
+	質問・判断・止まった作業者・失敗の判定と、閉じた子との結びは iss-00078 に任せる。会話を同じ画面で開くのは iss-00077。
+	"""
 
-// 観測できる要件。番号（R-01、R-02、…）をキーにする。
-// title は必須。acceptance（観測できる受け入れの条件）は standard 以上で必須。
+includes: [
+	"純粋な関数の新しいモジュール `src/apex/`（`model.ts`、`build.ts`）と文書 `orca-web.apexes/v1`",
+	"`GET /api/apexes`（同じオリジンだけ、CORS なし、`?project=`）",
+	"一覧の画面 `/apexes`（`web/apexes.html`・`apexes.js`・純粋な関数の `apexes-view.js`・textContent だけの `apexes-dom.js`）と、ほかの画面からのリンク",
+	"README と AGENTS.md の地図の追記",
+]
+excludes: [
+	"Orca から読む項目の追加（iss-00078）",
+	"質問（ask）・判断（gate）・報告のない作業者・失敗・統括不在の判定（iss-00078）",
+	"会話の埋め込み、新着の点（iss-00077）",
+	"通知、favicon（iss-00081）",
+	"`/` の差し替え（iss-00082）",
+	"`orca-web.state/v1`・`/embed/*`・`/api/worktrees/summary` の変更",
+]
+
 requirements: {
-	// "R-01": {
-	// 	title: "利用者が〜できる"
-	// 	text:  "詳しい説明"
-	// 	acceptance: ["〜が観測できる"]
-	// }
+	"R-01": {
+		title: "エージェントを頂点・メンバー・結べないものの3つに分ける"
+		text: """
+			- メンバー：`parentPaneKey` が、自分でない今あるエージェントの `paneKey` とちょうど1つ一致するエージェント（親子は何段でもたどる。循環は打ち切り、輪に入ったものは結べないものにする）。
+			- 頂点：`parentPaneKey` がなく、`worker` もないエージェント。
+			- 結べないもの：それ以外（`parentPaneKey` があるが親が見つからない、`worker` があるが親が見つからない）。
+			各エージェントは3つのどれか1つだけに入る。
+			"""
+		acceptance: [
+			"親・子・孫の3段の木で、子と孫が頂点のメンバーになり、頂点は1つだけ一覧に出る",
+			"`parentPaneKey` の親が見つからない子と、`worker` があって親のない子は、頂点にならず「結べない仕事」に出る",
+			"エージェントの数＝頂点の数＋メンバーの数＋結べないものの数",
+		]
+	}
+	"R-02": {
+		title: "頂点の状態を、配下を含めて3つで決める"
+		text: """
+			状態の印は受け箱の `agentMark`（working・blocked・waiting・done・sleeping・unknown）を使う。上から順に最初に当たったもの：
+			1. 対応が必要：頂点が blocked か waiting（理由 `apex_blocked`・`apex_waiting`）。または、メンバーが blocked か waiting で、`stateStartedAt` から 20 秒以上たった（`stateStartedAt` がなければすぐ）。端末のタブのメンバーは `terminal` が `attached` のものだけ（理由 `member_blocked`・`member_waiting`）。
+			2. 作業中：チームの誰か（頂点かメンバー）が working（理由 `working`、頂点が monitoring なら `monitoring`、メンバーだけが動いていれば `members_working`）。または、メンバーの許可待ち・入力待ちが 20 秒の猶予の中。
+			3. 頂点の印が unknown：作業中にし、札 `unverified` を付ける。
+			4. 完了：それ以外（頂点が done か sleeping で、チームに動いている・待っているものがない）。
+			"""
+		acceptance: [
+			"頂点が done でメンバーが working の頂点は作業中（理由 members_working）",
+			"頂点が waiting なら、メンバーが working でも対応が必要",
+			"メンバーの blocked は 19 秒では作業中、20 秒で対応が必要",
+			"頂点もメンバーも done なら完了",
+		]
+	}
+	"R-03": {
+		title: "読めない・古いときを完了と区別する"
+		text: """
+			- 頂点の印が unknown なら完了にせず、作業中に札 `unverified`（「確かめられない」）。
+			- 状態の文書が `stale` か接続が `connected` でないとき、文書に `stale: true` を立て、画面に帯を出す（状態は最後に読めた値のまま）。
+			"""
+		acceptance: [
+			"state が null の頂点（配下なし）は作業中・札 unverified で、完了の数に入らない",
+			"状態の文書が stale のとき、一覧の文書の stale が真で、画面に「Orca を読めていません」の帯が出る",
+		]
+	}
+	"R-04": {
+		title: "完了と古いものを畳む段に分ける"
+		text: """
+			画面の段は5つ：対応が必要、作業中、完了（最近）、以前の完了、眠っている。ほかに結べない仕事。
+			- 眠っている：頂点の `terminal` が `awaiting-restore`、または最後の活動（頂点とメンバーの `stateStartedAt` の最大、なければ worktree の `lastActivityAt`）が 7 日より前。対応が必要の頂点は眠っているにしない。
+			- 以前の完了：完了で、最後の活動が 24 時間より前（眠っているでないもの）。
+			- 完了（最近）：完了で、最後の活動が 24 時間以内。
+			段の中は、最後の活動の新しい順。以前の完了・眠っている・結べない仕事は畳んで出す。
+			"""
+		acceptance: [
+			"25 時間前に done になった頂点は以前の完了、復元待ちの頂点は眠っている、に入る",
+			"unverified の頂点で 8 日動きがないものは眠っているに入る",
+		]
+	}
+	"R-05": {
+		title: "頂点の行で相手と構成が分かる"
+		text:  "各行に、種類のアイコン、状態の印、題名（なければ worktree の名前）、プロジェクトと Issue、理由の札、配下の数（動いている／全体）、経過（`elapsed.js`）を出す。行を押すと、その頂点の `/embed/agent?id=` を新しいタブで開く。"
+		acceptance: [
+			"行に題名・プロジェクト・Issue・理由の札・配下の数・経過が出る",
+			"行のリンクが `/embed/agent?id=<頂点の id>` を新しいタブ（`_blank`、`noopener noreferrer`）で開く",
+		]
+	}
+	"R-06": {
+		title: "API を同じオリジンだけに配り、プロジェクトで絞れる"
+		acceptance: [
+			"`GET /api/apexes` が `orca-web.apexes/v1` を返し、別のオリジンは 403、GET 以外は 405",
+			"`?project=<repo の id>` で、その repo の worktree にいる頂点だけになる（513 字以上は 400）",
+		]
+	}
+	"R-07": {
+		title: "画面がタブの題名に対応が必要の数を出し、見えない間は読まない"
+		acceptance: [
+			"対応が必要が2つなら題名が `(2) 指揮 — orca-web`、0なら `指揮 — orca-web`",
+			"`document.hidden` の間はポーリングを止め、見えたらすぐ読む",
+		]
+	}
 }
 
-// 失敗・境界の条件。番号（F-01、…）をキーにする。
-// title は必須。impact（起きたときの影響）と recovery（回復のしかた）は strict 以上で必須。
 failures: {
-	// "F-01": {
-	// 	title:    "〜のときは、何も書かずに止まる"
-	// 	impact:   "〜"
-	// 	recovery: "〜"
-	// }
+	"F-01": {
+		title: "状態の文書が使えないときは空の一覧と理由を返す"
+		text:  "状態の読みの部品がない（起動の途中）ときは 503 `apexes_unavailable`。接続が `starting` のときは空の items と `stale: true`。"
+	}
+	"F-02": {
+		title: "本文・パス・paneKey を文書に出さない"
+		text:  "文書には会話の本文、最後の一言、worktree のパス、paneKey、terminalHandle を入れない（受け箱・要約と同じ方針）。"
+	}
 }
 
-// 制約・前提、合意した判断、未解決事項（任意）。
-// constraints: ["..."]
-// decisions: ["..."]
-// questions: ["..."]
+constraints: [
+	"AGENTS.md の守ること（innerHTML を足さない、実行時の依存を足さない、Orca に読む要求のほか送らない）",
+	"`orca-web.state/v1`・`/embed/*`・`/api/worktrees/summary` を変えない",
+	"状態の決め方は `src/inbox/classify.ts` の `agentMark`・`agentWorkingMode` を使い、二重に持たない",
+]
+
+decisions: [
+	"Epic epic-00075 の decisions をすべて引き継ぐ",
+	"メンバーの許可待ちの猶予は 20 秒（Opus 5.5 のレビュアーの提案をタスク担当が採用、2026-11-25。自動の承認で一瞬だけ出る表示を拾わないため）",
+	"取得元が古いときは状態を変えず帯と札で示す（純粋な関数は前の値を持たないため。古い間は文書が更新されないので完了への移り変わりも起きない）",
+]
