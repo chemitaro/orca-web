@@ -443,9 +443,19 @@ a {
   gap: 2px 12px;
 }
 
-.apexes-page .apex-counts .count[data-key="needs_action"] {
+/* 強調は対応が必要が 1 以上のときだけ（count--alert）。 */
+.apexes-page .apex-counts .count--alert {
   color: var(--bad);
   font-weight: 600;
+}
+
+/* 新着の点（完了してまだ見ていない頂点）。 */
+.apexes-page .apex-unseen {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
 }
 
 .apexes-page .apex-link {

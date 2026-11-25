@@ -10,7 +10,9 @@ import {
   buildApexesView as buildView,
   frameSrc,
   initialSelection,
+  isUnseen,
   pickSelection,
+  pruneSeen,
   reduceSelection,
   SWITCH_CONFIRM_TEXT,
   selectionUrl,
@@ -62,7 +64,7 @@ test('T-08: 段は開く3つと畳む3つの順で、見出しの数を持つ', 
   );
   assert.deepEqual(
     view.headline.map((h: { text: string }) => h.text),
-    ['対応が必要 1', '作業中 1', '完了 3'],
+    ['対応が必要 1', '作業中 1', '完了 1'],
   );
 });
 
@@ -217,4 +219,94 @@ test('T-04：selectionUrl は apex を足す・替える・外し、ほかの引
 
 test('T-06：切り替えの確かめの文', () => {
   assert.equal(SWITCH_CONFIRM_TEXT, '送信の処理中か結果不明の表示があります。切り替えると表示を失います');
+});
+
+const DAY = 24 * HOUR;
+// biome-ignore lint/suspicious/noExplicitAny: hand-made items for the pure functions
+const item = (patch: Record<string, any>): any => ({
+  id: 'x',
+  group: 'done_recent',
+  status: 'done',
+  lastActivityAt: ago(HOUR),
+  ...patch,
+});
+
+test('T-07：isUnseen は完了と以前の完了で、見たことがないか、見た時刻より最後の活動が新しいときだけ真', () => {
+  assert.equal(isUnseen(item({}), {}), true, '見たことがない');
+  assert.equal(isUnseen(item({ group: 'done_older' }), {}), true);
+  assert.equal(isUnseen(item({}), { x: ago(2 * HOUR) }), true, '見た後でまた動いた');
+  assert.equal(isUnseen(item({}), { x: ago(HOUR - 1) }), false, '見た後に動いていない');
+  assert.equal(isUnseen(item({ group: 'working', status: 'working' }), {}), false);
+  assert.equal(isUnseen(item({ group: 'needs_action', status: 'needs_action' }), {}), false);
+  assert.equal(isUnseen(item({ group: 'sleeping' }), {}), false, '眠っている段の done には点を出さない');
+  assert.equal(isUnseen(item({ lastActivityAt: null }), {}), false, '最後の活動がなければ出さない');
+  assert.equal(isUnseen(item({}), null), false, '保存が使えなければ点を出さない');
+});
+
+test('T-07：pruneSeen は 14 日より古い記録を落とし、絞っていない・stale でない・空でない文書のときだけ一覧にない id を落とす', () => {
+  const doc = documentOf([agent('keep'), agent('fresh')]);
+  const seen = { keep: ago(HOUR), fresh: ago(13 * DAY), old: ago(15 * DAY), gone: ago(HOUR), bad: 'x' };
+  assert.deepEqual(pruneSeen(seen, doc, NOW), { keep: ago(HOUR), fresh: ago(13 * DAY) });
+  const kept = { keep: ago(HOUR), gone: ago(HOUR), old: ago(15 * DAY) };
+  assert.deepEqual(pruneSeen(kept, { ...doc, project: 'repo-a' }, NOW), { keep: ago(HOUR), gone: ago(HOUR) });
+  assert.deepEqual(pruneSeen(kept, { ...doc, stale: true }, NOW), { keep: ago(HOUR), gone: ago(HOUR) });
+  assert.deepEqual(pruneSeen(kept, { ...doc, items: [] }, NOW), { keep: ago(HOUR), gone: ago(HOUR) });
+});
+
+test('T-07：行の点と見出しの「新着 n」は完了と以前の完了の点の数。保存が使えなければ点も数も出さない', () => {
+  const doc = fullDocument();
+  const view = buildApexesView(doc, { now: NOW, seen: {} });
+  // biome-ignore lint/suspicious/noExplicitAny: the rows are untyped JS objects
+  const rows = new Map<string, any>(
+    view.sections.flatMap((s: { rows: { key: string }[] }) => s.rows).map((r: { key: string }) => [r.key, r]),
+  );
+  assert.equal(rows.get('recent').unseen, true);
+  assert.equal(rows.get('older').unseen, true);
+  assert.equal(rows.get('asleep').unseen, false);
+  assert.equal(rows.get('needs').unseen, false);
+  assert.deepEqual(
+    view.headline.map((h: { text: string }) => h.text),
+    ['対応が必要 1', '作業中 1', '完了 1', '新着 2'],
+  );
+  const seenRecent = buildApexesView(doc, { now: NOW, seen: { recent: new Date(NOW).toISOString() } });
+  assert.deepEqual(
+    seenRecent.headline.map((h: { text: string }) => h.text),
+    ['対応が必要 1', '作業中 1', '完了 1', '新着 1'],
+  );
+  const noStorage = buildApexesView(doc, { now: NOW, seen: null });
+  assert.equal(
+    noStorage.sections
+      .flatMap((s: { rows: { unseen: boolean }[] }) => s.rows)
+      .some((r: { unseen: boolean }) => r.unseen),
+    false,
+  );
+  assert.deepEqual(
+    noStorage.headline.map((h: { text: string }) => h.text),
+    ['対応が必要 1', '作業中 1', '完了 1'],
+  );
+});
+
+test('T-10：見出しの数は段の件数。確かめられず眠っているに入った作業中の頂点は作業中に数えない。対応が必要 0 は強調しない', () => {
+  // biome-ignore lint/suspicious/noExplicitAny: a hand-made apexes document
+  const doc: any = {
+    ...documentOf([]),
+    counts: { needs_action: 0, working: 3, done: 0 },
+    items: [
+      item({ id: 'w1', group: 'working', status: 'working' }),
+      item({ id: 'w2', group: 'working', status: 'working' }),
+      item({ id: 'z', group: 'sleeping', status: 'working', tags: ['unverified'] }),
+    ],
+  };
+  const view = buildApexesView(doc, { now: NOW });
+  const working = view.sections.find((s: { key: string }) => s.key === 'working');
+  const head = new Map(view.headline.map((h: { key: string; text: string; emphasis: boolean }) => [h.key, h]));
+  // biome-ignore lint/suspicious/noExplicitAny: the headline parts are untyped JS objects
+  const part = (key: string): any => head.get(key);
+  assert.equal(part('working').text, `作業中 ${working.count}`);
+  assert.equal(part('working').text, '作業中 2');
+  assert.equal(part('needs_action').text, '対応が必要 0');
+  assert.equal(part('needs_action').emphasis, false);
+  const needs = buildApexesView(fullDocument(), { now: NOW });
+  assert.equal(needs.headline[0].emphasis, true);
+  assert.equal(needs.title, '(1) 指揮 — orca-web', '題名の件数は counts.needs_action のまま');
 });

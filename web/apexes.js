@@ -4,8 +4,11 @@
 // 頂点の行を押すと、右のペインに見出しと /embed/agent の枠を出し、?apex= で覚える（履歴は増やさない。iss-00077）。
 // 選びの移り変わりは apexes-view.js の reduceSelection、枠の作り直しと切り替えの確かめは apexes-dom.js。
 // 幅 900px 以上は2ペイン、狭い幅は1列で、選ぶと会話だけを出し「← 一覧」で戻る（CSS の apexes--selected）。
+// 新着の点：選んだ頂点を 10 秒続けて出したら、見た時刻を localStorage に覚える（id と時刻だけ。使えなければ点を出さない）。
 import {
   clearAgentFrame,
+  createSeenStore,
+  createSeenTracker,
   mayLeaveFrame,
   mountAgentFrame,
   renderHeadline,
@@ -20,7 +23,9 @@ import {
   buildApexesView,
   buildPane,
   initialSelection,
+  pruneSeen,
   reduceSelection,
+  SEEN_DWELL_MS,
   selectionUrl,
   WIDE_MIN_PX,
 } from './apexes-view.js';
@@ -50,6 +55,37 @@ let remembered = null;
 /** 今の見出しの開く先（押したときに読む）。 */
 let openTarget = null;
 
+// 見た時刻。読めなければ null で、点を出さない（一覧と会話はそのまま動く）。
+const seenStore = createSeenStore(() => window.localStorage);
+let seenMap = seenStore.load();
+const seenTracker = createSeenTracker({
+  dwellMs: SEEN_DWELL_MS,
+  now: () => Date.now(),
+  isVisible: () => document.visibilityState === 'visible',
+  schedule: (fn, ms) => setTimeout(fn, ms),
+  cancel: (timer) => clearTimeout(timer),
+  onSeen: (id, at) => {
+    const latest = seenStore.load();
+    if (latest === null) return;
+    seenMap = { ...latest, [id]: at };
+    seenStore.save(seenMap);
+    render();
+  },
+});
+document.addEventListener('visibilitychange', () => seenTracker.visibility());
+
+/** 文書を受けるたびに、古い記録と一覧にない id を捨てる（決めた条件のときだけ）。 */
+function pruneStoredSeen(doc) {
+  const latest = seenStore.load();
+  seenMap = latest;
+  if (latest === null) return;
+  const pruned = pruneSeen(latest, doc, Date.now());
+  if (Object.keys(pruned).length !== Object.keys(latest).length) {
+    seenMap = pruned;
+    seenStore.save(pruned);
+  }
+}
+
 // 「Orca で開く」の共有の部品。描き直しても同じ要素を見出しへ移す（要求の途中の表示を保つ）。
 const writer = createWriter();
 const openControl = createOpenControl(document, { size: 'md' });
@@ -67,6 +103,7 @@ function syncOpen() {
 function renderPane() {
   const pane = buildPane(lastDoc, selection, { now: Date.now(), remembered });
   remembered = pane.remember;
+  seenTracker.show(selection.id);
   document.body.classList.toggle('apexes--selected', pane.selected);
   if (!pane.selected) {
     openTarget = null;
@@ -88,7 +125,7 @@ function render() {
     document.title = apexesTitle(0);
     return;
   }
-  const view = buildApexesView(lastDoc, { now: Date.now(), error: lastError, selectedId: selection.id });
+  const view = buildApexesView(lastDoc, { now: Date.now(), error: lastError, selectedId: selection.id, seen: seenMap });
   document.title = view.title;
   els.counts.replaceChildren(renderHeadline(document, view.headline));
   els.freshness.replaceChildren(renderFreshness(document, view.freshness));
@@ -141,6 +178,7 @@ async function load(isCurrent) {
     if (!isCurrent()) return;
     lastDoc = doc;
     lastError = null;
+    pruneStoredSeen(doc);
   } catch (error) {
     if (!isCurrent()) return;
     lastError = error.message;

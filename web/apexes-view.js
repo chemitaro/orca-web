@@ -2,6 +2,8 @@
 // 段ごとの行、見出しの数、タブの題名、鮮度の帯を作る。DOM、時計、fetch に触らない。言葉の表はここの1か所。
 // 選んだ頂点（?apex=）の扱い（iss-00077 D-02）：選びの状態 { id, autoPick, checked } を reduceSelection で移し、
 // 右のペインの見出しと案内を buildPane で作る。枠の src は frameSrc の1か所。
+// 新着の点（D-06）：見た時刻の写し seen（{ [頂点の id]: ISO 時刻 }、保存が使えなければ null）から isUnseen で決め、
+// pruneSeen で古い記録を捨てる。見出しの数（D-09）は文書の counts ではなく、作った段の件数から出す。
 
 import { iconKey, STATE_ICONS } from './embed/agent-marks-icons.js';
 import { MARK_LABELS } from './embed/agent-marks-view.js';
@@ -49,6 +51,15 @@ export const WIDE_MIN_PX = 900;
 export const SWITCH_CONFIRM_TEXT = '送信の処理中か結果不明の表示があります。切り替えると表示を失います';
 export const PANE_GUIDE_TEXT = '一覧から頂点を選ぶと、ここに会話が出ます';
 export const MISSING_LABEL = '一覧にありません';
+/** 見た時刻を保存する localStorage の鍵と形の版。 */
+export const SEEN_STORAGE_KEY = 'orca-web.apexes.seen';
+export const SEEN_VERSION = 1;
+/** 選んだ頂点をこれだけ続けて右のペインに出したら、見たとする。 */
+export const SEEN_DWELL_MS = 10_000;
+/** これより古い見た時刻は捨てる。 */
+export const SEEN_KEEP_MS = 14 * 24 * 60 * 60 * 1000;
+export const UNSEEN_LABEL = '新着';
+const UNSEEN_GROUPS = new Set(['done_recent', 'done_older']);
 
 const DETAIL_PREFIX = '/embed/agent?id=';
 const BASE_TITLE = '指揮 — orca-web';
@@ -87,7 +98,44 @@ function baseRow(item) {
   };
 }
 
-function apexRow(item, now, selectedId = null) {
+const time = (value) => (typeof value === 'string' ? Date.parse(value) : Number.NaN);
+
+/**
+ * 新着の点を出すか。段が完了か以前の完了で、最後の活動が見た時刻より新しい（見たことがなければ真）。
+ * seen が null（保存が使えない）なら出さない。
+ */
+export function isUnseen(item, seen) {
+  if (!seen || !UNSEEN_GROUPS.has(item?.group)) return false;
+  const last = time(item.lastActivityAt);
+  if (!Number.isFinite(last)) return false;
+  const id = String(item.id);
+  const at = Object.hasOwn(seen, id) ? time(seen[id]) : Number.NaN;
+  return !Number.isFinite(at) || at < last;
+}
+
+/**
+ * 見た時刻の記録を減らす。now から 14 日より古いもの（読めない時刻も）を落とす。
+ * 文書が ?project= で絞られておらず、stale でなく、items が空でないときだけ、文書にない id も落とす。
+ * @param {Record<string, string>} seen
+ * @returns {Record<string, string>}
+ */
+export function pruneSeen(seen, doc, now) {
+  const items = list(doc?.items);
+  const known =
+    doc && doc.project === null && doc.stale !== true && items.length > 0
+      ? new Set(items.map((item) => String(item.id)))
+      : null;
+  const out = {};
+  for (const [id, at] of Object.entries(seen ?? {})) {
+    const value = time(at);
+    if (!Number.isFinite(value) || value < now - SEEN_KEEP_MS) continue;
+    if (known && !known.has(id)) continue;
+    out[id] = at;
+  }
+  return out;
+}
+
+function apexRow(item, now, selectedId = null, seen = null) {
   const reasons = list(item.reasons);
   const counts = item.counts ?? {};
   const total = num(counts.total);
@@ -95,6 +143,7 @@ function apexRow(item, now, selectedId = null) {
     ...baseRow(item),
     selectable: true,
     selected: selectedId !== null && String(item.id) === selectedId,
+    unseen: isUnseen(item, seen),
     monitoring: reasons.includes('monitoring'),
     reasons: reasons.map((r) => REASON_LABELS[r] ?? String(r)),
     tags: list(item.tags).map((t) => TAG_LABELS[t] ?? String(t)),
@@ -110,6 +159,7 @@ function unlinkedRow(item) {
     ...baseRow(item),
     selectable: false,
     selected: false,
+    unseen: false,
     monitoring: false,
     reasons: [UNLINKED_LABELS[item.reason] ?? String(item.reason)],
     tags: [],
@@ -129,7 +179,8 @@ function freshnessLines(doc, error) {
 /**
  * 頂点の一覧の文書から画面の内容を作る。
  * @param {any} doc /api/apexes の文書
- * @param {{ now: number, error?: string | null, selectedId?: string | null }} options
+ * @param {{ now: number, error?: string | null, selectedId?: string | null,
+ *   seen?: Record<string, string> | null }} options seen は見た時刻の写し（なければ点を出さない）
  */
 export function buildApexesView(doc, options) {
   const items = list(doc.items);
@@ -139,18 +190,25 @@ export function buildApexesView(doc, options) {
         ? list(doc.unlinked).map(unlinkedRow)
         : items
             .filter((item) => item.group === key)
-            .map((item) => apexRow(item, options.now, options.selectedId ?? null));
+            .map((item) => apexRow(item, options.now, options.selectedId ?? null, options.seen ?? null));
     return { key, title: SECTION_LABELS[key], count: rows.length, collapsed: COLLAPSED.has(key), rows };
   });
   const counts = doc.counts ?? {};
-  const needsAction = num(counts.needs_action);
+  // 見出しの数は開いた段の件数（D-09）。題名の件数は counts.needs_action のまま（段と同じ値）。
+  const sectionCount = (key) => sections.find((section) => section.key === key)?.count ?? 0;
+  const needsShown = sectionCount('needs_action');
+  const unseen = sections
+    .filter((section) => UNSEEN_GROUPS.has(section.key))
+    .reduce((n, section) => n + section.rows.filter((row) => row.unseen).length, 0);
+  const headline = [
+    { key: 'needs_action', text: `${SECTION_LABELS.needs_action} ${needsShown}`, emphasis: needsShown > 0 },
+    { key: 'working', text: `${SECTION_LABELS.working} ${sectionCount('working')}`, emphasis: false },
+    { key: 'done', text: `${SECTION_LABELS.done_recent} ${sectionCount('done_recent')}`, emphasis: false },
+  ];
+  if (unseen > 0) headline.push({ key: 'unseen', text: `${UNSEEN_LABEL} ${unseen}`, emphasis: false });
   return {
-    title: apexesTitle(needsAction),
-    headline: [
-      { key: 'needs_action', text: `対応が必要 ${needsAction}` },
-      { key: 'working', text: `作業中 ${num(counts.working)}` },
-      { key: 'done', text: `完了 ${num(counts.done)}` },
-    ],
+    title: apexesTitle(num(counts.needs_action)),
+    headline,
     freshness: freshnessLines(doc, options.error ?? null),
     sections,
   };

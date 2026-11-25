@@ -4,6 +4,8 @@ import { test } from 'node:test';
 import { buildApexList } from '../../src/apex/build.ts';
 import {
   clearAgentFrame,
+  createSeenStore,
+  createSeenTracker,
   mayLeaveFrame,
   mountAgentFrame,
   renderHeadline,
@@ -11,7 +13,7 @@ import {
   renderSection,
   startApexPolling,
 } from '../../web/apexes-dom.js';
-import { buildApexesView } from '../../web/apexes-view.js';
+import { buildApexesView, SEEN_DWELL_MS, SEEN_STORAGE_KEY } from '../../web/apexes-view.js';
 import { agent, fact, input, NOW, repo, worktree } from '../inbox/fixture.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -62,9 +64,9 @@ class FakeElement {
     throw new Error('insertAdjacentHTML must not be used');
   }
 
-  /** 属性は SVG の要素だけに付ける。 */
+  /** 属性は SVG の要素と、HTML の要素の aria-label だけに付ける。 */
   setAttribute(name: string, value: string): void {
-    if (this.namespaceURI !== SVG_NS) throw new Error('setAttribute is not expected');
+    if (this.namespaceURI !== SVG_NS && name !== 'aria-label') throw new Error('setAttribute is not expected');
     if (name.toLowerCase().startsWith('on')) throw new Error(`event attribute ${name} must not be set`);
     this.attrs[name] = String(value);
   }
@@ -381,4 +383,144 @@ test('T-10: 入口は startApexPolling で読み、題名を view から付け�
     const text = await readFile(new URL(`../../web/${path}`, import.meta.url), 'utf8');
     assert.doesNotMatch(text, /\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML\(|document\.write\(/, path);
   }
+});
+
+test('T-07：新着の行は題名の前に点（apex-unseen、aria-label 新着）を出し、見出しの強調は対応が必要が 1 以上のときだけ', () => {
+  const doc = buildApexList({
+    state: input({ agents: [agent('d', { state: fact('done') }), agent('w')] }).state,
+    now: NOW,
+    project: null,
+  });
+  const view = buildApexesView(doc, { now: NOW, seen: {} });
+  const done = view.sections.find((s: { key: string }) => s.key === 'done_recent');
+  const node = renderSection(fakeDocument, done) as FakeElement;
+  const head = node.all().find((e) => e.className === 'apex-head') as FakeElement;
+  const classes = head.children.map((c) => c.className);
+  assert.ok(classes.indexOf('apex-unseen') >= 0 && classes.indexOf('apex-unseen') < classes.indexOf('apex-title'));
+  assert.equal(head.children.find((c) => c.className === 'apex-unseen')?.attrs['aria-label'], '新着');
+  const quiet = renderHeadline(fakeDocument, view.headline) as FakeElement;
+  assert.equal(quiet.textContent, '対応が必要 0作業中 1完了 1新着 1');
+  assert.deepEqual(
+    quiet.children.map((c) => c.className),
+    ['count', 'count', 'count', 'count'],
+    '対応が必要 0 は普通の色',
+  );
+  const loud = renderHeadline(fakeDocument, [
+    { key: 'needs_action', text: '対応が必要 2', emphasis: true },
+  ]) as FakeElement;
+  assert.equal(loud.children[0]?.className, 'count count--alert');
+});
+
+test('T-07：見た時刻の保存は決めた鍵と形で読み書きし、例外や壊れた値でも止まらない', () => {
+  const data = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => void data.set(key, value),
+  };
+  const store = createSeenStore(() => storage);
+  assert.deepEqual(store.load(), {});
+  assert.equal(store.save({ a: '2026-01-02T12:00:00.000Z' }), true);
+  assert.deepEqual(JSON.parse(data.get(SEEN_STORAGE_KEY) ?? ''), { v: 1, seen: { a: '2026-01-02T12:00:00.000Z' } });
+  assert.deepEqual(store.load(), { a: '2026-01-02T12:00:00.000Z' });
+  data.set(SEEN_STORAGE_KEY, '{broken');
+  assert.deepEqual(store.load(), {}, '壊れた値は空として読む');
+  data.set(SEEN_STORAGE_KEY, JSON.stringify({ v: 2, seen: { a: 'x' } }));
+  assert.deepEqual(store.load(), {}, '知らない版は空');
+  data.set(SEEN_STORAGE_KEY, JSON.stringify({ v: 1, seen: { a: 1, b: '2026-01-02T12:00:00.000Z' } }));
+  assert.deepEqual(store.load(), { b: '2026-01-02T12:00:00.000Z' }, '文字でない時刻は捨てる');
+  const throwing = createSeenStore(() => {
+    throw new Error('SecurityError');
+  });
+  assert.equal(throwing.load(), null, '使えなければ null（点を出さない）');
+  assert.equal(throwing.save({}), false);
+  const failing = createSeenStore(() => ({
+    getItem: () => {
+      throw new Error('denied');
+    },
+    setItem: () => {
+      throw new Error('quota');
+    },
+  }));
+  assert.equal(failing.load(), null);
+  assert.equal(failing.save({ a: 'x' }), false);
+});
+
+function trackerHarness() {
+  let now = 0;
+  let visible = true;
+  let next = 1;
+  const timers = new Map<number, { at: number; fn: () => void }>();
+  const seen: [string, string][] = [];
+  const tracker = createSeenTracker({
+    dwellMs: SEEN_DWELL_MS,
+    now: () => now,
+    isVisible: () => visible,
+    schedule: (fn: () => void, ms: number) => {
+      const id = next++;
+      timers.set(id, { at: now + ms, fn });
+      return id;
+    },
+    cancel: (id: number | null) => {
+      if (id !== null) timers.delete(id);
+    },
+    onSeen: (id: string, at: string) => seen.push([id, at]),
+  });
+  const advance = (ms: number) => {
+    now += ms;
+    for (const [id, t] of [...timers]) {
+      if (t.at <= now) {
+        timers.delete(id);
+        t.fn();
+      }
+    }
+  };
+  const setVisible = (value: boolean) => {
+    visible = value;
+    tracker.visibility();
+  };
+  return { tracker, seen, timers, advance, setVisible };
+}
+
+test('T-07：選んだ頂点を 10 秒続けて出すと見た時刻を書き、9 秒で別の頂点に替えると書かない', () => {
+  assert.equal(SEEN_DWELL_MS, 10_000);
+  const h = trackerHarness();
+  h.tracker.show('a');
+  h.advance(9_000);
+  h.tracker.show('b');
+  h.advance(9_000);
+  assert.deepEqual(h.seen, [], '9 秒では書かない');
+  h.advance(1_000);
+  assert.deepEqual(h.seen, [['b', new Date(19_000).toISOString()]]);
+  h.tracker.show('b');
+  h.advance(30_000);
+  assert.equal(h.seen.length, 1, '同じ頂点を出し続けても重ねて書かない');
+  h.tracker.show(null);
+  assert.equal(h.timers.size, 0);
+});
+
+test('T-07：タブが隠れると数えるのをやめ、見えたら初めから数える', () => {
+  const h = trackerHarness();
+  h.tracker.show('a');
+  h.advance(5_000);
+  h.setVisible(false);
+  h.advance(30_000);
+  assert.deepEqual(h.seen, []);
+  h.setVisible(true);
+  h.advance(9_000);
+  assert.deepEqual(h.seen, []);
+  h.advance(1_000);
+  assert.equal(h.seen.length, 1);
+  const hidden = trackerHarness();
+  hidden.setVisible(false);
+  hidden.tracker.show('a');
+  hidden.advance(20_000);
+  assert.deepEqual(hidden.seen, [], '隠れている間に選んでも数えない');
+});
+
+test('T-07：入口は見た時刻を保存の口で読み書きし、選びを数える口に渡す', async () => {
+  const entry = await readFile(new URL('../../web/apexes.js', import.meta.url), 'utf8');
+  assert.match(entry, /createSeenStore\(\(\) => window\.localStorage\)/);
+  assert.match(entry, /pruneSeen\(/);
+  assert.match(entry, /seenTracker\.show\(/);
+  assert.match(entry, /seen: seenMap/);
 });

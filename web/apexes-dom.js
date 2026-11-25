@@ -3,7 +3,9 @@
 // テストは小さな偽の document で確かめる。見えない間は読まないポーリングの輪 startApexPolling もここに置く。
 // 右のペイン（iss-00077 D-03）：枠は頂点を替えるたびに iframe の要素を作り直し（mountAgentFrame）、既にある枠の src を書き換えない。
 // 外す前に、枠の中の送信の処理中の印を読んで確かめる（mayLeaveFrame、印は embed/unsettled.js）。
-import { frameSrc, SWITCH_CONFIRM_TEXT } from './apexes-view.js';
+// 新着の点（D-06）：見た時刻の保存（createSeenStore、localStorage の読み書きはみな try/catch）と、
+// 選んだ頂点を続けて出した時間を数える口（createSeenTracker）。
+import { frameSrc, SEEN_STORAGE_KEY, SEEN_VERSION, SWITCH_CONFIRM_TEXT, UNSEEN_LABEL } from './apexes-view.js';
 import { AGENT_ICONS, appIcon, stateIcon } from './embed/agent-marks.js';
 import { frameUnsettled } from './embed/unsettled.js';
 import { createPollLoop } from './poll-loop.js';
@@ -15,11 +17,11 @@ function make(doc, tag, text, className) {
   return node;
 }
 
-/** 見出しの数（対応が必要・作業中・完了）。 */
+/** 見出しの数（対応が必要・作業中・完了・新着）。emphasis の数だけ強調の class を付ける。 */
 export function renderHeadline(doc, headline) {
   const box = make(doc, 'p', null, 'apex-counts');
   for (const part of headline) {
-    const span = make(doc, 'span', part.text, 'count');
+    const span = make(doc, 'span', part.text, part.emphasis ? 'count count--alert' : 'count');
     span.dataset.key = part.key;
     box.append(span);
   }
@@ -58,6 +60,12 @@ export function renderRow(doc, row) {
   const mark = make(doc, 'span', null, `apex-mark apex-mark--${row.mark}`);
   if (row.monitoring) mark.append(stateIcon(doc, 'monitoring', 'state-icon'));
   mark.append(make(doc, 'span', row.markLabel));
+  if (row.unseen) {
+    const dot = make(doc, 'span', null, 'apex-unseen');
+    dot.setAttribute('aria-label', UNSEEN_LABEL);
+    dot.title = UNSEEN_LABEL;
+    head.append(dot);
+  }
   head.append(mark, make(doc, 'span', row.title, 'apex-title'));
   a.append(head);
 
@@ -171,6 +179,83 @@ export function mayLeaveFrame(slot, confirm) {
   const frame = currentFrame(slot);
   if (!frame || !frameUnsettled(frame)) return true;
   return confirm(SWITCH_CONFIRM_TEXT) === true;
+}
+
+/**
+ * 見た時刻の保存（localStorage の鍵 SEEN_STORAGE_KEY、形 { v: 1, seen: { [id]: ISO 時刻 } }）。
+ * 読み書きは try/catch で包む。使えなければ load は null（点を出さない）、save は偽を返す。壊れた値は空として読む。
+ * @param {() => { getItem: (key: string) => string | null, setItem: (key: string, value: string) => void }} getStorage
+ */
+export function createSeenStore(getStorage) {
+  return {
+    load() {
+      let text;
+      try {
+        text = getStorage().getItem(SEEN_STORAGE_KEY);
+      } catch {
+        return null;
+      }
+      if (text === null || text === undefined) return {};
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed?.v !== SEEN_VERSION || !parsed.seen || typeof parsed.seen !== 'object') return {};
+        const seen = {};
+        for (const [id, at] of Object.entries(parsed.seen)) if (typeof at === 'string') seen[id] = at;
+        return seen;
+      } catch {
+        return {};
+      }
+    },
+    save(seen) {
+      try {
+        getStorage().setItem(SEEN_STORAGE_KEY, JSON.stringify({ v: SEEN_VERSION, seen }));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
+/**
+ * 選んだ頂点を、別の頂点を選ばず、タブが見えたまま dwellMs 続けて出したら、onSeen(id, ISO 時刻) を1回呼ぶ。
+ * show は選びが変わるたびに（同じ id でも）、visibility は visibilitychange で呼ぶ。隠れたら数え直す。
+ * @param {{ dwellMs: number, now: () => number, isVisible: () => boolean,
+ *   schedule: (fn: () => void, ms: number) => any, cancel: (timer: any) => void,
+ *   onSeen: (id: string, at: string) => void }} options
+ */
+export function createSeenTracker({ dwellMs, now, isVisible, schedule, cancel, onSeen }) {
+  let current = null;
+  let timer = null;
+  let done = false;
+  const clear = () => {
+    if (timer !== null) cancel(timer);
+    timer = null;
+  };
+  const arm = () => {
+    clear();
+    if (current === null || done || !isVisible()) return;
+    const id = current;
+    timer = schedule(() => {
+      timer = null;
+      if (current !== id || done || !isVisible()) return;
+      done = true;
+      onSeen(id, new Date(now()).toISOString());
+    }, dwellMs);
+  };
+  return {
+    show(id) {
+      if (id === current) return;
+      current = id;
+      done = false;
+      arm();
+    },
+    visibility() {
+      if (isVisible()) {
+        if (timer === null) arm();
+      } else clear();
+    },
+  };
 }
 
 /**
