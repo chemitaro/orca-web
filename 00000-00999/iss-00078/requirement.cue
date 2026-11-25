@@ -20,7 +20,7 @@ background: """
 	"""
 
 includes: [
-	"Orca から読む項目の追加（run の consumer_generation、task の created_by_pane_key・created_by_run_generation、worker の workerState・attention.categories）。`/api/state` の JSON には出さない",
+	"Orca から読む項目の追加（run の consumer_generation、task の created_by_pane_key・created_by_run_generation、worker の attention.categories。worker の workerState は既に `workers[].state` にある）。`/api/state` の JSON には出さない",
 	"頂点と配下の結び（生きた辺、端末の統括の task の作成者、構造化 Chat の統括のメモリの対応表）",
 	"対応が必要の判定 A3〜A6 と、鮮度の扱い、データの時刻の起点",
 	"完了の残りの札、結べない仕事の絞り込み",
@@ -38,7 +38,7 @@ excludes: [
 requirements: {
 	"R-01": {
 		title: "足りない項目を Orca から読み、新しい API の中だけで使う"
-		text:  "run の `consumer_generation`、task の `created_by_pane_key`・`created_by_run_generation`、worker の `workerState`・`projection.attention.categories` を、今の読み（`run-list --full`・`task-list --full`・`worker-list --full`）の応答から拾う。新しい CLI の命令は足さない。`/api/state` の文書（`orca-web.state/v1`）には出さず、頂点の一覧の組み立てだけが使う。"
+		text:  "run の `consumer_generation`、task の `created_by_pane_key`・`created_by_run_generation`、worker の `projection.attention.categories` を（worker の `workerState` は既に `workers[].state` として読んでいるのでそれを使う）、今の読み（`run-list --full`・`task-list --full`・`worker-list --full`）の応答から拾う。新しい CLI の命令は足さない。`/api/state` の文書（`orca-web.state/v1`）には出さず、頂点の一覧の組み立てだけが使う。"
 		acceptance: [
 			"録画の再生で、拾った値が頂点の一覧の組み立てに届く",
 			"`/api/state` の JSON の形が今のまま（新しい鍵がない）",
@@ -53,11 +53,14 @@ requirements: {
 			3. 構造化 Chat の統括：1 で頂点に結べたメンバーの `worker`（dispatchId・taskId・runId）から task をたどり、その task の束を頂点に結ぶ。この対応（束 → 頂点の id）をメモリだけに持ち、メンバーのタブが閉じた後も使う。
 			4. 束の生きた仕事は、Run の今の世代（`consumer_generation`）の束の頂点にだけ結ぶ。古い世代の束の頂点には、終わった履歴だけを結ぶ。
 			5. `worker` があり親の見つからないエージェント（iss-00076 の worker_without_parent）は、その task の束の頂点が分かれば、その頂点のメンバーにする。
+			6. 1つのエージェントは1つの頂点にだけ入る（生きた辺が先）。1つの Dispatch は1つの頂点にだけ数える：生きた辺のメンバーのエージェントの Dispatch（`agent.worker.dispatchId`）は、そのメンバーの頂点に数え、4 の付け替えをしない。4 は、タブのあるエージェントに結ばれていない生きた Dispatch にだけ当てる。
+			7. 配下の数（counts）は、生きた辺のメンバーと束の Dispatch を、Dispatch の id で重ねずに数える（メンバーのエージェントと同じ Dispatch は1つ）。
 			"""
 		acceptance: [
 			"端末の統括が頂点のとき、子のタブがない束の task と Dispatch が、その頂点の配下の数（全体）に入る",
 			"構造化 Chat の統括は、メンバーのタブがあるうちに一度結べば、タブが閉じた後もその束が頂点に結ばれる（同じプロセスの間）",
-			"run-use で世代が上がった Run では、今の世代の束の頂点にだけ生きた仕事が数えられる",
+			"run-use で世代が上がった Run では、タブのあるエージェントに結ばれていない生きた Dispatch は、今の世代の束の頂点にだけ数えられる",
+			"タブのある作業者は、生きた辺のメンバーとしても束の Dispatch としても1回だけ数えられる",
 		]
 	}
 	"R-03": {
@@ -67,8 +70,10 @@ requirements: {
 			iss-00076 の A1・A2 の後に、次の順で見る。どれも F が真のときだけ新しく当たる。
 			- A3 問い：束の Dispatch の attention に `input`（未回答の ask）か `approval`（未解決の gate）があり、ask なら頂点が動いていない、gate なら頂点が「monitoring を除く working」でない状態が、max(頂点の stateStartedAt, その Dispatch の task の作成の時刻) から G を超えた。理由 `question`・`decision`。
 			- A4 止まった仕事：生きた仕事があり、頂点もチームのメンバーも誰も動いていない状態が、max(頂点の stateStartedAt, メンバーの stateStartedAt の最大) から G を超えた。理由 `stalled`。
-			- A5 統括のタブ：頂点の `terminal` が `awaiting-restore` か `attached` でない終わった値で、生きた仕事か問いがある。理由 `apex_closed`。
-			- A6 新しい失敗：束の Dispatch の `workerState` が `failed` で、その task の `completed_at` が頂点の stateStartedAt より後で、頂点が動いていない状態が G を超えた。理由 `failed`。
+			- A5 統括のタブ：頂点が端末のタブ（kind `terminal-tab`）で、`terminal` が null でも `attached` でもない値（`awaiting-restore` を含む）で、生きた仕事か問いがある。構造化 Chat とタブのない行には当てない（terminal の取得元がない）。理由 `apex_closed`。
+			- A6 新しい失敗：束の task ごとに最後の Dispatch（worker-list の並びで最後）の `workerState` が `failed` で、その task の `completed_at` と頂点の stateStartedAt の両方が読めて、completed_at が後で、頂点が動いていない状態が completed_at から G を超えた。どちらかが読めなければ当てない。理由 `failed`。
+			- A3 の起点は、頂点の stateStartedAt とその task の createdAt のうち読めるものの最大。どちらも読めなければ猶予なし。A4 の起点は、頂点とメンバーの stateStartedAt のうち読めるものの最大。どれも読めなければ当てない。
+			- 鮮度 F が偽の間：A3〜A6 を新しく判定せず、F が真だった最後の判定でその頂点に当たっていた A3〜A6 の理由をそのまま使う（その頂点が文書にある間）。F が偽の間に、A3〜A6 だけで対応が必要だった頂点が完了へ移ることはない。最後の判定はメモリだけに持つ（F-01 と同じく捨てる）。
 			作業中には、生きた仕事がある、または A3・A4・A6 の猶予の中、を足す（理由 `live_work`・`grace`）。
 			"""
 		acceptance: [
@@ -77,7 +82,8 @@ requirements: {
 			"生きた Dispatch があり誰も動いていない状態が 90 秒続くと対応が必要（stalled）",
 			"頂点のタブが復元待ちで生きた仕事があると対応が必要（apex_closed）",
 			"頂点の状態が始まった後に failed になった Dispatch があり頂点が動いていないと、90 秒で対応が必要（failed）。始まる前の失敗では当たらない",
-			"tasks か workers の取得元が stale の間は A3〜A6 に新しく当たらない",
+			"tasks か workers の取得元が stale の間は A3〜A6 に新しく当たらず、その前に A3〜A6 で対応が必要だった頂点は対応が必要のまま（完了へ移らない）",
+			"構造化 Chat の頂点は、生きた仕事があっても apex_closed にならない",
 		]
 	}
 	"R-04": {
@@ -96,7 +102,7 @@ requirements: {
 	}
 	"R-06": {
 		title: "結べない仕事を絞る"
-		text:  "結べない仕事の段には、iss-00076 の結べないエージェントに加え、どの頂点にも結べない束のうち、生きた Dispatch か問いがあるものだけを出す（束の Run の目的の1行、生きた数、問いの数）。"
+		text:  "結べない仕事の段には、iss-00076 の結べないエージェントに加え、どの頂点にも結べない束のうち、生きた Dispatch か問いがあるものだけを出す（束の Run の目的の1行、生きた数、問いの数）。`?project=` のときは、束の Dispatch の worktree（`workers[].worktreeId`）のどれかがその repo にある束だけを出す。"
 		acceptance: [
 			"終わった Dispatch しかない結べない束は段に出ない",
 		]
@@ -113,7 +119,7 @@ requirements: {
 failures: {
 	"F-01": {
 		title: "メモリの対応表を捨てる"
-		text:  "束 → 頂点の対応表は、頂点が状態の文書から2回続けて消えたとき、束の task がすべて終わって 24 時間たったとき、プロセスが終わったときに捨てる。ファイルに書かない。上限 1,000 件を超えたら古い順に捨てる。"
+		text:  "束 → 頂点の対応表は、Orca の読みの世代（ポーラーが新しく読み終えた回）ごとに1回だけ掃除する（同じ世代の文書を何度読んでも1回）。頂点が、tabs の取得元が stale でなく接続が connected の文書で2世代続けて消えたとき、束の task がすべて終わって 24 時間たったとき、プロセスが終わったときに捨てる。ファイルに書かない。上限 1,000 件を超えたら古い順に捨てる。"
 	}
 	"F-02": {
 		title: "読めないときに誤って鳴らさない"
@@ -122,9 +128,14 @@ failures: {
 }
 
 constraints: [
+	"実装は iss-00077 が main に入った後に、その main から始める（同じ `web/apexes*.js` と README・AGENTS.md を変えるため。iss-00077 の2ペインの描き方の上に札と結べない束を足す）",
 	"AGENTS.md の守ること（Orca には読む要求だけ。`orchestration check` を使わない。統括の連絡を既読にしない）",
 	"`orca-web.state/v1`・`/embed/*`・`/api/worktrees/summary` を変えない",
 	"判定は `src/apex/` の1か所に置く",
+]
+
+questions: [
+	"Epic の問い「構造化 Chat の /clear で paneKey が変わるか」は、読むだけの確かめでは起こせないので、この Issue では決めない。対応表は paneKey でなく頂点のエージェントの id で持つので、paneKey が変わっても対応表は保たれる（生きた辺は新しい paneKey で結び直す）。残りは Epic の未決として残す",
 ]
 
 decisions: [

@@ -11,14 +11,14 @@ steps: {
 	}
 	"S-02": {
 		title:    "束と対応表（D-02）"
-		text:     "対象：新しい `src/apex/bundles.ts`・`src/apex/owners.ts`、`src/apex/build.ts`（引数の追加）、テスト。確かめ：T-03〜T-05。完了：lint・test・build。コミットして次へ"
+		text:     "対象：新しい `src/apex/bundles.ts`・`src/apex/owners.ts`、`src/apex/build.ts`（引数の追加）、テスト。確かめ：T-03〜T-05、T-13。完了：lint・test・build。コミットして次へ"
 		realizes: ["R-02", "F-01"]
 		after:    ["S-01"]
 		session:  "impl"
 	}
 	"S-03": {
 		title:    "判定 A3〜A6 と札・結べない束（D-03、D-04）"
-		text:     "対象：`src/apex/build.ts`・`src/apex/model.ts`、テスト。確かめ：T-06〜T-10。完了：lint・test・build。コミットして次へ"
+		text:     "対象：`src/apex/build.ts`・`src/apex/model.ts`、テスト。確かめ：T-06〜T-10、T-14。完了：lint・test・build。コミットして次へ"
 		realizes: ["R-03", "R-04", "R-05", "R-06", "F-02"]
 		after:    ["S-02"]
 		session:  "impl"
@@ -32,7 +32,7 @@ steps: {
 	}
 	"S-05": {
 		title:    "README・AGENTS.md と試しの orca-web での集計（タスク担当）"
-		text:     "タスク担当が行う。README と AGENTS.md の `src/apex/` の節を直す。別のポートの試しの orca-web で `/api/apexes` を読み、頂点に結べた束の数、閉じた子を含む配下の数、理由ごとの頂点の数、結べない束の数、端末の統括の `created_by_pane_key` と頂点の paneKey の一致の数を集計し、report.md に記録する（題名・パス・会話を書かない）。確かめ：T-12。完了：lint・test・build が通り、report.md に結論がある"
+		text:     "タスク担当が行う。README と AGENTS.md の `src/apex/` の節を直す。別のポートの試しの orca-web で `/api/apexes` を読み、頂点に結べた束の数、閉じた子を含む配下の数、理由ごとの頂点の数、結べない束の数、端末の統括の `created_by_pane_key` と頂点の paneKey の一致の数、consumer_generation が 2 以上の Run ごとに今の世代の根の task があるか（作成者の有無）と、生きた Dispatch がどの世代の束にあるかを集計し、Epic の問いの答えか未決として記録し、report.md に記録する（題名・パス・会話を書かない）。確かめ：T-12。完了：lint・test・build が通り、report.md に結論がある"
 		realizes: ["R-02", "R-07"]
 		after:    ["S-04"]
 		session:  "doc"
@@ -48,9 +48,11 @@ tests: {
 	"T-06": {title: "A3：attention input の Dispatch と done の頂点で、89 秒は作業中（grace）、90 秒で needs_action（question）。approval（gate）は頂点が monitoring でも 90 秒で decision、input は monitoring の間は作業中", verifies: ["R-03"]}
 	"T-07": {title: "A4・A5：生きた Dispatch があり誰も動いていない 90 秒で stalled。頂点の terminal が awaiting-restore で生きた仕事がある → apex_closed。生きた仕事のない awaiting-restore は眠っている", verifies: ["R-03"]}
 	"T-08": {title: "A6：頂点の stateStartedAt より後の completedAt の failed は 90 秒で failed、前の failed は当たらない。dispatchStatus が failed でも workerState が stopped なら当たらない", verifies: ["R-03"]}
-	"T-09": {title: "鮮度：sources.tasks か sources.workers が stale なら A3〜A6 に当たらない（A1・A2 は当たる）", verifies: ["F-02", "R-03"]}
+	"T-09": {title: "鮮度：sources.tasks か sources.workers が stale なら A3〜A6 を新しく判定しない（A1・A2 は当たる）。memo がない頂点には A3〜A6 が当たらない", verifies: ["F-02", "R-03"]}
 	"T-10": {title: "放置と札：ready・blocked の task だけの束の done の頂点は完了で remaining_tasks が付く。PR open・CI failure で ci_failed、CI success で merge_pending、failed の Dispatch で failed_members。終わった Dispatch だけの結べない束は unlinked に出ず、生きた Dispatch のある結べない束は出る", verifies: ["R-04", "R-05", "R-06"]}
 	"T-11": {title: "画面：新しい理由と札の言葉が行に出る。結べない束の行が `/runs/<id>` にリンクする。配下の数が束の Dispatch を含む", verifies: ["R-07"]}
+	"T-13": {title: "重ならない数え方：タブのある作業者（生きた辺のメンバーで worker.dispatchId がある）は counts.total に1回。古い世代の束の、生きた辺のメンバーの Dispatch は付け替えず元の頂点に数え、タブのない生きた Dispatch だけ今の世代の頂点に数える。BundleOwners の sweep は同じ世代で2回呼んでも1回分、tabs が stale の文書では消えたと数えない", verifies: ["R-02", "F-01"]}
+	"T-14": {title: "A5 は構造化 Chat の頂点に当たらない。A6 は completedAt か頂点の stateStartedAt が null なら当たらず、task に2つの Dispatch があれば最後のものだけを見る。鮮度が偽になった直後、A6・A3 で needs_action だった頂点は needs_action のまま（memo）で、F が真に戻ると新しく判定する。?project= で結べない束は Dispatch の worktree の repo で絞られる", verifies: ["R-03", "R-06", "F-02"]}
 	"T-12": {title: "試しの orca-web（実物の Orca を読むだけ）：集計が report.md にある", verifies: ["R-02", "R-07"]}
 }
 
