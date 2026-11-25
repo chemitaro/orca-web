@@ -1,6 +1,6 @@
 import { agentWorkingMode, findIssue } from '../inbox/classify.ts';
 import type { AgentState, StateDocument, WorkerState } from '../state/model.ts';
-import { coordinatorAgent, workerAgent } from './links.ts';
+import { coordinatorAgent, type RunBundleInput, runBundleApexes, workerAgent } from './links.ts';
 import {
   RUN_LIST_SCHEMA,
   RUN_SOURCES,
@@ -12,6 +12,8 @@ import {
   type RunSources,
   type RunTreeDocument,
 } from './model.ts';
+
+export type { RunBundleInput };
 
 function freshness(state: StateDocument) {
   const sources = Object.fromEntries(
@@ -61,10 +63,21 @@ function makeNode(
   };
 }
 
-export function buildRunTree(state: StateDocument, runId: string): RunTreeDocument | null {
+/**
+ * Run の木。bundles（頂点の一覧と同じ内部の値と対応表）があれば、今の結び方で結べない統括を束の頂点に結ぶ（iss-00082 D-03）。
+ */
+export function buildRunTree(state: StateDocument, runId: string, bundles?: RunBundleInput): RunTreeDocument | null {
+  return treeOf(state, runId, bundles ? runBundleApexes(state, bundles) : undefined);
+}
+
+function treeOf(
+  state: StateDocument,
+  runId: string,
+  bundleApex: ReadonlyMap<string, AgentState> | undefined,
+): RunTreeDocument | null {
   const run = state.runs.find((r) => r.id === runId);
   if (!run) return null;
-  const coordinator = coordinatorAgent(state, run);
+  const coordinator = coordinatorAgent(state, run, bundleApex);
   const root = makeNode(
     state,
     `coordinator:${runId}`,
@@ -137,11 +150,13 @@ export function buildRunTree(state: StateDocument, runId: string): RunTreeDocume
   };
 }
 
-export function buildRunList(state: StateDocument, project: string | null): RunListDocument {
+/** Run の一覧。根の結びは木と同じ（bundles は1回だけ解いて全部の Run に使う）。 */
+export function buildRunList(state: StateDocument, project: string | null, bundles?: RunBundleInput): RunListDocument {
+  const bundleApex = bundles ? runBundleApexes(state, bundles) : undefined;
   const projects = new Map<string, RunProject & { count: number }>();
   const runs: RunListItem[] = [];
   for (const run of state.runs) {
-    const tree = buildRunTree(state, run.id);
+    const tree = treeOf(state, run.id, bundleApex);
     if (!tree) continue;
     const runProjects = new Map<string, RunProject>();
     const pending = [tree.root];
