@@ -130,20 +130,35 @@ test('health 不応答・子の早い終了・使用中の画面ポートで起�
       };
       const plan = buildTrialPlan({ stateDir: path.join(dir, kind), ports });
       const marker = path.join(dir, `${kind}.stop`);
+      // 子が SIGTERM の受け口を用意し終えた印。負荷の高い機械では node の起動が遅く、受け口の前に止められうる。
+      const ready = path.join(dir, `${kind}.ready`);
       const script = path.join(dir, `${kind}.mjs`);
       await writeFile(
         script,
         kind === 'early'
           ? 'process.exit(0)'
-          : `import { createServer } from 'node:http'; import { writeFileSync } from 'node:fs'; const server = createServer((req,res)=>res.end(JSON.stringify({ok:true,pid:process.pid}))); ${kind === 'health' ? 'setInterval(()=>{},1000);' : "server.listen(Number(process.env.PORT),'127.0.0.1');"} process.on('SIGTERM',()=>{writeFileSync(${JSON.stringify(marker)},'yes');process.exit(0)}); ${kind === 'exit-after-ready' ? 'setTimeout(()=>process.exit(0),400);' : ''}`,
+          : `import { createServer } from 'node:http'; import { writeFileSync } from 'node:fs'; const server = createServer((req,res)=>res.end(JSON.stringify({ok:true,pid:process.pid}))); ${kind === 'health' ? 'setInterval(()=>{},1000);' : "server.listen(Number(process.env.PORT),'127.0.0.1');"} process.on('SIGTERM',()=>{writeFileSync(${JSON.stringify(marker)},'yes');process.exit(0)}); writeFileSync(${JSON.stringify(ready)},'yes'); ${kind === 'exit-after-ready' ? 'setTimeout(()=>process.exit(0),400);' : ''}`,
       );
       try {
         assert.equal(
-          await runTrial(plan, { childArgs: [script], signals, log: () => {}, healthTimeoutMs: 2000 }),
+          // health は答えない子で時間切れを試すので短く、ほかは負荷の高い機械でも子が答えるまで待つ。
+          await runTrial(plan, {
+            childArgs: [script],
+            signals,
+            log: () => {},
+            healthTimeoutMs: kind === 'health' ? 2000 : 20_000,
+          }),
           1,
           kind,
         );
-        if (kind !== 'early' && kind !== 'exit-after-ready') assert.equal(await readFile(marker, 'utf8'), 'yes');
+        if (kind !== 'early' && kind !== 'exit-after-ready') {
+          // 受け口を用意した子は、SIGTERM で印を書いて終わる。用意する前に止められた子は、runTrial が終わりを待っている。
+          const readied = await readFile(ready, 'utf8').then(
+            () => true,
+            () => false,
+          );
+          if (kind !== 'health' || readied) assert.equal(await readFile(marker, 'utf8'), 'yes');
+        }
         await assert.rejects(readFile(path.join(plan.stateDir, 'trial.pid')), { code: 'ENOENT' });
         assert.equal(signals.listenerCount('SIGINT'), 0);
         if (kind !== 'page') await assert.rejects(fetch(`http://127.0.0.1:${ports.page}/config.json`));

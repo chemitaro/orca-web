@@ -6,6 +6,7 @@
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import path from 'node:path';
+import { buildApexList } from '../apex/build.ts';
 import { buildInbox } from '../inbox/classify.ts';
 import type { InboxInputs } from '../inbox/model.ts';
 import type { OpenErrorCode, OpenOutcome, OpenRequest } from '../orca/open.ts';
@@ -137,6 +138,10 @@ const STATIC_FILES: Readonly<Record<string, { file: string; type: string; page?:
     '/runs-view.js': { file: 'runs-view.js', type: 'text/javascript; charset=utf-8' },
     '/runs-dom.js': { file: 'runs-dom.js', type: 'text/javascript; charset=utf-8' },
     '/poll-loop.js': { file: 'poll-loop.js', type: 'text/javascript; charset=utf-8' },
+    '/apexes': { file: 'apexes.html', type: 'text/html; charset=utf-8', page: 'index' },
+    '/apexes.js': { file: 'apexes.js', type: 'text/javascript; charset=utf-8' },
+    '/apexes-view.js': { file: 'apexes-view.js', type: 'text/javascript; charset=utf-8' },
+    '/apexes-dom.js': { file: 'apexes-dom.js', type: 'text/javascript; charset=utf-8' },
     '/settings': { file: 'settings.html', type: 'text/html; charset=utf-8', page: 'index' },
     '/main.js': { file: 'main.js', type: 'text/javascript; charset=utf-8' },
     '/view.js': { file: 'view.js', type: 'text/javascript; charset=utf-8' },
@@ -703,6 +708,7 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
         TRANSCRIPT_ROUTES.has(pathname) ||
         pathname === '/api/inbox' ||
         pathname === '/api/runs' ||
+        pathname === '/api/apexes' ||
         runTreeRoute !== null
       ) {
         // 同じオリジンだけ（Origin がないか、自分のオリジン）。CORS を付けない。
@@ -747,6 +753,18 @@ export function createAppHandler(options: AppOptions = {}): (req: IncomingMessag
           }
           options.runs.noteViewer();
           sendJson(res, 200, buildRunList(await options.runs.snapshot(), project));
+        } else if (pathname === '/api/apexes') {
+          const project = url.searchParams.get('project');
+          if (project !== null && project.length > 512) {
+            sendError(res, 400, 'invalid_request');
+            return;
+          }
+          if (!options.runs) {
+            sendError(res, 503, 'apexes_unavailable');
+            return;
+          }
+          options.runs.noteViewer();
+          sendJson(res, 200, buildApexList({ state: await options.runs.snapshot(), now: Date.now(), project }));
         } else if (pathname === '/api/inbox') {
           const project = url.searchParams.get('project');
           if (project !== null && project.length > 512) {

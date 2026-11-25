@@ -4,6 +4,7 @@ Orca（stablyai/orca のデスクトップアプリ）の状態を読み、既�
 SpecDock のダッシュボードに部品として埋め込む。
 
 - 要対応の受け箱（`/`）：全プロジェクトのエージェントと統括あての連絡を、要対応（許可待ち・入力待ち、統括あての未読の質問と判断の依頼、マージ待ちの PR）、止まっている（CI の失敗、長く出力のない作業中（バックグラウンドタスクの監視中は除く）、終了した端末）、動いている、不明、終わった（畳む）の段に分ける。プロジェクトで絞り込め（`?project=<repo の id>`）、各項目から詳細とチャット、Orca で開く（Mac だけ）、PR へ進める。許可の承認や返事はしない（Orca で開いて答える）。
+- 指揮の画面（`/apexes`）：親のない頂点のエージェント（統括や単独のエージェント）だけを、対応が必要（頂点か、端末が開いているメンバーの許可待ち・入力待ち。メンバーは 20 秒の猶予の後）、作業中（チームの誰かが動いている。頂点が終わっていても配下が動いていれば作業中）、完了の3つで並べる。完了は最近（24 時間以内）、以前の完了、眠っている（復元待ちか、7 日動きがない）に分けて畳む。状態が分からない頂点は完了にせず「確かめられない」の札を付ける（24 時間動きがなければ眠っている）。配下（`parentPaneKey` でたどれるメンバー）の数と、親の見つからないエージェント（結べない仕事）を出す。行から詳細とチャットを新しいタブで開く。`?project=<repo の id>` で絞り込める。タブの題名に対応が必要の数を出し、見えない間は読まない。
 - オーケストレーションの木（`/runs/<id>`）と Run の一覧（`/runs`）：Run ごとに、統括を根に作業者の親子（task の親子）を1本の木で出す。各節に役割、Issue、題名、種類、モデル（作業者は起動時の値）、推論、状態、経過、プロジェクトを出し、取れない値は「—」。作業者の worktree が統括と別のプロジェクトなら札を付ける。オーケストレーションで起動していないエージェントは入れない。統括は、Run の `coordinator_handle` が閉じた端末なら、親のない task を最近作った今ある端末から決める。
 - プロジェクトの画面（`/projects/<repo の id>`）：そのプロジェクトの受け箱と、そこに節が1つでもある Run。統括が別のプロジェクトにいる Run に「<プロジェクト> の統括から」の札を付ける。
 - 状態の API と画面（`/settings`）：repo・worktree・エージェント・オーケストレーションの状態（種類、状態、時刻、親子、PR と CI、取れるときのモデルと推論）。表示する項目を選べる。
@@ -77,7 +78,7 @@ npm run service:uninstall              # 外して定義を消す（ログと項
 - Tailscale の IP で待ち受けられない（ログインの直後で Tailscale がまだ動いていないなど）ときは、127.0.0.1 だけで動き、ログに1行を書き、30 秒ごとに試し直す。`GET /api/health` の `listeners` に、アドレスごとの状態（`listening`、`retrying` と誤りの種類）が出る。
 - すべての要求で Host を完全一致で確かめる（`127.0.0.1:<port>`、`localhost:<port>`、`<Tailscale の IP>:<port>`。違えば 421）。
 - 書き込み（`POST /api/open`、`PUT /api/settings/fields`）は、同じオリジンの JSON と、`POST /api/token` が出す短期のトークン（`X-Orca-Web-Token`）を要する。書き込みに CORS は付けない。
-- 会話の API（`GET /api/transcript`、`GET /api/transcript/events`）と受け箱の API（`GET /api/inbox`）、木と一覧の API（`GET /api/runs?project=`、`GET /api/runs/<id>/tree`）は同じオリジンだけに読ませ、CORS を付けない（別のオリジンは 403）。
+- 会話の API（`GET /api/transcript`、`GET /api/transcript/events`）と受け箱の API（`GET /api/inbox`）、頂点の一覧の API（`GET /api/apexes?project=`）、木と一覧の API（`GET /api/runs?project=`、`GET /api/runs/<id>/tree`）は同じオリジンだけに読ませ、CORS を付けない（別のオリジンは 403）。
 - 受け箱は、オーケストレーションの連絡を `orca orchestration check --peek --terminal run:<id>` だけで読み、判断の門を `gate-list` で読む。統括の連絡を既読にしない（読む口は `--peek` のない check と `--ack`・`--all` などを送らずに拒む）。連絡は受け箱を見る人がいる間だけ読む。読む Run は、`updated_at` が7日以内の Run に加えて、生きている worker がいる Run、統括の端末が今ある Run、task の作成か完了が7日以内の Run（最大 50。動いている Run を先に選ぶ）。連絡と判断の門の時刻は ISO 8601 の UTC にそろえる。
 - 送信の口（`POST /api/send/intent`、`POST /api/send/confirm`）は、書き込みと同じ守り（同じオリジンの JSON と短期のトークン）を要し、CORS を付けない。送れるかの口（`GET /api/send/status`）と送信の照会（`GET /api/send/<操作の ID>`）は同じオリジンの読みだけ（`Sec-Fetch-Site` が cross-site・same-site なら 403）。守りで拒んだ送信の要求は送信の記録に書かず、件数だけをログに出す。
 - Orca の authToken と書き込みのトークンを、ログ、URL、画面に出さない。会話の記録のパスを応答に出さない。サーバーのログに送った本文を出さない。
