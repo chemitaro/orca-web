@@ -1,5 +1,7 @@
 import { type AgentMark, agentMark, agentWorkingMode, findIssue } from '../inbox/classify.ts';
-import type { AgentState, StateDocument } from '../state/model.ts';
+import type { AgentState, StateDocument, WorkerState } from '../state/model.ts';
+import { isLiveDispatch, type LinkedMember, linkApexes, type Placement } from './bundles.ts';
+import { emptyExtras } from './extras.ts';
 import type {
   ApexGroup,
   ApexItem,
@@ -10,7 +12,6 @@ import type {
   ApexStatus,
   BuildApexListInput,
   UnlinkedItem,
-  UnlinkedReason,
 } from './model.ts';
 import { APEXES_SCHEMA } from './model.ts';
 
@@ -18,6 +19,13 @@ import { APEXES_SCHEMA } from './model.ts';
 export const MEMBER_GRACE_MS = 20_000;
 const RECENT_MS = 24 * 3_600_000;
 const SLEEP_MS = 7 * 24 * 3_600_000;
+
+const OBJECTIVE_MAX = 200;
+
+/** 未回答の ask（input）か未解決の gate（approval）。 */
+function asksOrGates(worker: { attention: readonly string[] } | undefined): boolean {
+  return worker !== undefined && (worker.attention.includes('input') || worker.attention.includes('approval'));
+}
 
 const GROUPS: readonly ApexGroup[] = ['needs_action', 'working', 'done_recent', 'done_older', 'sleeping'];
 const REASONS: readonly ApexReason[] = [
@@ -32,11 +40,6 @@ const REASONS: readonly ApexReason[] = [
   'done',
   'sleeping',
 ];
-
-type Placement =
-  | { kind: 'apex' }
-  | { kind: 'member'; apexId: string; parentId: string; depth: number }
-  | { kind: 'unlinked'; reason: UnlinkedReason };
 
 /** 親は「parentPaneKey に一致する、自分でない今あるエージェントがちょうど1つ」のときだけ。 */
 function parents(agents: readonly AgentState[]): Map<string, AgentState | null> {
@@ -189,11 +192,11 @@ function groupOf(
   return at !== null && at < now - RECENT_MS ? 'done_older' : 'done_recent';
 }
 
-function memberEntry(agent: AgentState, placement: Placement & { kind: 'member' }): ApexMember {
+function memberEntry({ agent, parentId, depth }: LinkedMember): ApexMember {
   return {
     id: agent.id,
-    parentId: placement.parentId,
-    depth: placement.depth,
+    parentId,
+    depth,
     mark: agentMark(agent),
     agentType: agent.agentType.value,
     title: agent.title.value,
@@ -228,6 +231,19 @@ function compareItems(a: ApexItem, b: ApexItem): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+/** メンバーの印と、メンバーと重ならない束の Dispatch（生きていれば working、終わっていれば done）を数える。 */
+function countTeam(team: readonly LinkedMember[], dispatches: readonly WorkerState[]): ApexItem['counts'] {
+  const covered = new Set(team.map(({ agent }) => agent.worker?.dispatchId).filter((id) => id !== undefined));
+  const marks: AgentMark[] = team.map(({ agent }) => agentMark(agent));
+  const seen = new Set<string>();
+  for (const worker of dispatches) {
+    if (covered.has(worker.dispatchId) || seen.has(worker.dispatchId)) continue;
+    seen.add(worker.dispatchId);
+    marks.push(isLiveDispatch(worker) ? 'working' : 'done');
+  }
+  return countMarks(marks);
+}
+
 function countMarks(marks: readonly AgentMark[]): ApexItem['counts'] {
   return {
     total: marks.length,
@@ -242,15 +258,14 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
   const stale = state.stale || state.connection.state !== 'connected';
   const agents = state.connection.state === 'starting' ? [] : state.agents;
   const placements = place(agents);
-  const membersOf = new Map<string, { agent: AgentState; entry: ApexMember }[]>();
-  for (const agent of agents) {
-    const placement = placements.get(agent.id);
-    if (placement?.kind !== 'member') continue;
-    membersOf.set(placement.apexId, [
-      ...(membersOf.get(placement.apexId) ?? []),
-      { agent, entry: memberEntry(agent, placement) },
-    ]);
-  }
+  const links = linkApexes({
+    state,
+    agents,
+    placements,
+    extras: input.extras ?? emptyExtras(),
+    owners: input.owners ?? null,
+    now,
+  });
   const inProject = (repoId: string | null) => input.project === null || repoId === input.project;
   const items: ApexItem[] = [];
   const unlinked: UnlinkedItem[] = [];
@@ -258,7 +273,7 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
     const placement = placements.get(agent.id);
     const where = location(state, agent.worktreeId);
     if (!inProject(where.repoId)) continue;
-    if (placement?.kind === 'unlinked') {
+    if (placement?.kind === 'unlinked' && !links.promoted.has(agent.id)) {
       unlinked.push({
         id: agent.id,
         kind: agent.kind,
@@ -273,7 +288,7 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
       continue;
     }
     if (placement?.kind !== 'apex') continue;
-    const team = membersOf.get(agent.id) ?? [];
+    const team = links.members.get(agent.id) ?? [];
     const memberAgents = team.map((member) => member.agent);
     const judged = judge(agent, memberAgents, now);
     const last = lastActivity(agent, memberAgents, state);
@@ -293,14 +308,31 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
       tags: [...judged.tags],
       lastActivityAt: last,
       stateStartedAt: agent.stateStartedAt.value,
-      members: orderMembers(
-        agent.id,
-        team.map((member) => member.entry),
-      ),
-      counts: countMarks(team.map((member) => member.entry.mark)),
+      members: orderMembers(agent.id, team.map(memberEntry)),
+      counts: countTeam(team, links.dispatches.get(agent.id) ?? []),
     });
   }
   items.sort(compareItems);
+  const extras = input.extras ?? emptyExtras();
+  for (const bundle of links.unlinkedBundles) {
+    const live = bundle.dispatches.filter(isLiveDispatch).length;
+    const questions = bundle.dispatches.filter((worker) => asksOrGates(extras.workers.get(worker.dispatchId))).length;
+    if (live === 0 && questions === 0) continue;
+    if (input.project !== null) {
+      const repos = bundle.dispatches.map((worker) => location(state, worker.worktreeId.value ?? '').repoId);
+      if (!repos.includes(input.project)) continue;
+    }
+    const objective = state.runs.find((run) => run.id === bundle.runId)?.title.value ?? null;
+    unlinked.push({
+      id: bundle.key,
+      kind: 'bundle',
+      runId: bundle.runId,
+      objective: objective === null ? null : objective.slice(0, OBJECTIVE_MAX),
+      generation: bundle.generation,
+      live,
+      questions,
+    });
+  }
   return {
     schema: APEXES_SCHEMA,
     generatedAt: new Date(now).toISOString(),

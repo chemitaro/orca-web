@@ -1,5 +1,7 @@
 import type { AgentMark } from '../inbox/classify.ts';
 import type { AgentKind, Connection, StateDocument } from '../state/model.ts';
+import type { OrchestrationExtras } from './extras.ts';
+import type { BundleOwners } from './owners.ts';
 
 export const APEXES_SCHEMA = 'orca-web.apexes/v1';
 
@@ -56,10 +58,11 @@ export interface ApexItem {
   lastActivityAt: string | null;
   stateStartedAt: string | null;
   members: ApexMember[];
+  /** 生きた辺のメンバーと束の Dispatch を、Dispatch の id で重ねずに数える。 */
   counts: { total: number; working: number; waiting: number; done: number };
 }
 
-export interface UnlinkedItem {
+export interface UnlinkedAgentItem {
   id: string;
   kind: AgentKind;
   agentType: string | null;
@@ -70,6 +73,23 @@ export interface UnlinkedItem {
   mark: AgentMark;
   reason: UnlinkedReason;
 }
+
+/** どの頂点にも結べない束のうち、生きた Dispatch か問いがあるもの。 */
+export interface UnlinkedBundleItem {
+  /** 束の鍵（`<Run の id>#<世代>`）。 */
+  id: string;
+  kind: 'bundle';
+  runId: string;
+  /** Run の目的の1行（200 字まで）。 */
+  objective: string | null;
+  generation: number | null;
+  /** 生きた Dispatch の数。 */
+  live: number;
+  /** 未回答の ask か未解決の gate のある Dispatch の数。 */
+  questions: number;
+}
+
+export type UnlinkedItem = UnlinkedAgentItem | UnlinkedBundleItem;
 
 export interface ApexListDocument {
   schema: typeof APEXES_SCHEMA;
@@ -86,4 +106,8 @@ export interface BuildApexListInput {
   state: StateDocument;
   now: number;
   project: string | null;
+  /** 頂点の一覧だけが使う内部の値。なければ生きた辺だけで結ぶ。 */
+  extras?: OrchestrationExtras;
+  /** 束 → 頂点の対応表。app の生存の間に1つ。 */
+  owners?: BundleOwners | null;
 }
