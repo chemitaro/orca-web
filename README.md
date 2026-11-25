@@ -154,7 +154,7 @@ SpecDock の画面に iframe で置く。iframe の中は orca-web のオリジ�
 
 - `id`：状態の API のエージェントの `id`（端末のタブは paneKey、構造化 Chat は `chat:<タブの id>`）。`theme`（`light`、`dark`）も渡せる。
 - 構造化 Chat の1人は、Orca のタブと `worktree ps` の行（paneKey `structured-agent-session-…`）を1つのエージェント `chat:<タブの id>` にまとめて出す（要約、受け箱、Run の木、稼働の印でも1人）。古い形の `id=structured-agent-session-…` は、まとめたエージェントの id へ 302 で転送する。会話と送信の API は `chat:` の id で呼ぶ（古い id には `agent_not_found` を返す）。
-- Run の木では、構造化 Chat の作業者の節を、worker-list の `resource.endpointIncarnation`（`structured:<セッション>`）とタブのセッションが同じ chat-tab に結ぶ（同じセッションの worker が2つ以上なら結ばない）。統括の端末が分からない Run の根は、根の task の作業者の `parentPaneKey` が指すエージェント（構造化 Chat の統括）に結ぶ。どちらも結べなければ `agentId` は null のまま。
+- Run の木では、構造化 Chat の作業者の節を、worker-list の `resource.endpointIncarnation`（`structured:<セッション>`）とタブのセッションが同じ chat-tab に結ぶ（同じセッションの worker が2つ以上なら結ばない）。統括の端末が分からない Run の根は、根の task の作業者の `parentPaneKey` が指すエージェント（構造化 Chat の統括）に結ぶ。どちらも結べなければ、指揮の画面と同じ束（Run の今の世代の task の束）の持ち主の頂点に結び、それもなければ `agentId` は null のまま。
 - 上に題名と「Orca で開く」（埋め込みのボタンと同じ Orca のロゴと `Open` の部品。md）、その下に詳細（worktree、種類、状態、モデルと推論とその意味、親と子、PR と CI）。詳細は幅によらず畳んで始め、押すと開く。詳細の見出しには、稼働の印の部品（`agent-marks.js`）でこのエージェントの状態と種類の印を出す（経過は出さない）。下に会話。幅 390px 以下では Orca で開くを出さない。
 - 詳細の中のリンク（親、子、PR）は、どれも新しいタブで開く（`target="_blank"`、`rel="noopener noreferrer"`、新しいタブの小さな印と title「新しいタブで開く」）。iframe の中で別のエージェントの詳細に移らないので、置いた画面が選んだ相手と iframe の中の相手が食い違わない。新しいタブでは iframe でない単独の詳細として開く。
 - 見た目は SpecDock のダッシュボードのデザインシステムに合わせる（`--ds-*`・`--sd-*` を先に使い、なければ SpecDock の app.css と同じ値。明暗の両方と `?theme=`）。会話の時刻は `elapsed.js` の短い形（now・5m・3h・2d）で、元の時刻は `title` にある。
