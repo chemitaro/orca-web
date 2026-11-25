@@ -305,8 +305,9 @@ export function selectionUrl(currentSearch, id) {
 }
 
 /** 右のペインの枠の src。 */
-export function frameSrc(id) {
-  return detailHref(id);
+export function frameSrc(id, { compose = true } = {}) {
+  // compose=off は送る欄を出さない答えるだけの枠（iss-00080 D-02）。
+  return compose ? detailHref(id) : `${detailHref(id)}&compose=off`;
 }
 
 /**

@@ -12,7 +12,7 @@ function withoutComments(source: string): string {
 }
 
 const read = (path: string) => withoutComments(readFileSync(new URL(`../../web/${path}`, import.meta.url), 'utf8'));
-const APEX_FILES = ['apexes.js', 'apexes-view.js', 'apexes-dom.js'];
+const APEX_FILES = ['apexes.js', 'apexes-view.js', 'apexes-dom.js', 'apexes-cards-view.js'];
 
 test('T-05：apexes の web のソースに、既にある iframe の src・location の書き換え、window.open がない', () => {
   for (const path of APEX_FILES) {
@@ -28,9 +28,10 @@ test('T-05：apexes の web のソースに、既にある iframe の src・loca
   // src の代入は mountAgentFrame の中の1か所だけで、作ったばかりの要素に入れる前に決める。
   const dom = read('apexes-dom.js');
   assert.equal([...dom.matchAll(/\.src\s*=(?!=)/g)].length, 1);
-  const mount = /export function mountAgentFrame\(slot, id\) \{([\s\S]*?)\n\}/.exec(dom)?.[1] ?? '';
+  const mount =
+    /export function mountAgentFrame\(slot, id, \{ compose = true \} = \{\}\) \{([\s\S]*?)\n\}/.exec(dom)?.[1] ?? '';
   const created = mount.indexOf("const frame = slot.ownerDocument.createElement('iframe');");
-  const assigned = mount.indexOf('frame.src = frameSrc(id);');
+  const assigned = mount.indexOf('frame.src = frameSrc(id, { compose });');
   const appended = mount.indexOf('slot.append(frame);');
   assert.ok(created >= 0 && created < assigned && assigned < appended, '作る → src を決める → 入れる の順');
 });
@@ -40,7 +41,8 @@ test('R-01：入口は ?apex= を履歴を増やさない replaceState で覚え
   assert.match(entry, /history\.replaceState\(/);
   assert.doesNotMatch(entry, /history\.pushState\(/);
   assert.match(entry, /mayLeaveFrame\(els\.paneFrame, \(text\) => window\.confirm\(text\)\)/);
-  assert.match(entry, /mountAgentFrame\(els\.paneFrame, pane\.header\.id\)/);
+  assert.match(entry, /mountAgentFrame\(els\.paneFrame, target\.id, \{ compose: target\.compose \}\)/);
+  assert.match(entry, /const target = paneFrameTarget\(pane\.header\.id, memberView\);/);
   assert.match(
     entry,
     /initialSelection\(location\.search, \{\s*wide: window\.matchMedia\(`\(min-width: \$\{WIDE_MIN_PX\}px\)`\)\.matches,/,
@@ -97,4 +99,23 @@ test('R-06：900px 未満のメディアクエリに、見出しの nav・行の
   assert.match(words, /overflow-wrap: anywhere;/);
   const title = rule('.apexes-page .apex-head .apex-title {');
   assert.match(title, /flex: 1 1 0;/, '行の題名は残りの幅に収まって折り返す');
+});
+
+test('iss-00080 T-04・T-05・F-01：カードの操作は枠の切り替えの確かめを通し、頂点に伝えるは下書きの送り手だけを使う', () => {
+  const entry = read('apexes.js');
+  const change = /function changeFrame\(next\) \{([\s\S]*?)\n\}/.exec(entry)?.[1] ?? '';
+  assert.match(change, /mayLeaveFrame\(els\.paneFrame, \(text\) => window\.confirm\(text\)\)/);
+  const tell = /cardAction === 'tell'[\s\S]*?\n {2}\}/.exec(entry)?.[0] ?? '';
+  const back = tell.indexOf('if (!changeFrame(null)) return;');
+  const send = tell.indexOf('draftSender.send(buildDraftText(card));');
+  assert.ok(back >= 0 && back < send, '頂点の枠に戻してから送り手に渡す');
+  assert.match(entry, /createDraftSender\(\{\s*selfOrigin: location\.origin,/, '宛先のオリジンは自分のオリジン');
+  assert.match(entry, /window\.addEventListener\('message', \(event\) => draftSender\.handleMessage\(event\)\)/);
+  assert.match(entry, /noteFrame\(mountAgentFrame\(els\.paneFrame, target\.id, \{ compose: target\.compose \}\)\)/);
+  assert.match(entry, /noteFrame\(null\)/);
+  // 送る経路を足さない：入口から書き込みの口を呼ぶのは「Orca で開く」だけ。
+  assert.equal([...entry.matchAll(/writer\.send\(/g)].length, 1);
+  assert.doesNotMatch(entry, /\/api\/(?:send|answer|approval)\//);
+  // メンバーは URL に出さない。
+  assert.doesNotMatch(entry, /memberView[^\n]*selectionUrl|selectionUrl[^\n]*memberView/);
 });

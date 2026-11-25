@@ -9,8 +9,10 @@ import type {
   ApexListDocument,
   ApexMember,
   ApexProject,
+  ApexQuestion,
   ApexReason,
   ApexStatus,
+  ApexWaitingMember,
   BuildApexListInput,
   UnlinkedItem,
 } from './model.ts';
@@ -250,6 +252,47 @@ function lastFailed(bundle: Bundle): { task: Bundle['tasks'][number]; worker: Wo
   return result;
 }
 
+/** 猶予の外で待ちを示すメンバー。理由 member_blocked・member_waiting と同じ判定（judge と共有）。 */
+function waitingMember(member: AgentState, now: number): boolean {
+  return memberWaits(member) && !inGrace(member, now);
+}
+
+function waitingMembersOf(members: readonly ApexMember[], agents: ReadonlyMap<string, AgentState>, now: number) {
+  const result: ApexWaitingMember[] = [];
+  for (const member of members) {
+    const agent = agents.get(member.id);
+    if (agent && waitingMember(agent, now)) result.push({ id: member.id, title: member.title, mark: member.mark });
+  }
+  return result;
+}
+
+/** 束の Dispatch の問い。同じ Dispatch と種類は1回。 */
+function questionsOf(
+  dispatches: readonly WorkerState[],
+  extras: OrchestrationExtras,
+  tasks: ReadonlyMap<string, StateDocument['tasks'][number]>,
+): ApexQuestion[] {
+  const result: ApexQuestion[] = [];
+  const seen = new Set<string>();
+  for (const [category, kind] of [
+    ['input', 'ask'],
+    ['approval', 'gate'],
+  ] as const) {
+    for (const worker of dispatches) {
+      const key = `${kind}:${worker.dispatchId}`;
+      if (seen.has(key) || !extras.workers.get(worker.dispatchId)?.attention.includes(category)) continue;
+      seen.add(key);
+      const title = worker.taskId === null ? null : (tasks.get(worker.taskId)?.title.value ?? null);
+      result.push({
+        dispatchId: worker.dispatchId,
+        taskTitle: title === null ? null : title.slice(0, OBJECTIVE_MAX),
+        kind,
+      });
+    }
+  }
+  return result;
+}
+
 function judge(apex: AgentState, members: readonly AgentState[], work: Work, now: number) {
   const mark = agentMark(apex);
   const found = new Set<ApexReason>();
@@ -257,7 +300,7 @@ function judge(apex: AgentState, members: readonly AgentState[], work: Work, now
   if (mark === 'waiting') found.add('apex_waiting');
   for (const member of members) {
     if (!memberWaits(member)) continue;
-    if (inGrace(member, now)) found.add('member_grace');
+    if (!waitingMember(member, now)) found.add('member_grace');
     else found.add(agentMark(member) === 'blocked' ? 'member_blocked' : 'member_waiting');
   }
   if (mark === 'working') found.add(agentWorkingMode(apex) === 'monitoring' ? 'monitoring' : 'working');
@@ -459,6 +502,7 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
     const memberAgents = team.map((member) => member.agent);
     const judged = verdicts.get(agent.id) as ReturnType<typeof judge>;
     const last = lastActivity(agent, memberAgents, state);
+    const members = orderMembers(agent.id, team.map(memberEntry));
     items.push({
       id: agent.id,
       kind: agent.kind,
@@ -476,7 +520,7 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
       badges: judged.status === 'done' ? badgesOf(agent, memberAgents, links.bundles.get(agent.id) ?? [], state) : [],
       lastActivityAt: last,
       stateStartedAt: agent.stateStartedAt.value,
-      members: orderMembers(agent.id, team.map(memberEntry)),
+      members,
       counts: countTeam(team, links.dispatches.get(agent.id) ?? []),
       team: buildTeam({
         apexId: agent.id,
@@ -486,6 +530,8 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
         workers: state.workers,
         tasks,
       }),
+      waitingMembers: waitingMembersOf(members, new Map(memberAgents.map((member) => [member.id, member])), now),
+      questions: questionsOf(links.dispatches.get(agent.id) ?? [], extras, tasks),
     });
   }
   items.sort(compareItems);
