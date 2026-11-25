@@ -69,3 +69,49 @@ test('iss-00048 D-05：質問のカードの2つのファイルを同じオリ�
   assert.match(frame, /createOpenBoard\(/);
   assert.doesNotMatch(frame, /innerHTML|insertAdjacentHTML/);
 });
+
+test('iss-00077 T-03：会話の接続を変数に持ち、止めると閉じ、つなぎ直すと前を閉じて1本だけ作る', () => {
+  const app = readFileSync(new URL('../../src/server/app.ts', import.meta.url), 'utf8');
+  for (const name of ['visibility-gate.js', 'unsettled.js']) {
+    const escaped = name.replace('.', '\\.');
+    assert.match(
+      app,
+      new RegExp(`'/embed/${escaped}': \\{ file: 'embed/${escaped}', type: 'text/javascript; charset=utf-8' \\}`),
+      name,
+    );
+  }
+  assert.equal([...frame.matchAll(/new EventSource\(/g)].length, 1, 'EventSource を作るのは connect の1か所');
+  const connect = /function connect\(\) \{([\s\S]*?)\n\}/.exec(frame)?.[1] ?? '';
+  assert.match(connect, /^\s*source\?\.close\(\);\s*source = new EventSource\(/, 'つなぎ直す前に前の接続を閉じる');
+  assert.match(frame, /createVisibilityGate\(\{\s*hiddenMs: HIDDEN_PAUSE_MS,/);
+  const pause = /onPause: \(\) => \{([\s\S]*?)\},/.exec(frame)?.[1] ?? '';
+  assert.match(pause, /source\?\.close\(\)/);
+  assert.match(pause, /stateLoop\.stop\(\)/);
+  const resume = /onResume: \(\) => \{([\s\S]*?)\},/.exec(frame)?.[1] ?? '';
+  assert.match(resume, /stateLoop\.restart\(\);\s*connect\(\);/, '状態をすぐ読み、つなぎ直す');
+  assert.doesNotMatch(resume, /sendText|sendFlow/, '送る欄の書きかけは触らない');
+  assert.match(frame, /addEventListener\('visibilitychange', \(\) => gate\.update\(\)\)/);
+  assert.doesNotMatch(frame, /setTimeout\(pollState/, '状態の読みは止められる輪だけで予約する');
+  assert.match(frame, /createPollLoop\(\{\s*load: loadState,/);
+});
+
+test('iss-00077 T-03：body の印は送る欄・質問・承認の段を読むだけで付け、送信の流れの関数を呼び替えない', () => {
+  const sync = /function syncUnsettled\(\) \{([\s\S]*?)\n\}/.exec(frame)?.[1] ?? '';
+  assert.match(sync, /markUnsettled\(\s*document\.body,/);
+  assert.match(sync, /sendPhase: sendFlow\.getState\(\)\.phase/);
+  assert.match(sync, /questionBoard\.flow\(key\)\.phase/);
+  assert.match(sync, /approvalBoard\.state\(key\)\.flow\.phase/);
+  assert.doesNotMatch(sync, /submit|confirm|query|dismiss|adopt|choose/, '読むだけ');
+  // 印は、送る欄を描くたび、カードの段が変わるたび、会話を描くたびに付け直す。
+  assert.match(frame, /renderSendPanel\(document, view\)\);\s*syncUnsettled\(\);/);
+  assert.equal(
+    [...frame.matchAll(/onChange: \(key\) => \{\s*syncUnsettled\(\);\s*renderQuestionRow\(key\);/g)].length,
+    2,
+  );
+  assert.match(frame, /approvalBoard\.prune\(new Set\(approvalRows\.keys\(\)\)\);\s*syncUnsettled\(\);/);
+  // 送信の流れの作り方は今のまま。
+  assert.match(
+    frame,
+    /const sendFlow = createSendFlow\(\{ agentId, writer, read, onChange: \(\) => renderSend\(\) \}\);/,
+  );
+});

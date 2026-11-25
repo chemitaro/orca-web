@@ -8,8 +8,12 @@
 // 会話の承認もカード（D-06、iss-00050）で描く。状態は approval-view.js の板がカードの key ごとに持ち、手段は approver の表
 // （構造化 Chat は意図と確定で、送れるかは /api/send/status の approval。端末の許可の確認は promptId で指す意図と確定で、
 // 送れるかは answerKeys（iss-00054）。答えられない承認は読むだけで「Orca で開く」）で選ぶ。
+// 見えない状態が 30 秒続いたら会話の SSE を閉じ、状態の読みの予約をやめる。見えたら状態をすぐ読み、SSE をつなぎ直す
+// （会話は snapshot から描き直す。送る欄の書きかけの文は触らない）。門は visibility-gate.js（iss-00077 D-05）。
+// 送る欄・質問・承認のどれかが処理中か結果不明の間は、body に印（unsettled.js）を付け、外の画面が切り替えの前に確かめる（D-04）。
 // 文字はすべて textContent で入れる（会話の本文、ツールの出力、題名、送る本文、質問と選択肢は信頼しないデータ）。
 
+import { createPollLoop } from '../poll-loop.js';
 import { createWriter } from '../write.js';
 import { createMarkdownCache, refreshTimes, renderChatRow, renderDetail, renderDetailMark } from './agent-dom.js';
 import { watchWorktreeSummary } from './agent-marks.js';
@@ -31,6 +35,8 @@ import {
 } from './question-view.js';
 import { renderSendPanel } from './send-dom.js';
 import { buildSendView, composerKeyAction, createSendFlow } from './send-view.js';
+import { isUnsettled, markUnsettled } from './unsettled.js';
+import { createVisibilityGate, HIDDEN_PAUSE_MS } from './visibility-gate.js';
 
 const STATE_POLL_MS = 5_000;
 /** 会話の時刻（now・5m など）を描き直す間隔。 */
@@ -111,7 +117,10 @@ const questionBoard = createQuestionBoard({
     keys: createCallAnswerer({ agentId, writer, read, mode: 'keys' }),
     message: createCallAnswerer({ agentId, writer, read, mode: 'message' }),
   },
-  onChange: (key) => renderQuestionRow(key),
+  onChange: (key) => {
+    syncUnsettled();
+    renderQuestionRow(key);
+  },
 });
 /** 今の会話の承認の行（key ごと）。 */
 let approvalRows = new Map();
@@ -121,11 +130,25 @@ const approvalBoard = createApprovalBoard({
     terminal: createTerminalApprover({ agentId, writer, read }),
     readOnly: readOnlyApprover,
   },
-  onChange: (key) => renderQuestionRow(key),
+  onChange: (key) => {
+    syncUnsettled();
+    renderQuestionRow(key);
+  },
 });
 /** 質問と承認のカードの行を、みな描き直す（送れるかや開く先が変わったとき）。 */
 function renderCardRows() {
   for (const key of [...questionRows.keys(), ...approvalRows.keys()]) renderQuestionRow(key);
+}
+/** 送る欄・質問・承認の今の段から、body の印を付け直す（読むだけで、流れは変えない）。 */
+function syncUnsettled() {
+  markUnsettled(
+    document.body,
+    isUnsettled({
+      sendPhase: sendFlow.getState().phase,
+      questionPhases: [...questionRows.keys()].map((key) => questionBoard.flow(key).phase),
+      approvalPhases: [...approvalRows.keys()].map((key) => approvalBoard.state(key).flow.phase),
+    }),
+  );
 }
 /** 端末の質問のカードの「Orca で開く」の状態（カードを描き直しても、最後の状態を戻す）。 */
 const openBoard = createOpenBoard();
@@ -255,6 +278,7 @@ function renderChat({ stickToEnd }) {
   questionBoard.prune(new Set(questionRows.keys()));
   approvalRows = new Map(rows.filter((row) => row.kind === 'approval').map((row) => [row.key, row]));
   approvalBoard.prune(new Set(approvalRows.keys()));
+  syncUnsettled();
   for (const row of rows) els.log.append(renderChatRow(document, row, rowOptions(now)));
   restoreFocus(note);
   if (stickToEnd || nearEnd) els.scroller.scrollTop = els.scroller.scrollHeight;
@@ -343,8 +367,11 @@ function applyEvent(event) {
   if (chat !== before) renderChat({ stickToEnd: event.type !== 'appended' });
 }
 
+/** 今の会話の接続。止めるときに閉じ、つなぎ直すときに作り直す（いつも1本だけ）。 */
+let source = null;
 function connect() {
-  const source = new EventSource(`/api/transcript/events?agent=${encodeURIComponent(agentId)}`);
+  source?.close();
+  source = new EventSource(`/api/transcript/events?agent=${encodeURIComponent(agentId)}`);
   for (const type of ['snapshot', 'replacement', 'appended', 'unavailable']) {
     source.addEventListener(type, (message) => {
       try {
@@ -405,20 +432,26 @@ function renderDetailArea(state) {
   els.detail.append(renderDetail(document, detail));
 }
 
-async function pollState() {
+async function loadState(isCurrent) {
   try {
     const res = await fetch('/api/state', { cache: 'no-store' });
     if (!res.ok) throw new Error(String(res.status));
-    renderDetailArea(await res.json());
+    const state = await res.json();
+    if (isCurrent()) renderDetailArea(state);
   } catch {
-    if (!detail) {
+    if (isCurrent() && !detail) {
       els.title.textContent = 'orca-web から状態を読めません';
       if (openControl.state !== 'busy') openControl.setState('missing', 'orca-web から状態を読めません');
     }
-  } finally {
-    setTimeout(pollState, STATE_POLL_MS);
   }
 }
+/** 状態の読みの輪。止めると予約を取り消し、読みの途中でも、その終わりに予約を作らない（poll-loop.js の世代）。 */
+const stateLoop = createPollLoop({
+  load: loadState,
+  schedule: (fn, ms) => setTimeout(fn, ms),
+  cancel: (timer) => clearTimeout(timer),
+  delayMs: STATE_POLL_MS,
+});
 
 // 「Orca で開く」は幅 390px 以下では出さない（iPhone の幅）。
 const narrow = window.matchMedia('(max-width: 390px)');
@@ -460,6 +493,7 @@ function renderSend() {
   els.sendButton.disabled = view.button.disabled;
   els.sendButton.setAttribute('aria-busy', view.button.busy ? 'true' : 'false');
   els.sendPanel.replaceChildren(renderSendPanel(document, view));
+  syncUnsettled();
 }
 
 els.sendText.addEventListener('input', () => {
@@ -500,8 +534,26 @@ if (!agentId) {
   els.openSlot.hidden = true;
   els.send.hidden = true;
 } else {
-  void pollState();
+  stateLoop.restart();
   connect();
+  // 見えない状態が 30 秒続いたら、会話の接続と状態の読みを止める。見えたら状態をすぐ読み、つなぎ直す。
+  const gate = createVisibilityGate({
+    hiddenMs: HIDDEN_PAUSE_MS,
+    onPause: () => {
+      source?.close();
+      source = null;
+      stateLoop.stop();
+    },
+    onResume: () => {
+      stateLoop.restart();
+      connect();
+    },
+    schedule: (fn, ms) => setTimeout(fn, ms),
+    cancel: (timer) => clearTimeout(timer),
+    isHidden: () => document.visibilityState === 'hidden',
+  });
+  document.addEventListener('visibilitychange', () => gate.update());
+  gate.update();
   void pollSend();
   // 詳細の見出しの印。要約を同じオリジンで読む（10 秒ごと、見えない間は読まない）。読めなければ置き場を空にする。
   watchWorktreeSummary('', {

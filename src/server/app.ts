@@ -171,6 +171,8 @@ const STATIC_FILES: Readonly<
   '/embed/question-dom.js': { file: 'embed/question-dom.js', type: 'text/javascript; charset=utf-8' },
   '/embed/approval-view.js': { file: 'embed/approval-view.js', type: 'text/javascript; charset=utf-8' },
   '/embed/approval-dom.js': { file: 'embed/approval-dom.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/visibility-gate.js': { file: 'embed/visibility-gate.js', type: 'text/javascript; charset=utf-8' },
+  '/embed/unsettled.js': { file: 'embed/unsettled.js', type: 'text/javascript; charset=utf-8' },
   '/embed/agent-marks.js': { file: 'embed/agent-marks.js', type: 'text/javascript; charset=utf-8', cors: 'read' },
   '/embed/agent-marks-view.js': {
     file: 'embed/agent-marks-view.js',

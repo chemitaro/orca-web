@@ -1,5 +1,6 @@
 // ポーリングの輪。読みに世代を持たせ、次の読みの予約は最新の世代の読みが終わったときだけ行う。
 // restart() は前の予約を取り消し、新しい世代の読みを始める。読みの途中に選び直しても、予約はいつも1つだけ。
+// stop() は予約を取り消し、世代を進める。読みの途中で止めても、その読みは描かず、終わりに予約を作らない。
 
 /**
  * @param {{
@@ -8,7 +9,7 @@
  *   cancel: (timer: any) => void,
  *   delayMs: number,
  * }} options load は isCurrent() が偽なら結果で描かない。schedule と cancel は setTimeout と clearTimeout に当たる。
- * @returns {{ restart: () => void }}
+ * @returns {{ restart: () => void, stop: () => void }}
  */
 export function createPollLoop({ load, schedule, cancel, delayMs }) {
   let generation = 0;
@@ -24,12 +25,16 @@ export function createPollLoop({ load, schedule, cancel, delayMs }) {
     if (isCurrent()) timer = schedule(() => void run(mine), delayMs);
   }
 
+  const halt = () => {
+    cancel(timer);
+    timer = null;
+    generation += 1;
+  };
   return {
     restart() {
-      cancel(timer);
-      timer = null;
-      generation += 1;
+      halt();
       void run(generation);
     },
+    stop: halt,
   };
 }

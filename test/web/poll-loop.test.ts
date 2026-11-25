@@ -106,3 +106,36 @@ test('読みが失敗しても、最新の世代なら次の読みを予約す�
   await settle();
   assert.equal(h.timers.size, 1);
 });
+
+test('T-11：stop の後は予約がなく、読みの途中で止めてもその終わりに予約を作らない', async () => {
+  const h = harness();
+  h.loop.restart();
+  h.load(0).resolve();
+  await settle();
+  assert.equal(h.timers.size, 1);
+  h.loop.stop();
+  assert.equal(h.timers.size, 0, '止めると予約を取り消す');
+  h.loop.restart();
+  assert.equal(h.loads.length, 2);
+  h.loop.stop();
+  assert.equal(h.load(1).isCurrent(), false, '止めた後の読みは描かない');
+  h.load(1).resolve();
+  await settle();
+  assert.equal(h.timers.size, 0, '読みの途中で止めると、その終わりに予約しない');
+});
+
+test('T-11：止めた後の restart で読みが1回すぐ起き、以後の輪は1本だけ', async () => {
+  const h = harness();
+  h.loop.restart();
+  h.loop.stop();
+  h.loop.restart();
+  assert.equal(h.loads.length, 2);
+  h.load(0).resolve();
+  h.load(1).resolve();
+  await settle();
+  assert.equal(h.timers.size, 1);
+  h.fire();
+  h.load(2).resolve();
+  await settle();
+  assert.equal(h.timers.size, 1);
+});
