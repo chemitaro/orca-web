@@ -3,8 +3,8 @@ package spec
 goal: "チームの節が文書に出て、右のペインのチームの帯で階層と結果が見えることがテストで確かめられている。"
 
 steps: {
-	"S-01": {title: "チームの節（D-01）", text: "対象：新しい `src/apex/team.ts`、`src/apex/build.ts`・`model.ts`、テスト。確かめ：T-01", realizes: ["R-01"], session: "impl"}
-	"S-02": {title: "チームの帯（D-02）", text: "対象：新しい `web/apexes-team-view.js`・`web/apexes-team-dom.js`、`web/apexes.js`・`web/apexes-dom.js`・`web/style.css`、STATIC_FILES、テスト、README の追記。確かめ：T-02・T-03。実装担当の最後の手順", realizes: ["R-02"], after: ["S-01"], session: "impl"}
+	"S-01": {status: "done", title: "チームの節（D-01）", text: "対象：新しい `src/apex/team.ts`、`src/apex/build.ts`・`model.ts`、テスト。確かめ：T-01", realizes: ["R-01"], session: "impl"}
+	"S-02": {status: "done", title: "チームの帯（D-02）", text: "対象：新しい `web/apexes-team-view.js`・`web/apexes-team-dom.js`、`web/apexes.js`・`web/apexes-dom.js`・`web/style.css`、STATIC_FILES、テスト、README の追記。確かめ：T-02・T-03。実装担当の最後の手順", realizes: ["R-02"], after: ["S-01"], session: "impl"}
 }
 
 tests: {
