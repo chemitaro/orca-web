@@ -54,6 +54,29 @@ export interface ApexMember {
   stateStartedAt: string | null;
 }
 
+export type ApexTeamStatus = 'working' | 'waiting' | 'done' | 'failed' | 'live' | 'unknown';
+
+/** チームの節（R-01）。エージェントと Dispatch が同じなら1節（agent）。並びは深さ優先、兄弟は createdAt の古い順。 */
+export interface ApexTeamNode {
+  /** `agent:<エージェントの id>` か `dispatch:<Dispatch の id>`。 */
+  key: string;
+  kind: 'agent' | 'dispatch';
+  agentId: string | null;
+  dispatchId: string | null;
+  /** 親の節の鍵。頂点の直下は null。 */
+  parentKey: string | null;
+  /** 頂点からの段数（1 から）。 */
+  depth: number;
+  /** task の題名か、エージェントの題名（200 字まで）。 */
+  title: string | null;
+  status: ApexTeamStatus;
+  createdAt: string | null;
+  /** task の completedAt。エージェントだけの節は null。 */
+  completedAt: string | null;
+  /** エージェントの節だけ。 */
+  stateStartedAt: string | null;
+}
+
 export interface ApexItem {
   id: string;
   kind: AgentKind;
@@ -77,6 +100,8 @@ export interface ApexItem {
   members: ApexMember[];
   /** 生きた辺のメンバーと束の Dispatch を、Dispatch の id で重ねずに数える。 */
   counts: { total: number; working: number; waiting: number; done: number };
+  /** 生きた辺のメンバーと束の Dispatch の木（R-01）。 */
+  team: ApexTeamNode[];
 }
 
 export interface UnlinkedAgentItem {

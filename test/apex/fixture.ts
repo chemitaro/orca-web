@@ -12,6 +12,7 @@ export interface TaskSpec {
   status?: string | null;
   createdAt?: string | null;
   completedAt?: string | null;
+  title?: string | null;
 }
 
 export interface DispatchSpec {
@@ -45,6 +46,7 @@ export function orchestration(o: {
       status: fact(spec.status ?? null),
       createdAt: fact(spec.createdAt ?? null),
       completedAt: fact(spec.completedAt ?? null),
+      ...(spec.title === undefined ? {} : { title: fact(spec.title) }),
     });
   });
   const workers = (o.dispatches ?? []).map((spec) => {
