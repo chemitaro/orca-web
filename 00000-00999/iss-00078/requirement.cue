@@ -1,48 +1,135 @@
 package spec
 
-// 要件（Issue）。型 specdock/v1。書き方は spec-dock/docs/authoring/ のガイドにある。
-// 文章の項目には Markdown を書いてよい。型にない項目は、必要に応じて足してよい。
-
-// 型の版。消さない。
 schema: "specdock/v1"
 
-// 保証レベル（light、standard、strict、critical）と、その理由。
-// 失敗したときの影響と回復の難しさで選ぶ（工数や作業の難しさでは選ばない）。
-// 具体化や作業の途中で、上げても下げてもよい。正本はここだけで、ほかの場所に写さない。
 assurance: {
 	level:  "standard"
-	reason: "Orca から読む項目を足し判定を広げる。読むだけで、誤りは表示に留まる"
+	reason: "Orca から読む項目を足し判定を広げる。読むだけで、誤りは表示に留まり、PR を戻せば元に戻る"
 }
 
-// 目的と背景（任意）。
-// purpose:    "この Issue が実現する価値"
-// background: "解く問題と、関係者"
+purpose: "頂点と配下を、子のタブが閉じた後も Run の世代と task の作成者で結び、対応が必要の理由（未回答の質問・未解決の判断・止まった仕事・新しい失敗・統括のタブが閉じたのに仕事が残る）を判定し、完了に残りの札を付ける。"
 
-// 対象と対象外（任意）。
-// includes: ["..."]
-// excludes: ["..."]
+background: """
+	Epic epic-00075 の切り分け（R-04、R-05、F-01）。iss-00076 の `src/apex/` を広げる。
+	2026-11-25 の読みだけの確かめ（Orca v1.4.272、`orchestration run-list --full`・`task-list --full`・`worker-list --full`）：
+	- run の記録に `consumer_generation`（整数）がある。orca-web は拾っていない（`src/orca/read-state.ts` の runs の pick）。
+	- task の記録に `created_by_pane_key`、`created_by_process_incarnation`、`created_by_run_generation`（整数）がある。orca-web は `created_by_terminal_handle` だけを拾う（`pickTask`）。
+	- worker の記録に `workerState`、`projection.attention.categories`（`input`＝その Dispatch の未回答の ask、`approval`＝その task の未解決の gate、ほかに `guidance`・`failure`・`interruption`・`stale`・`unverifiable`・`root_completion`）、`projection.attention.requiresAction`、`projection.parent.taskId` がある。orca-web は `attention` を拾わない（`pickWorker`）。
+	- Fable 5.2 の実機の集計（同日）：根の task 357 のうち 169 は作成者の handle と paneKey を持ち、188 は3項目とも null（構造化 Chat の統括）。（Run、世代）ごとに根の task の作成者は1つ。`coordinatedFrom` は全件 null で頂点の材料にならない。
+	- Opus 5.5 のレビュアーの指摘：`requiresAction` は failure でも真になる。未完の task（blocked 60・ready 8 など）は放置された古い Run に残る。dispatchStatus の failed は stopped・abandoned を含む（workerState の failed は 30）。
+	"""
 
-// 観測できる要件。番号（R-01、R-02、…）をキーにする。
-// title は必須。acceptance（観測できる受け入れの条件）は standard 以上で必須。
+includes: [
+	"Orca から読む項目の追加（run の consumer_generation、task の created_by_pane_key・created_by_run_generation、worker の workerState・attention.categories）。`/api/state` の JSON には出さない",
+	"頂点と配下の結び（生きた辺、端末の統括の task の作成者、構造化 Chat の統括のメモリの対応表）",
+	"対応が必要の判定 A3〜A6 と、鮮度の扱い、データの時刻の起点",
+	"完了の残りの札、結べない仕事の絞り込み",
+	"画面の理由の札の言葉と、チームの数の表示の更新",
+]
+excludes: [
+	"チームの階層の図と履歴の帯（iss-00079）",
+	"対応のカードと答える操作（iss-00080）",
+	"通知（iss-00081）",
+	"Run の木（`src/runs/`）の結びの入れ替え（iss-00082）",
+	"`orca-web.state/v1` の項目の追加",
+	"Orca に読む要求のほかを送ること、統括の連絡を既読にすること",
+]
+
 requirements: {
-	// "R-01": {
-	// 	title: "利用者が〜できる"
-	// 	text:  "詳しい説明"
-	// 	acceptance: ["〜が観測できる"]
-	// }
+	"R-01": {
+		title: "足りない項目を Orca から読み、新しい API の中だけで使う"
+		text:  "run の `consumer_generation`、task の `created_by_pane_key`・`created_by_run_generation`、worker の `workerState`・`projection.attention.categories` を、今の読み（`run-list --full`・`task-list --full`・`worker-list --full`）の応答から拾う。新しい CLI の命令は足さない。`/api/state` の文書（`orca-web.state/v1`）には出さず、頂点の一覧の組み立てだけが使う。"
+		acceptance: [
+			"録画の再生で、拾った値が頂点の一覧の組み立てに届く",
+			"`/api/state` の JSON の形が今のまま（新しい鍵がない）",
+		]
+	}
+	"R-02": {
+		title: "頂点と配下を、閉じた子も含めて結ぶ"
+		text: """
+			「束」＝（Run の id、世代）の task の集まり。
+			1. 生きた辺（iss-00076 のまま）：`parentPaneKey`＝`paneKey`。
+			2. 端末の統括：束の根の task（`parent_id` なし）の `created_by_pane_key` が頂点の `paneKey` に一致すれば、その束は頂点のもの。
+			3. 構造化 Chat の統括：1 で頂点に結べたメンバーの `worker`（dispatchId・taskId・runId）から task をたどり、その task の束を頂点に結ぶ。この対応（束 → 頂点の id）をメモリだけに持ち、メンバーのタブが閉じた後も使う。
+			4. 束の生きた仕事は、Run の今の世代（`consumer_generation`）の束の頂点にだけ結ぶ。古い世代の束の頂点には、終わった履歴だけを結ぶ。
+			5. `worker` があり親の見つからないエージェント（iss-00076 の worker_without_parent）は、その task の束の頂点が分かれば、その頂点のメンバーにする。
+			"""
+		acceptance: [
+			"端末の統括が頂点のとき、子のタブがない束の task と Dispatch が、その頂点の配下の数（全体）に入る",
+			"構造化 Chat の統括は、メンバーのタブがあるうちに一度結べば、タブが閉じた後もその束が頂点に結ばれる（同じプロセスの間）",
+			"run-use で世代が上がった Run では、今の世代の束の頂点にだけ生きた仕事が数えられる",
+		]
+	}
+	"R-03": {
+		title: "対応が必要の理由を広げる（A3〜A6）"
+		text: """
+			前提：鮮度 F ＝ 状態の文書の取得元のうち tasks と workers がどちらも stale でない。生きた仕事 ＝ 頂点に結んだ束の Dispatch で、`workerState` が終わっていない（succeeded・failed・stopped・abandoned・cancelled でない）もの。動いている ＝ state が working（monitoring を含む）。時刻はすべてデータの値から測り、猶予 G ＝ 90 秒。
+			iss-00076 の A1・A2 の後に、次の順で見る。どれも F が真のときだけ新しく当たる。
+			- A3 問い：束の Dispatch の attention に `input`（未回答の ask）か `approval`（未解決の gate）があり、ask なら頂点が動いていない、gate なら頂点が「monitoring を除く working」でない状態が、max(頂点の stateStartedAt, その Dispatch の task の作成の時刻) から G を超えた。理由 `question`・`decision`。
+			- A4 止まった仕事：生きた仕事があり、頂点もチームのメンバーも誰も動いていない状態が、max(頂点の stateStartedAt, メンバーの stateStartedAt の最大) から G を超えた。理由 `stalled`。
+			- A5 統括のタブ：頂点の `terminal` が `awaiting-restore` か `attached` でない終わった値で、生きた仕事か問いがある。理由 `apex_closed`。
+			- A6 新しい失敗：束の Dispatch の `workerState` が `failed` で、その task の `completed_at` が頂点の stateStartedAt より後で、頂点が動いていない状態が G を超えた。理由 `failed`。
+			作業中には、生きた仕事がある、または A3・A4・A6 の猶予の中、を足す（理由 `live_work`・`grace`）。
+			"""
+		acceptance: [
+			"頂点が done で、未回答の ask の Dispatch があり 90 秒たつと対応が必要（question）。89 秒なら作業中",
+			"頂点が monitoring で未解決の gate があると、90 秒で対応が必要（decision）。ask だけなら monitoring の間は作業中",
+			"生きた Dispatch があり誰も動いていない状態が 90 秒続くと対応が必要（stalled）",
+			"頂点のタブが復元待ちで生きた仕事があると対応が必要（apex_closed）",
+			"頂点の状態が始まった後に failed になった Dispatch があり頂点が動いていないと、90 秒で対応が必要（failed）。始まる前の失敗では当たらない",
+			"tasks か workers の取得元が stale の間は A3〜A6 に新しく当たらない",
+		]
+	}
+	"R-04": {
+		title: "放置された古い task だけでは対応が必要にしない"
+		text:  "ready・pending の task と、gate のない blocked の task、生きた Dispatch のない古い世代の束は、A3〜A6 の材料にしない。完了の頂点の札（残りの task n）にだけ使う。"
+		acceptance: [
+			"blocked・ready の task だけが残る束を持つ done の頂点は完了で、札「残りの task n」が付く",
+		]
+	}
+	"R-05": {
+		title: "完了の頂点に残りの札を付ける"
+		text:  "完了の頂点の札：`merge_pending`（頂点かメンバーの worktree の PR が open で CI が success か未設定）、`ci_failed`（PR が open で CI が failure）、`failed_members`（束の failed の Dispatch の数）、`remaining_tasks`（束の終わっていない task の数）。札は毎回データから出し、直れば消える。"
+		acceptance: [
+			"PR が open で CI が failure の worktree にいる完了の頂点に札 ci_failed が付き、CI が通ると消える",
+		]
+	}
+	"R-06": {
+		title: "結べない仕事を絞る"
+		text:  "結べない仕事の段には、iss-00076 の結べないエージェントに加え、どの頂点にも結べない束のうち、生きた Dispatch か問いがあるものだけを出す（束の Run の目的の1行、生きた数、問いの数）。"
+		acceptance: [
+			"終わった Dispatch しかない結べない束は段に出ない",
+		]
+	}
+	"R-07": {
+		title: "画面に新しい理由と札、配下の数を出す"
+		acceptance: [
+			"理由 question・decision・stalled・apex_closed・failed・live_work と札 merge_pending・ci_failed・failed_members・remaining_tasks に日本語の言葉が付いて行に出る",
+			"行の配下の数が、生きた辺のメンバーと結んだ束の Dispatch を合わせた「動いている/全体」になる",
+		]
+	}
 }
 
-// 失敗・境界の条件。番号（F-01、…）をキーにする。
-// title は必須。impact（起きたときの影響）と recovery（回復のしかた）は strict 以上で必須。
 failures: {
-	// "F-01": {
-	// 	title:    "〜のときは、何も書かずに止まる"
-	// 	impact:   "〜"
-	// 	recovery: "〜"
-	// }
+	"F-01": {
+		title: "メモリの対応表を捨てる"
+		text:  "束 → 頂点の対応表は、頂点が状態の文書から2回続けて消えたとき、束の task がすべて終わって 24 時間たったとき、プロセスが終わったときに捨てる。ファイルに書かない。上限 1,000 件を超えたら古い順に捨てる。"
+	}
+	"F-02": {
+		title: "読めないときに誤って鳴らさない"
+		text:  "鮮度 F が偽の間は A3〜A6 に新しく当たらない。orca-web の再起動の後は、構造化 Chat の束はメンバーのタブで結び直すまで結べない仕事に出る（利用者の 2026-11-25 の判断で受け入れ、Orca 本体への要望は iss-00082）。"
+	}
 }
 
-// 制約・前提、合意した判断、未解決事項（任意）。
-// constraints: ["..."]
-// decisions: ["..."]
-// questions: ["..."]
+constraints: [
+	"AGENTS.md の守ること（Orca には読む要求だけ。`orchestration check` を使わない。統括の連絡を既読にしない）",
+	"`orca-web.state/v1`・`/embed/*`・`/api/worktrees/summary` を変えない",
+	"判定は `src/apex/` の1か所に置く",
+]
+
+decisions: [
+	"Epic epic-00075 の decisions を引き継ぐ",
+	"猶予 G＝90 秒、時刻はデータの値から測り、鮮度が偽の間は新しく鳴らさない（Opus 5.5 のレビュアーの提案をタスク担当が採用、2026-11-25）",
+	"未完は生きた Dispatch と問いだけで数え、放置された task は札だけにする（同上）",
+	"生きた仕事は Run の今の世代の束の頂点に結ぶ（同上。run-use の引き継ぎに合わせる）",
+]
