@@ -9,6 +9,11 @@
 // 対応が必要に入った頂点を1回だけデスクトップに通知する（判断は apexes-notify.js、出す口は apexes-dom.js）。
 // チームの帯（iss-00079）：見出しの下、会話の上に、選んだ頂点の team の畳める帯を出す（組み立ては apexes-team-view.js、
 // 描くのは apexes-team-dom.js）。描き直しても、同じ頂点の間は開いた帯とまとめを開いたままにする。
+// 対応のカード（iss-00080）：帯の下、会話の上に、頂点のチームで人の手が要るもののカードを出す（組み立ては apexes-cards-view.js）。
+// ［見て答える］はメンバーの答えるだけの枠（compose=off）に作り直し、［頂点に戻る］で頂点の枠に戻す（メンバーは URL に出さない）。
+// ［頂点に伝える］は頂点の枠（メンバーの枠なら作り直して）の入力欄に決めた型の下書きを入れるだけで、送らない
+// （口は embed/draft-receiver.js。枠を作るたびに送り手に知らせ、今の枠の準備の知らせを待つ）。どの切り替えも mayLeaveFrame を通す。
+import { buildApexCards, buildDraftText, draftNotice, paneFrameTarget } from './apexes-cards-view.js';
 import {
   clearAgentFrame,
   createApexNotifier,
@@ -16,7 +21,10 @@ import {
   createSeenTracker,
   mayLeaveFrame,
   mountAgentFrame,
+  renderApexCards,
+  renderDraftNotice,
   renderHeadline,
+  renderMemberBand,
   renderPaneHead,
   renderSection,
   startApexPolling,
@@ -38,6 +46,7 @@ import {
   selectionUrl,
   WIDE_MIN_PX,
 } from './apexes-view.js';
+import { createDraftSender } from './embed/draft-receiver.js';
 import { createOpenControl, runOpen } from './embed/open-control.js';
 import { renderFreshness } from './inbox-dom.js';
 import { projectFromSearch } from './inbox-view.js';
@@ -68,6 +77,30 @@ let remembered = null;
 let openTarget = null;
 /** 今のチームの帯の頂点の id（替われば帯を閉じて描く）。 */
 let teamApexId = null;
+/** 右のペインに出しているメンバーの答えるだけの枠（{ id, title }）。null なら頂点の枠。頂点を替えると外す。 */
+let memberView = null;
+/** 下書きの結果の帯（draftNotice）。頂点を替えると外す。 */
+let draftResult = null;
+/** 今のカード（key ごと）。押したときに読む。 */
+let cardsByKey = new Map();
+/** 今の枠（作り直したら送り手に知らせる）。 */
+let mountedFrame = null;
+
+// 頂点の入力欄への下書きの送り手。今の枠の準備の知らせだけを覚える（同じオリジン・今の枠から）。
+const draftSender = createDraftSender({
+  selfOrigin: location.origin,
+  onResult: (result) => {
+    draftResult = draftNotice(result);
+    renderPane();
+  },
+});
+window.addEventListener('message', (event) => draftSender.handleMessage(event));
+/** 枠を作り直したら送り手に知らせる（前の枠あての下書きと準備の印は捨てる）。 */
+function noteFrame(frame) {
+  if (frame === mountedFrame) return;
+  mountedFrame = frame;
+  draftSender.frameCreated(frame);
+}
 
 // 見た時刻。読めなければ null で、点を出さない（一覧と会話はそのまま動く）。
 const seenStore = createSeenStore(() => window.localStorage);
@@ -123,6 +156,7 @@ function renderPane() {
     openTarget = null;
     els.paneHead.replaceChildren();
     clearAgentFrame(els.paneFrame, pane.guide);
+    noteFrame(null);
     return;
   }
   openTarget = pane.header.open;
@@ -131,11 +165,17 @@ function renderPane() {
   const teamState = teamApexId === pane.header.id ? readTeamState(previous) : {};
   teamApexId = pane.header.id;
   const team = renderTeamBand(document, buildTeamBand(pane.remember, Date.now()), teamState);
-  els.paneHead.replaceChildren(
-    renderPaneHead(document, pane.header, { openRoot: openControl.root }),
-    ...(team ? [team] : []),
-  );
-  mountAgentFrame(els.paneFrame, pane.header.id);
+  const cards = buildApexCards(pane.remember);
+  cardsByKey = new Map(cards.map((card) => [card.key, card]));
+  const target = paneFrameTarget(pane.header.id, memberView);
+  const parts = [
+    renderMemberBand(document, target.band),
+    team,
+    renderApexCards(document, cards),
+    renderDraftNotice(document, draftResult),
+  ].filter((part) => part !== null);
+  els.paneHead.replaceChildren(renderPaneHead(document, pane.header, { openRoot: openControl.root }), ...parts);
+  noteFrame(mountAgentFrame(els.paneFrame, target.id, { compose: target.compose }));
 }
 
 /** favicon の href を替える（同じ値なら触らない）。 */
@@ -171,6 +211,10 @@ function render() {
 /** 選びを移し、URL の ?apex= を合わせて（履歴は増やさない）描き直す。 */
 function applySelection(next) {
   if (next === selection) return;
+  if (next.id !== selection.id) {
+    memberView = null;
+    draftResult = null;
+  }
   selection = next;
   if (apexFromSearch(location.search) !== selection.id) {
     const search = selectionUrl(location.search, selection.id);
@@ -207,6 +251,35 @@ els.paneHead.addEventListener('click', (event) => {
   const button = /** @type {HTMLElement | null} */ (event.target)?.closest?.('button[data-action="back"]');
   if (!button) return;
   changeSelection({ type: 'clear' });
+});
+
+/** 右のペインの枠を頂点かメンバーに替える。枠の中に処理中か結果不明の表示があれば、先に確かめる。替えたら真。 */
+function changeFrame(next) {
+  if ((next?.id ?? null) === (memberView?.id ?? null)) return true;
+  if (!mayLeaveFrame(els.paneFrame, (text) => window.confirm(text))) return false;
+  memberView = next;
+  draftResult = null;
+  renderPane();
+  return true;
+}
+els.paneHead.addEventListener('click', (event) => {
+  const button = /** @type {HTMLElement | null} */ (event.target)?.closest?.('button[data-action="to-apex"]');
+  if (button) changeFrame(null);
+});
+// 対応のカードの操作。答えは枠の中の既存のカードと送る欄だけを通る（ここからは送らない）。
+els.paneHead.addEventListener('click', (event) => {
+  const button = /** @type {HTMLElement | null} */ (event.target)?.closest?.('button[data-card-action]');
+  const card = cardsByKey.get(button?.dataset.cardKey ?? '');
+  if (!button || !card) return;
+  if (button.dataset.cardAction === 'answer' && card.kind === 'member') {
+    changeFrame({ id: card.memberId, title: card.memberTitle });
+  } else if (button.dataset.cardAction === 'tell' && card.kind === 'question') {
+    // メンバーの枠なら頂点の枠に作り直してから（送り手は新しい枠の準備の知らせを待つ）。
+    if (!changeFrame(null)) return;
+    draftResult = null;
+    draftSender.send(buildDraftText(card));
+    renderPane();
+  }
 });
 
 // 通知の判断と出す口。押すと窓を前に出し、その頂点を選ぶ（切り替えの確かめは changeSelection が持つ）。

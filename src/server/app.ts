@@ -155,6 +155,8 @@ const STATIC_FILES: Readonly<
   // チームの帯（iss-00079 D-02）。
   '/apexes-team-view.js': { file: 'apexes-team-view.js', type: 'text/javascript; charset=utf-8' },
   '/apexes-team-dom.js': { file: 'apexes-team-dom.js', type: 'text/javascript; charset=utf-8' },
+  // 対応のカード（iss-00080 D-01）。
+  '/apexes-cards-view.js': { file: 'apexes-cards-view.js', type: 'text/javascript; charset=utf-8' },
   // タブの印（iss-00081 D-01）。対応が必要があれば /apexes が印付きに差し替える。
   '/favicon.svg': { file: 'favicon.svg', type: 'image/svg+xml' },
   '/favicon-alert.svg': { file: 'favicon-alert.svg', type: 'image/svg+xml' },
@@ -185,6 +187,8 @@ const STATIC_FILES: Readonly<
   '/embed/approval-dom.js': { file: 'embed/approval-dom.js', type: 'text/javascript; charset=utf-8' },
   '/embed/visibility-gate.js': { file: 'embed/visibility-gate.js', type: 'text/javascript; charset=utf-8' },
   '/embed/unsettled.js': { file: 'embed/unsettled.js', type: 'text/javascript; charset=utf-8' },
+  // 親の画面からの下書きの口（iss-00080 D-04）。
+  '/embed/draft-receiver.js': { file: 'embed/draft-receiver.js', type: 'text/javascript; charset=utf-8' },
   '/embed/agent-marks.js': { file: 'embed/agent-marks.js', type: 'text/javascript; charset=utf-8', cors: 'read' },
   '/embed/agent-marks-view.js': {
     file: 'embed/agent-marks-view.js',

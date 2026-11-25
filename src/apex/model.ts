@@ -77,6 +77,21 @@ export interface ApexTeamNode {
   stateStartedAt: string | null;
 }
 
+/** 許可待ち・入力待ちのメンバー（iss-00080 D-00）。理由 member_blocked・member_waiting と同じ条件で当たったもの。 */
+export interface ApexWaitingMember {
+  id: string;
+  title: string | null;
+  mark: AgentMark;
+}
+
+/** 束の Dispatch の未回答の ask（attention input）と未解決の gate（approval）。本文は持たない（iss-00080 D-00）。 */
+export interface ApexQuestion {
+  dispatchId: string;
+  /** task の題名（200 字まで）。 */
+  taskTitle: string | null;
+  kind: 'ask' | 'gate';
+}
+
 export interface ApexItem {
   id: string;
   kind: AgentKind;
@@ -102,6 +117,10 @@ export interface ApexItem {
   counts: { total: number; working: number; waiting: number; done: number };
   /** 生きた辺のメンバーと束の Dispatch の木（R-01）。 */
   team: ApexTeamNode[];
+  /** 対応のカードの材料（iss-00080）。並びはメンバーの並び。 */
+  waitingMembers: ApexWaitingMember[];
+  /** 対応のカードの材料（iss-00080）。A3 の猶予や頂点の状態に関わらず、問いがあれば出す。並びは Dispatch の並び、ask が先。 */
+  questions: ApexQuestion[];
 }
 
 export interface UnlinkedAgentItem {

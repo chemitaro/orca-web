@@ -3,6 +3,8 @@
 // テストは小さな偽の document で確かめる。見えない間は読まないポーリングの輪 startApexPolling もここに置く。
 // 右のペイン（iss-00077 D-03）：枠は頂点を替えるたびに iframe の要素を作り直し（mountAgentFrame）、既にある枠の src を書き換えない。
 // 外す前に、枠の中の送信の処理中の印を読んで確かめる（mayLeaveFrame、印は embed/unsettled.js）。
+// メンバーの枠（iss-00080 D-02）：compose が偽なら送る欄のない答えるだけの枠（&compose=off）。id か compose が違えば作り直す。
+// 対応のカード（D-01）・メンバーの帯・下書きの結果の帯もここで描く（renderApexCards、renderMemberBand、renderDraftNotice）。
 // 新着の点（D-06）：見た時刻の保存（createSeenStore、localStorage の読み書きはみな try/catch）と、
 // 選んだ頂点を続けて出した時間を数える口（createSeenTracker）。
 import { frameSrc, SEEN_STORAGE_KEY, SEEN_VERSION, SWITCH_CONFIRM_TEXT, UNSEEN_LABEL } from './apexes-view.js';
@@ -155,18 +157,65 @@ function currentFrame(slot) {
  * 置き場に、頂点 id の /embed/agent の枠を出す。前と同じ id なら今の枠をそのまま返し、違えば子をすべて外して、
  * 新しい iframe の要素に src などを決めてから入れる。既にある枠の src を書き換えない（iframe の中のページを移さない）。
  */
-export function mountAgentFrame(slot, id) {
+export function mountAgentFrame(slot, id, { compose = true } = {}) {
   const current = currentFrame(slot);
-  if (current && current.dataset.agentId === id) return current;
+  const mode = compose ? 'on' : 'off';
+  if (current && current.dataset.agentId === id && current.dataset.compose === mode) return current;
   const frame = slot.ownerDocument.createElement('iframe');
   frame.dataset.agentId = id;
+  frame.dataset.compose = mode;
   frame.className = 'apex-frame';
   frame.title = FRAME_TITLE;
   frame.referrerPolicy = 'same-origin';
-  frame.src = frameSrc(id);
+  frame.src = frameSrc(id, { compose });
   slot.replaceChildren();
   slot.append(frame);
   return frame;
+}
+
+/**
+ * 対応のカードの欄（apexes-cards-view.js の buildApexCards）。カードがなければ null（欄を出さない）。
+ * 押すボタンは data-card-action（answer・tell）と data-card-key を持つ。
+ */
+export function renderApexCards(doc, cards) {
+  if (!Array.isArray(cards) || cards.length === 0) return null;
+  const box = make(doc, 'section', null, 'apex-cards');
+  box.setAttribute('aria-label', '対応');
+  for (const card of cards) {
+    const row = make(doc, 'div', null, `apex-card apex-card--${card.kind}`);
+    row.dataset.cardKey = card.key;
+    row.append(make(doc, 'span', card.text, 'apex-card-text'));
+    if (card.note) row.append(make(doc, 'span', card.note, 'apex-card-note'));
+    if (card.action) {
+      const button = make(doc, 'button', card.action.label, 'apex-card-action');
+      button.type = 'button';
+      button.dataset.cardAction = card.action.type;
+      button.dataset.cardKey = card.key;
+      row.append(button);
+    }
+    box.append(row);
+  }
+  return box;
+}
+
+/** メンバーの枠の帯（「メンバー〈題名〉（答えるだけ）」と［頂点に戻る］、data-action="to-apex"）。band がなければ null。 */
+export function renderMemberBand(doc, band) {
+  if (!band) return null;
+  const box = make(doc, 'div', null, 'apex-member-band');
+  box.append(make(doc, 'span', band.text, 'apex-member-band-text'));
+  const back = make(doc, 'button', band.back, 'apex-member-back');
+  back.type = 'button';
+  back.dataset.action = 'to-apex';
+  box.append(back);
+  return box;
+}
+
+/** 下書きの結果の帯（apexes-cards-view.js の draftNotice）。なければ null。 */
+export function renderDraftNotice(doc, notice) {
+  if (!notice) return null;
+  const box = make(doc, 'p', notice.text, `apex-draft-notice apex-draft-notice--${notice.kind}`);
+  box.role = 'status';
+  return box;
 }
 
 /** 置き場の枠を外し、案内の文を出す。 */

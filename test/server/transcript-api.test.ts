@@ -496,6 +496,7 @@ test('/embed/agent は inline を許さない CSP と、自分と読み取りの
       '/embed/agent-dom.js',
       '/embed/send-view.js',
       '/embed/send-dom.js',
+      '/embed/draft-receiver.js',
       '/embed/agent.css',
     ]) {
       assert.equal((await h.get(path)).status, 200, path);

@@ -2,18 +2,23 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { buildApexList } from '../../src/apex/build.ts';
+import { buildApexCards, buildDraftText, paneFrameTarget } from '../../web/apexes-cards-view.js';
 import {
   clearAgentFrame,
   createSeenStore,
   createSeenTracker,
   mayLeaveFrame,
   mountAgentFrame,
+  renderApexCards,
+  renderDraftNotice,
   renderHeadline,
+  renderMemberBand,
   renderPaneHead,
   renderSection,
   startApexPolling,
 } from '../../web/apexes-dom.js';
 import { buildApexesView, SEEN_DWELL_MS, SEEN_STORAGE_KEY } from '../../web/apexes-view.js';
+import { createDraftSender } from '../../web/embed/draft-receiver.js';
 import { agent, fact, input, NOW, repo, worktree } from '../inbox/fixture.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -640,4 +645,87 @@ test('T-11: 札は理由の後に chip badge で描き、結べない束の行�
   assert.equal(bundleLink.rel, 'noopener noreferrer');
   assert.ok(bundleLink.textContent.includes(DANGER));
   assert.ok(bundleLink.textContent.includes('生きた仕事 1'));
+});
+
+test('iss-00080 T-04：compose が偽なら &compose=off の枠に作り直し、頂点に戻ると頂点の枠に作り直す', () => {
+  const box = slot();
+  const apex = mountAgentFrame(box, 'apex') as FakeElement;
+  assert.equal(apex.src, '/embed/agent?id=apex');
+  const member = mountAgentFrame(box, 'm 1', { compose: false }) as FakeElement;
+  assert.notEqual(member, apex);
+  assert.equal(member.src, '/embed/agent?id=m%201&compose=off');
+  assert.equal(mountAgentFrame(box, 'm 1', { compose: false }), member, '同じ id と compose では作り直さない');
+  const back = mountAgentFrame(box, 'apex') as FakeElement;
+  assert.notEqual(back, apex, '頂点に戻ると新しい枠');
+  assert.equal(back.src, '/embed/agent?id=apex');
+  assert.equal(member.src, '/embed/agent?id=m%201&compose=off', '外した枠の src は書き換えない');
+  assert.deepEqual(
+    box.children.map((c) => c.tagName),
+    ['IFRAME'],
+  );
+  // 同じ id でも compose が違えば作り直す。
+  assert.notEqual(mountAgentFrame(box, 'apex', { compose: false }), back);
+});
+
+test('iss-00080 T-03・T-04：カードの欄・メンバーの帯・下書きの帯は textContent だけで描き、操作は data 属性', () => {
+  assert.equal(renderApexCards(fakeDocument, []), null, 'カードがなければ欄を出さない');
+  const cards = buildApexCards({
+    reasons: ['apex_blocked'],
+    waitingMembers: [{ id: 'm1', title: DANGER, mark: 'blocked' }],
+    questions: [{ dispatchId: 'd1', taskTitle: DANGER, kind: 'ask' }],
+  });
+  const box = renderApexCards(fakeDocument, cards) as FakeElement;
+  const all = box.all();
+  for (const tag of new Set(all.map((e) => e.tagName))) assert.ok(ALLOWED.has(tag), tag);
+  assert.ok(box.textContent.includes(DANGER));
+  const buttons = all.filter((e) => e.tagName === 'BUTTON');
+  assert.deepEqual(
+    buttons.map((b) => [b.textContent, b.dataset.cardAction, b.dataset.cardKey, b.type]),
+    [
+      ['見て答える', 'answer', 'member:m1', 'button'],
+      ['頂点に伝える', 'tell', 'question:ask:d1', 'button'],
+    ],
+  );
+  assert.ok(box.textContent.includes('会話のカードで答えてください'));
+  assert.equal(renderMemberBand(fakeDocument, null), null);
+  const band = renderMemberBand(fakeDocument, paneFrameTarget('apex', { id: 'm1', title: DANGER }).band) as FakeElement;
+  assert.ok(band.textContent.includes(`メンバー「${DANGER}」（答えるだけ）`));
+  const back = band.all().find((e) => e.tagName === 'BUTTON');
+  assert.equal(back?.dataset.action, 'to-apex');
+  assert.equal(back?.textContent, '頂点に戻る');
+  assert.equal(renderDraftNotice(fakeDocument, null), null);
+  const notice = renderDraftNotice(fakeDocument, { kind: 'bad', text: '下書きを入れられませんでした' }) as FakeElement;
+  assert.equal(notice.textContent, '下書きを入れられませんでした');
+});
+
+test('iss-00080 T-04：メンバーの枠の間の［頂点に伝える］は頂点の枠に作り直してから、その枠の ready を待って送る', () => {
+  const box = slot();
+  const posted: Array<{ frame: string; message: unknown; origin: string }> = [];
+  const withWindow = (frame: FakeElement) => {
+    const win = {
+      postMessage: (message: unknown, origin: string) => posted.push({ frame: frame.src, message, origin }),
+    };
+    Object.assign(frame, { contentWindow: win });
+    return win;
+  };
+  const results: unknown[] = [];
+  const sender = createDraftSender({ selfOrigin: 'http://127.0.0.1:8791', onResult: (r) => results.push(r) });
+  const memberFrame = mountAgentFrame(box, 'm1', { compose: false }) as FakeElement;
+  const memberWin = withWindow(memberFrame);
+  sender.frameCreated(memberFrame);
+  sender.handleMessage({ origin: 'http://127.0.0.1:8791', source: memberWin, data: { type: 'orca-web:ready' } });
+  // 押した：頂点の枠に作り直し、その枠を覚えてから送る。
+  const apexFrame = mountAgentFrame(box, 'apex') as FakeElement;
+  const apexWin = withWindow(apexFrame);
+  sender.frameCreated(apexFrame);
+  const text = buildDraftText({ taskTitle: 't', questionKind: 'ask', dispatchId: 'd1' });
+  sender.send(text);
+  assert.deepEqual(posted, [], '頂点の枠の ready の前は送らない');
+  sender.handleMessage({ origin: 'http://127.0.0.1:8791', source: memberWin, data: { type: 'orca-web:ready' } });
+  assert.deepEqual(posted, [], '前の枠の ready では送らない');
+  sender.handleMessage({ origin: 'http://127.0.0.1:8791', source: apexWin, data: { type: 'orca-web:ready' } });
+  assert.deepEqual(posted, [
+    { frame: '/embed/agent?id=apex', message: { type: 'orca-web:draft', text }, origin: 'http://127.0.0.1:8791' },
+  ]);
+  sender.frameCreated(null);
 });
