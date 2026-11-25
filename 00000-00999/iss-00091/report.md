@@ -25,3 +25,4 @@ ID: "iss-00091"
 
 - S-01 c4b9453：worker の `projection.stage.activity` を内部の値に足し、A3 だけで activity working の Dispatch の ask・gate を対応が必要の材料から外し、理由 `question_working`（「質問あり（作業は継続中）」、対応が必要の段に入れない）を足した。questions に `working`、カードに「作業を続けながらの質問」。A4・A5 は元の asks・gates のまま。実装担当：Claude（ctx_35f2ee291370、claude-opus-5-5、medium）。
 - 最終品質ゲート：合格（2026-11-26）。c4b9453、レビュー pass（P0〜P3 0）、テスト lint・test（1362）・build すべて 0。
+- マージ：PR #93（2026-11-26、54dbf7a、head c4b9453、CI OBSERVED_CI_PASS・READY）。
