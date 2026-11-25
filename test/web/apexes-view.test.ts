@@ -371,7 +371,16 @@ test('T-11: 新しい理由と札に日本語の言葉が付き、配下の数�
 test('T-11: 理由と札の言葉の表は、文書のすべての値に言葉を持つ', async () => {
   const { BADGE_LABELS, REASON_LABELS } = await import('../../web/apexes-view.js');
   const labels: Record<string, unknown> = REASON_LABELS;
-  for (const reason of ['question', 'decision', 'stalled', 'apex_closed', 'failed', 'live_work', 'grace']) {
+  for (const reason of [
+    'question',
+    'decision',
+    'question_working',
+    'stalled',
+    'apex_closed',
+    'failed',
+    'live_work',
+    'grace',
+  ]) {
     assert.equal(typeof labels[reason], 'string', reason);
   }
   assert.deepEqual(Object.keys(BADGE_LABELS).sort(), [
@@ -431,4 +440,9 @@ test('T-11: 結べない束の行は Run の目的と生きた数・問いの数
       ['Run run-c', '/runs/run-c', ['問い 1'], false],
     ],
   );
+});
+
+test('iss-00091 T-04: 理由 question_working の言葉は「質問あり（作業は継続中）」', async () => {
+  const { REASON_LABELS } = await import('../../web/apexes-view.js');
+  assert.equal((REASON_LABELS as Record<string, unknown>).question_working, '質問あり（作業は継続中）');
 });

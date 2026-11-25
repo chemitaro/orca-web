@@ -30,6 +30,7 @@ export const REASON_LABELS = {
   member_waiting: '配下が入力待ち',
   question: '未回答の質問',
   decision: '未解決の判断',
+  question_working: '質問あり（作業は継続中）',
   stalled: '仕事が止まった',
   apex_closed: '統括のタブが閉じたのに仕事が残る',
   failed: '新しい失敗',

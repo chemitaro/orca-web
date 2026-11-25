@@ -73,8 +73,8 @@ test('T-07：questions は束の Dispatch の attention の input→ask、approv
   });
   assert.ok(item.reasons.includes('grace'), '猶予の中');
   assert.deepEqual(item.questions, [
-    { dispatchId: 'd1', taskTitle: '質問の task', kind: 'ask' },
-    { dispatchId: 'd2', taskTitle: 'あ'.repeat(200), kind: 'gate' },
+    { dispatchId: 'd1', taskTitle: '質問の task', kind: 'ask', working: false },
+    { dispatchId: 'd2', taskTitle: 'あ'.repeat(200), kind: 'gate', working: false },
   ]);
 });
 

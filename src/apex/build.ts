@@ -42,6 +42,7 @@ const REASONS: readonly ApexReason[] = [
   'member_waiting',
   'question',
   'decision',
+  'question_working',
   'stalled',
   'apex_closed',
   'failed',
@@ -74,7 +75,19 @@ const WORKING: ReadonlySet<ApexReason> = new Set([
   'grace',
 ]);
 /** 鮮度が偽の間は memo から引き継ぐ理由（A3〜A6）。 */
-const FRESH_ONLY: ReadonlySet<ApexReason> = new Set(['question', 'decision', 'stalled', 'apex_closed', 'failed']);
+const FRESH_ONLY: ReadonlySet<ApexReason> = new Set([
+  'question',
+  'decision',
+  'question_working',
+  'stalled',
+  'apex_closed',
+  'failed',
+]);
+
+/** 作業者が作業を続けている（`projection.stage.activity` が working）。読めない・知らない値は続けていないとみなす（iss-00091 F-01）。 */
+function keepsWorking(worker: { activity: string | null } | undefined): boolean {
+  return worker?.activity === 'working';
+}
 
 /** 親は「parentPaneKey に一致する、自分でない今あるエージェントがちょうど1つ」のときだけ。 */
 function parents(agents: readonly AgentState[]): Map<string, AgentState | null> {
@@ -203,10 +216,13 @@ function judgeWork(apex: AgentState, members: readonly AgentState[], work: Work,
     else found.add(reason);
   };
   // A3 問い：ask は頂点が動いていない、gate は頂点が monitoring を除く working でない。
+  // 作業を続けている作業者の問いは材料にせず、question_working で示す（iss-00091。A4・A5 は元の asks・gates のまま）。
+  const continuing = (worker: WorkerState) => keepsWorking(work.extras.workers.get(worker.dispatchId));
+  if ([...asks, ...gates].some(continuing)) found.add('question_working');
   const busy = apexMoving && agentWorkingMode(apex) !== 'monitoring';
   for (const [list, reason, blocked] of [
-    [asks, 'question', apexMoving],
-    [gates, 'decision', busy],
+    [asks.filter((worker) => !continuing(worker)), 'question', apexMoving],
+    [gates.filter((worker) => !continuing(worker)), 'decision', busy],
   ] as const) {
     if (blocked) continue;
     for (const worker of list) {
@@ -280,13 +296,15 @@ function questionsOf(
   ] as const) {
     for (const worker of dispatches) {
       const key = `${kind}:${worker.dispatchId}`;
-      if (seen.has(key) || !extras.workers.get(worker.dispatchId)?.attention.includes(category)) continue;
+      const extra = extras.workers.get(worker.dispatchId);
+      if (seen.has(key) || !extra?.attention.includes(category)) continue;
       seen.add(key);
       const title = worker.taskId === null ? null : (tasks.get(worker.taskId)?.title.value ?? null);
       result.push({
         dispatchId: worker.dispatchId,
         taskTitle: title === null ? null : title.slice(0, OBJECTIVE_MAX),
         kind,
+        working: keepsWorking(extra),
       });
     }
   }
