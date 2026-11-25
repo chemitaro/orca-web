@@ -3,8 +3,8 @@ package spec
 goal: "対応のカードが出て、メンバーの許可待ちに同じ枠で答えられ、質問・判断が頂点の下書きになることが、テストで確かめられている。"
 
 steps: {
-	"S-01": {title: "compose=off と下書きの口（D-03、D-04）", text: "対象：`web/embed/agent-frame.js`、新しい `web/embed/draft-receiver.js`、STATIC_FILES、テスト（agent-navigation のテストが新しいファイルを読むなら合わせる）。確かめ：T-01・T-02・T-06", realizes: ["R-02", "R-03", "F-01"], session: "impl"}
-	"S-02": {title: "カードとメンバーの枠（D-01、D-02）", text: "対象：`src/apex/`（D-00 の waitingMembers・questions）、新しい `web/apexes-cards-view.js`（STATIC_FILES に登録）、`web/apexes.js`・`apexes-dom.js`・`style.css`、テスト、README。確かめ：T-03〜T-05・T-07・T-08。実装担当の最後の手順。区切りのレビュー：あり（cp1）", realizes: ["R-01", "R-02", "R-03"], after: ["S-01"], session: "impl"}
+	"S-01": {status: "done", title: "compose=off と下書きの口（D-03、D-04）", text: "対象：`web/embed/agent-frame.js`、新しい `web/embed/draft-receiver.js`、STATIC_FILES、テスト（agent-navigation のテストが新しいファイルを読むなら合わせる）。確かめ：T-01・T-02・T-06", realizes: ["R-02", "R-03", "F-01"], session: "impl"}
+	"S-02": {status: "done", title: "カードとメンバーの枠（D-01、D-02）", text: "対象：`src/apex/`（D-00 の waitingMembers・questions）、新しい `web/apexes-cards-view.js`（STATIC_FILES に登録）、`web/apexes.js`・`apexes-dom.js`・`style.css`、テスト、README。確かめ：T-03〜T-05・T-07・T-08。実装担当の最後の手順。区切りのレビュー：あり（cp1）", realizes: ["R-01", "R-02", "R-03"], after: ["S-01"], session: "impl"}
 }
 
 tests: {
