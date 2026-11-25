@@ -15,3 +15,10 @@ ID: "iss-00092"
 ## Verification
 
 ## Residual Risks / Follow-ups
+
+## レビュー記録
+
+- 仕様のレビュー（spec-reviewer、Opus 5.5）：round-1 で合格（2026-11-26）。sha256：requirement.cue `60e8917c5ce3f9264dcff5217795c2c832f7a1506374d1a53390b104305398ec`、design.cue `ffe36c003832e3245eee201b9c3132759f97a85832c49b8b0bdcb5d1ce3ebaaf`、plan.cue `51a91697da9d54f3f129cbbb311a3cf75607d7396cbedcb905a05bd771172eff`。P2 は実装の依頼書でタスク担当が読み方を決めた（下の逸脱と判断）。
+  - P2（アイコン）：members の agentType を agentId で引く。
+  - P2（並び）：浅い順・新しい順（エージェントは stateStartedAt、Dispatch は createdAt）は出す節を選ぶ優先だけで、出す並びは木の順。8 と「ほか n」は稼働中の節だけを数え、祖先は数えずに足す。
+  - P2（常駐の入れ替え）：マージの後にタスク担当が行う（利用者の依頼 2026-11-25）。
