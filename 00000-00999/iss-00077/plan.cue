@@ -4,12 +4,14 @@ goal: "`/apexes` で頂点を選ぶと同じ画面に会話が出て送れ、見
 
 steps: {
 	"S-01": {
+		status:   "done"
 		title:    "/embed/agent の frame-ancestors に 'self'（D-01）"
 		text:     "対象：`src/server/app.ts`、`test/server/transcript-api.test.ts`・`test/server/app.test.ts`・`test/server/trial-origins.test.ts` の CSP の確かめ（/embed/agent は 'self' を含み、ほかは今のまま）。確かめ：T-01。完了：`npm run lint`、`npm test`、`npm run build`。コミットして次へ"
 		realizes: ["R-03"]
 		session:  "impl"
 	}
 	"S-02": {
+		status:   "done"
 		title:    "見えない間の停止（D-05）と送信の処理中の印（D-04 の agent-frame 側）"
 		text:     "対象：新しい `web/embed/visibility-gate.js` と `test/web/visibility-gate.test.ts`、`web/embed/agent-frame.js`（EventSource を持ち閉じる、状態の読みの予約を止める、処理中の data 属性）、`src/server/app.ts` の STATIC_FILES、`test/web/agent-navigation.test.ts` が新しいファイルを読むなら合わせる、`test/web/agent-page.test.ts` の入口の確かめ。送信の流れ（send-view.js）を変えない。確かめ：T-02、T-03、T-11。完了：lint・test・build。コミットして次へ"
 		realizes: ["R-04", "F-01", "F-02"]
@@ -17,6 +19,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-03": {
+		status:   "done"
 		title:    "2ペイン、選択、枠の作り直し、切り替えの確かめ、幅（D-02〜D-04、D-07）"
 		text:     "対象：`web/apexes.html`、`web/apexes.js`、`web/apexes-view.js`、`web/apexes-dom.js`、`web/style.css`、`test/web/apexes-view.test.ts`、`test/web/apexes-dom.test.ts`、必要なら新しい `test/web/apexes-navigation.test.ts`（既にある iframe の src や location を書き換えないことのソースの確かめ）。確かめ：T-04〜T-06、T-08。完了：lint・test・build。コミットして次へ"
 		realizes: ["R-01", "R-02", "R-06", "F-01"]
@@ -24,6 +27,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-04": {
+		status:   "done"
 		title:    "新着の点と見出しの数（D-06、D-09）"
 		text:     "対象：`web/apexes-view.js`、`web/apexes.js`、`web/apexes-dom.js`、テスト。確かめ：T-07、T-10。完了：lint・test・build。実装担当 impl の最後の手順。止まって HEAD を報告する。区切りのレビュー：あり（cp1、開始のコミット..HEAD）"
 		realizes: ["R-05", "R-08"]
@@ -31,6 +35,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-05": {
+		status:   "done"
 		title:    "AGENTS.md・README と試しの orca-web での確かめ（タスク担当。D-08）"
 		text:     "タスク担当が行う。AGENTS.md の文言と地図、README を直す。別のポートの試しの orca-web（送信は無効の既定）で、ブラウザで `/apexes` を開き、頂点を選んで会話が出ること、幅 390px の1列、別の頂点への切り替えで iframe が1つのままであることを確かめ、report.md に記録する（題名・会話・パスを書かない）。確かめ：T-09。完了：lint・test・build が通り、report.md に結論がある"
 		realizes: ["R-07"]
