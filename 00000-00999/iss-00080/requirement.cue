@@ -39,8 +39,8 @@ requirements: {
 		title: "頂点のチームの対応をカードで出す"
 		text: """
 			カードの種類（その頂点の文書の理由と束から）：
-			- メンバーの許可待ち・入力待ち（理由 member_blocked・member_waiting のメンバーごと）：「〈メンバーの題名〉が許可待ち／入力待ち」と［見て答える］。
-			- メンバーの質問・判断（束の Dispatch の attention input・approval ごと）：「〈task の題名〉の質問（ask）／判断（gate）」と［頂点に伝える］。
+			- メンバーの許可待ち・入力待ち（頂点の文書の `waitingMembers`。理由 member_blocked・member_waiting と同じ条件（端末のタブは attached だけ、20 秒の猶予の外）で、当たったメンバーごと）：「〈メンバーの題名〉が許可待ち／入力待ち」と［見て答える］。
+			- メンバーの質問・判断（頂点の文書の `questions`。束の Dispatch の attention input・approval ごとに `{ dispatchId, taskTitle（200 字まで）, kind: 'ask'|'gate' }`。この Issue が `src/apex/` の文書に足す）：「〈task の題名〉の質問（ask）／判断（gate）」と［頂点に伝える］。
 			- 頂点自身の許可待ち・入力待ち（apex_blocked・apex_waiting）：「会話のカードで答えてください」だけ（答える操作は会話の中の既存のカードにある）。
 			カードは決めた順（頂点、メンバーの許可待ち、質問・判断）で、なければ欄を出さない。
 			"""
@@ -51,21 +51,23 @@ requirements: {
 	}
 	"R-02": {
 		title: "メンバーの許可待ちに、同じ枠でそのメンバーの画面を開いて答える"
-		text:  "［見て答える］を押すと、右のペインの iframe を作り直して `/embed/agent?id=<メンバー>&compose=off` を開き、見出しに「メンバー〈題名〉（答えるだけ）［頂点に戻る］」の帯を出す。`compose=off` の `/embed/agent` は送る欄を出さず、質問・承認のカードと会話はそのまま出す（答えは既存の経路）。［頂点に戻る］で頂点の枠に作り直す。切り替えの前の確かめ（iss-00077 の data-unsettled）は同じく効く。"
+		text:  "［見て答える］を押すと、右のペインの iframe を作り直して `/embed/agent?id=<メンバー>&compose=off` を開き、見出しに「メンバー〈題名〉（答えるだけ）［頂点に戻る］」の帯を出す。`compose=off` の `/embed/agent` は送る欄の要素を隠すだけで、送信の状態の読み（`/api/send/status`。質問・承認のカードが答えられるかを決める）は今のとおり続け、質問・承認のカードと会話はそのまま出す（答えは既存の経路）。［頂点に戻る］で頂点の枠に作り直す。切り替えの前の確かめ（iss-00077 の data-unsettled）は同じく効く。"
 		acceptance: [
 			"［見て答える］で、枠がそのメンバーの `/embed/agent?id=…&compose=off` になり、送る欄がない",
-			"`compose=off` でも承認のカードの答えのボタンは今のとおり動く（既存のテストが通る）",
+			"`compose=off` でも `/api/send/status` を読み、承認のカードの答えのボタンが押せる",
 		]
 	}
 	"R-03": {
 		title: "質問・判断は、頂点の入力欄に決めた型の下書きを入れるだけ"
 		text: """
-			［頂点に伝える］を押すと、親が頂点の iframe に postMessage で `{ type: 'orca-web:draft', text }` を送る。text は決めた型：「メンバー〈task の題名〉の質問（ask）に答えてください。」または「…の判断（gate）を決めてください。」に、改行と `（Dispatch <dispatchId>）` を付けたもの。
-			`/embed/agent` は、`event.origin` が自分のオリジンで、`event.source` が `window.parent` で、送る欄が出ていて（compose=off でない）、送信の処理中でなく、入力欄が空のときだけ、入力欄にその文を入れる。自動では送らない。空でなければ「入力欄に書きかけがあります」と親に返さず、何もしない（親は押した後に何も起きないことを帯で示さない。入力欄はそのまま）。
+			［頂点に伝える］を押すと、右のペインが頂点の枠でなければ（メンバーの枠を出していれば）、頂点の枠に作り直す（iss-00077 の切り替えの確かめを通す）。親は頂点の iframe から準備の知らせ `{ type: 'orca-web:ready' }`（受け口を登録し、送る欄の状態が読めた後に1回）を受けてから、postMessage で `{ type: 'orca-web:draft', text }` を送る。10 秒以内に準備の知らせが来なければ送らず、帯「下書きを入れられませんでした」を出す。
+			text は決めた型：「メンバー〈task の題名〉の質問（ask）に答えてください。」または「…の判断（gate）を決めてください。」に、改行と `（Dispatch <dispatchId>）` を付けたもの。
+			`/embed/agent` は、`event.origin` が自分のオリジンで、`event.source` が `window.parent` で、送る欄が出ていて（compose=off でない）、送る欄の phase が `compose` か `changed` で（disabled・sending・checking・unknown でない）、入力欄が空のときだけ、入力欄にその文を入れる（自動では送らない）。結果を `{ type: 'orca-web:draft-result', ok, reason }`（reason は not_empty・busy・disabled・compose_off）で親に返す。親は ok でなければ帯で理由を示す。
 			"""
 		acceptance: [
 			"［頂点に伝える］で、頂点の入力欄に決めた型の文が入り、送信の呼び出しは0回",
-			"入力欄に書きかけがあれば上書きしない",
+			"入力欄に書きかけがあれば上書きせず、親に not_empty が返り帯が出る",
+			"メンバーの枠を出している間に［頂点に伝える］を押すと、頂点の枠に戻り、準備の知らせの後に下書きが入る",
 			"別のオリジンや親でない窓からの message は無視する",
 		]
 	}

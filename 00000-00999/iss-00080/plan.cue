@@ -3,15 +3,18 @@ package spec
 goal: "対応のカードが出て、メンバーの許可待ちに同じ枠で答えられ、質問・判断が頂点の下書きになることが、テストで確かめられている。"
 
 steps: {
-	"S-01": {title: "compose=off と下書きの口（D-03、D-04）", text: "対象：`web/embed/agent-frame.js`、新しい `web/embed/draft-receiver.js`、STATIC_FILES、テスト（agent-navigation のテストが新しいファイルを読むなら合わせる）。確かめ：T-01・T-02", realizes: ["R-02", "R-03", "F-01"], session: "impl"}
-	"S-02": {title: "カードとメンバーの枠（D-01、D-02）", text: "対象：新しい `web/apexes-cards-view.js`、`web/apexes.js`・`apexes-dom.js`・`style.css`、必要なら `src/apex/` の文書に Dispatch ごとの attention と題名、テスト、README。確かめ：T-03〜T-05。実装担当の最後の手順。区切りのレビュー：あり（cp1）", realizes: ["R-01", "R-02", "R-03"], after: ["S-01"], session: "impl"}
+	"S-01": {title: "compose=off と下書きの口（D-03、D-04）", text: "対象：`web/embed/agent-frame.js`、新しい `web/embed/draft-receiver.js`、STATIC_FILES、テスト（agent-navigation のテストが新しいファイルを読むなら合わせる）。確かめ：T-01・T-02・T-06", realizes: ["R-02", "R-03", "F-01"], session: "impl"}
+	"S-02": {title: "カードとメンバーの枠（D-01、D-02）", text: "対象：`src/apex/`（D-00 の waitingMembers・questions）、新しい `web/apexes-cards-view.js`（STATIC_FILES に登録）、`web/apexes.js`・`apexes-dom.js`・`style.css`、テスト、README。確かめ：T-03〜T-05・T-07・T-08。実装担当の最後の手順。区切りのレビュー：あり（cp1）", realizes: ["R-01", "R-02", "R-03"], after: ["S-01"], session: "impl"}
 }
 
 tests: {
-	"T-01": {title: "compose=off：送る欄の要素が hidden で pollSend が始まらない。承認・質問のカードの答えの既存のテストが通る", verifies: ["R-02", "F-01"]}
-	"T-02": {title: "acceptDraft：同じオリジン・親から・composeOn・phase が idle か ready・入力欄が空のときだけ text を返す。別のオリジン・親でない source・compose off・sending・書きかけ、のどれでも null。返しても送信の関数は呼ばない", verifies: ["R-03", "F-01"]}
+	"T-01": {title: "compose=off：送る欄の要素が hidden で、/api/send/status は今のとおり読まれ（注入した fetch で数える）、承認のカードの view が status を受けて押せる状態になる", verifies: ["R-02", "F-01"]}
+	"T-06": {title: "ready と結果：agent-frame（ソースの確かめか注入）が受け口の登録と最初の状態の読みの後に orca-web:ready を1回、受けた下書きごとに orca-web:draft-result を返す。createDraftSender が ready の前は送らず、10 秒で帯、not_empty で帯", verifies: ["R-03"]}
+	"T-07": {title: "文書の追加：waitingMembers は attached でない端末のタブと猶予の中のメンバーを含まず、member_blocked の判定と一致する。questions は attention input→ask、approval→gate で、問いのない頂点では空", verifies: ["R-01"]}
+	"T-08": {title: "配るファイル：/apexes-cards-view.js と /embed/draft-receiver.js が STATIC_FILES から配られる（200）", verifies: ["R-01", "R-03"]}
+	"T-02": {title: "acceptDraft：同じオリジン・親から・composeOn・phase が compose か changed・入力欄が空のときだけ ok と text（改行は残し、ほかの制御文字は除く）。別のオリジン・親でない source・compose off・disabled・sending・checking・unknown・書きかけ・1,000 字超は ok 偽と理由。返しても送信の関数は呼ばない", verifies: ["R-03", "F-01"]}
 	"T-03": {title: "カード：member_blocked のメンバー → 見て答える、attention input → 質問、approval → 判断、apex_waiting → 会話へ。対応がなければ空", verifies: ["R-01"]}
-	"T-04": {title: "見て答える：枠が `/embed/agent?id=<メンバー>&compose=off` に作り直され、帯と頂点に戻るが出る。頂点に戻るで頂点の枠に戻る", verifies: ["R-02"]}
+	"T-04": {title: "見て答える：枠が `/embed/agent?id=<メンバー>&compose=off` に作り直され、帯と頂点に戻るが出る。頂点に戻るで頂点の枠に戻る。メンバーの枠の間の［頂点に伝える］は頂点の枠に戻してから ready を待って送る", verifies: ["R-02", "R-03"]}
 	"T-05": {title: "頂点に伝える：buildDraftText が決めた型の文と Dispatch の id を作り、postMessage の宛先のオリジンが自分のオリジン", verifies: ["R-03"]}
 }
 

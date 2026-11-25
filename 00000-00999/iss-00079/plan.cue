@@ -8,7 +8,7 @@ steps: {
 }
 
 tests: {
-	"T-01": {title: "節：タブのある作業者と同じ Dispatch は1節、閉じた子の Dispatch は親の task の最後の Dispatch の節の下、親の見えない節は頂点の直下、深さと並び（createdAt、同じなら worker-list の並び）、status の写し方（blocked→waiting、sleeping→done、タブのない生きた Dispatch→live）、題名は 200 字まで", verifies: ["R-01"]}
+	"T-01": {title: "節：タブのある作業者と同じ Dispatch は1節、閉じた子の Dispatch は親の task の最後の Dispatch の節の下、親の見えない節は頂点の直下、深さと並び（createdAt、同じなら worker-list の並び）、status の写し方（blocked→waiting、sleeping→done、タブのない生きた Dispatch→live）、題名は 200 字まで。Dispatch の節は completedAt を持つ", verifies: ["R-01"]}
 	"T-02": {title: "帯の選び：working・live・waiting・unknown・completedAt が 24 時間以内の failed とその祖先は出し、ほかは親ごとに「完了 n」。要約は作業中＝working＋live、不明は1以上のときだけ。120 節の束で出す節が上限（例 30）を超えない。履歴の帯は全 Dispatch を createdAt の順", verifies: ["R-02"]}
 	"T-03": {title: "dom：innerHTML を使わず、チームのない頂点では帯がない。エージェントの節のリンクは _blank・noopener noreferrer", verifies: ["R-02"]}
 }

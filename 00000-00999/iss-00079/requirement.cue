@@ -23,7 +23,7 @@ requirements: {
 	"R-01": {
 		title: "頂点ごとのチームの節を文書に出す"
 		text: """
-			各頂点の `team`：節 `{ key, kind: 'agent'|'dispatch', agentId, dispatchId, parentKey, depth, title（task の題名かエージェントの題名、200 字まで）, status: 'working'|'waiting'|'done'|'failed'|'live'|'unknown', createdAt }`。エージェントと Dispatch が同じなら1節（agent）。親は、エージェントは parentId、Dispatch は task の parent_id の task の Dispatch の節、なければ頂点。並びは深さ優先、兄弟は createdAt の古い順（同じなら worker-list の並び）。
+			各頂点の `team`：節 `{ key, kind: 'agent'|'dispatch', agentId, dispatchId, parentKey, depth, title（task の題名かエージェントの題名、200 字まで）, status: 'working'|'waiting'|'done'|'failed'|'live'|'unknown', createdAt, completedAt（task の completedAt。エージェントだけの節は null）, stateStartedAt（エージェントの節だけ、ほかは null） }`。エージェントと Dispatch が同じなら1節（agent）。親は、エージェントは parentId、Dispatch は task の parent_id の task の Dispatch の節、なければ頂点。並びは深さ優先、兄弟は createdAt の古い順（同じなら worker-list の並び）。
 			status の写し方：エージェントは agentMark で working→working、blocked・waiting→waiting、done・sleeping→done、unknown→unknown。エージェントに結ばれない Dispatch は workerState で、生きていれば live、failed→failed、ほかの終わりは done。
 			createdAt：Dispatch はその task の createdAt。エージェントの節は、Dispatch に結ばれていればその task の createdAt、なければ sessionStartedAt、なければ stateStartedAt。失敗の新しさは task の completedAt（なければ createdAt）で測る。
 			親：Dispatch の親は、task の parent_id の task の Dispatch のうち worker-list で最後のもの（再試行は最後）の節。iss-00078 で束から頂点のメンバーにした親の見えないエージェントも同じ規則で、親の task の節がなければ頂点の直下。エージェントの parentId がチームにない節も頂点の直下。
