@@ -151,6 +151,9 @@ const STATIC_FILES: Readonly<
   '/apexes.js': { file: 'apexes.js', type: 'text/javascript; charset=utf-8' },
   '/apexes-view.js': { file: 'apexes-view.js', type: 'text/javascript; charset=utf-8' },
   '/apexes-dom.js': { file: 'apexes-dom.js', type: 'text/javascript; charset=utf-8' },
+  // タブの印（iss-00081 D-01）。対応が必要があれば /apexes が印付きに差し替える。
+  '/favicon.svg': { file: 'favicon.svg', type: 'image/svg+xml' },
+  '/favicon-alert.svg': { file: 'favicon-alert.svg', type: 'image/svg+xml' },
   '/settings': { file: 'settings.html', type: 'text/html; charset=utf-8', page: 'index' },
   '/main.js': { file: 'main.js', type: 'text/javascript; charset=utf-8' },
   '/view.js': { file: 'view.js', type: 'text/javascript; charset=utf-8' },

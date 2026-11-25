@@ -5,6 +5,7 @@ import type { ApexListDocument } from '../../src/apex/model.ts';
 import type { AgentState, StateDocument } from '../../src/state/model.ts';
 import {
   apexesApiPath,
+  apexesFavicon,
   apexesTitle,
   buildPane as buildPaneView,
   buildApexesView as buildView,
@@ -113,6 +114,16 @@ test('T-09: 題名は対応が必要の数を先頭に出す', () => {
   const two = documentOf([agent('a', { state: fact('waiting') }), agent('b', { state: fact('blocked') })]);
   assert.equal(buildApexesView(two, { now: NOW }).title, '(2) 指揮 — orca-web');
   assert.equal(buildApexesView(documentOf([agent('a')]), { now: NOW }).title, '指揮 — orca-web');
+});
+
+test('T-01: favicon の href は対応が必要が0なら普通、1以上なら印付き。描く内容にも同じ値が入る', () => {
+  assert.equal(apexesFavicon(0), '/favicon.svg');
+  assert.equal(apexesFavicon(1), '/favicon-alert.svg');
+  assert.equal(apexesFavicon(3), '/favicon-alert.svg');
+  assert.equal(apexesFavicon(undefined), '/favicon.svg');
+  const two = documentOf([agent('a', { state: fact('waiting') }), agent('b', { state: fact('blocked') })]);
+  assert.equal(buildApexesView(two, { now: NOW }).favicon, '/favicon-alert.svg');
+  assert.equal(buildApexesView(documentOf([agent('a')]), { now: NOW }).favicon, '/favicon.svg');
 });
 
 test('API の道は project を符号にして付ける', () => {

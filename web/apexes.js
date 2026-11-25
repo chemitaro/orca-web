@@ -18,6 +18,7 @@ import {
 } from './apexes-dom.js';
 import {
   apexesApiPath,
+  apexesFavicon,
   apexesTitle,
   apexFromSearch,
   buildApexesView,
@@ -42,6 +43,7 @@ const els = {
   sections: /** @type {HTMLElement} */ (document.querySelector('#sections')),
   paneHead: /** @type {HTMLElement} */ (document.querySelector('#pane-head')),
   paneFrame: /** @type {HTMLElement} */ (document.querySelector('#pane-frame')),
+  favicon: /** @type {HTMLLinkElement | null} */ (document.querySelector('#favicon')),
 };
 
 const project = projectFromSearch(location.search);
@@ -117,16 +119,23 @@ function renderPane() {
   mountAgentFrame(els.paneFrame, pane.header.id);
 }
 
+/** favicon の href を替える（同じ値なら触らない）。 */
+function setFavicon(href) {
+  if (els.favicon && els.favicon.getAttribute('href') !== href) els.favicon.setAttribute('href', href);
+}
+
 function render() {
   renderPane();
   if (!lastDoc) {
     const text = lastError ? `orca-web に接続できない（${lastError}）` : '読み込み中…';
     els.freshness.replaceChildren(renderFreshness(document, [{ text, kind: lastError ? 'bad' : 'info' }]));
     document.title = apexesTitle(0);
+    setFavicon(apexesFavicon(0));
     return;
   }
   const view = buildApexesView(lastDoc, { now: Date.now(), error: lastError, selectedId: selection.id, seen: seenMap });
   document.title = view.title;
+  setFavicon(view.favicon);
   els.counts.replaceChildren(renderHeadline(document, view.headline));
   els.freshness.replaceChildren(renderFreshness(document, view.freshness));
   // 畳んだ段を利用者が開いていたら、描き直しても開いたままにする。

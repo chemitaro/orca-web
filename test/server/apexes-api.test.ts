@@ -170,6 +170,19 @@ test('R-05: /apexes を index と同じ CSP で配り、部品の JS を配り�
   });
 });
 
+test('T-01: favicon の2つの SVG を image/svg+xml で配り、/apexes が普通の favicon を参照する', async () => {
+  await withApp({}, async (send) => {
+    for (const path of ['/favicon.svg', '/favicon-alert.svg']) {
+      const res = await send(path);
+      assert.equal(res.status, 200, path);
+      assert.equal(res.headers['content-type'], 'image/svg+xml', path);
+      assert.match(res.text, /^<svg[\s\S]*<\/svg>\s*$/, path);
+      assert.ok(!/<script/i.test(res.text), path);
+    }
+    assert.match((await send('/apexes')).text, /<link rel="icon" id="favicon" href="\/favicon\.svg"/);
+  });
+});
+
 test('T-11: snapshotWithExtras があれば、内部の値で束を結び、対応表と memo を要求の間で保つ', async () => {
   const chat = agent('chat', { kind: 'chat-tab', paneKey: 'pane-chat', terminal: fact(null), state: fact('done') });
   const kid = tabbedWorker('kid', 'd1', 't-1', { parentPaneKey: fact('pane-chat') });

@@ -79,6 +79,8 @@ const UNSEEN_GROUPS = new Set(['done_recent', 'done_older']);
 const DETAIL_PREFIX = '/embed/agent?id=';
 const RUN_PREFIX = '/runs/';
 const BASE_TITLE = '指揮 — orca-web';
+const FAVICON_PLAIN = '/favicon.svg';
+const FAVICON_ALERT = '/favicon-alert.svg';
 
 const str = (value) => (typeof value === 'string' && value !== '' ? value : null);
 const num = (value) => (Number.isInteger(value) && value >= 0 ? value : 0);
@@ -88,6 +90,11 @@ const list = (value) => (Array.isArray(value) ? value : []);
 export function apexesTitle(needsAction) {
   const n = num(needsAction);
   return n > 0 ? `(${n}) ${BASE_TITLE}` : BASE_TITLE;
+}
+
+/** タブの favicon（iss-00081 D-01）。対応が必要が1つ以上なら印付きの SVG。 */
+export function apexesFavicon(needsAction) {
+  return num(needsAction) > 0 ? FAVICON_ALERT : FAVICON_PLAIN;
 }
 
 /** 詳細とチャットの画面への道。 */
@@ -262,6 +269,7 @@ export function buildApexesView(doc, options) {
   if (unseen > 0) headline.push({ key: 'unseen', text: `${UNSEEN_LABEL} ${unseen}`, emphasis: false });
   return {
     title: apexesTitle(num(counts.needs_action)),
+    favicon: apexesFavicon(num(counts.needs_action)),
     headline,
     freshness: freshnessLines(doc, options.error ?? null),
     sections,
