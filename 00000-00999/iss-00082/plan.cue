@@ -3,9 +3,9 @@ package spec
 goal: "`/` が指揮の画面になり、受け箱が `/inbox` で動き、Run の木の根が頂点の結びで決まり、要望の下書きがあることが、テストと試しの orca-web で確かめられている。"
 
 steps: {
-	"S-01": {title: "道とリンク（D-01、D-02）", text: "対象：`src/server/app.ts`、`web/*.html` の見出し、`web/runs-view.js`・`web/apexes-view.js`、`test/server/`・`test/web/` の道とリンクのテスト。確かめ：T-01〜T-03。コミットして次へ", realizes: ["R-01", "R-02", "F-01"], session: "impl"}
-	"S-02": {title: "Run の木の根（D-03）", text: "対象：`src/runs/links.ts`・`src/runs/tree.ts`（`buildRunTree`・`buildRunList` の引数）、`src/server/app.ts`（`/api/runs/<id>/tree` と `/api/runs` に内部の値と対応表を渡す）、`test/runs/`・`test/server/`。確かめ：T-04・T-05・T-07。実装担当の最後の手順。区切りのレビュー：あり（cp1）", realizes: ["R-03"], after: ["S-01"], session: "impl"}
-	"S-03": {title: "README・AGENTS.md、要望の下書き、試しの orca-web（タスク担当。D-04）", text: "タスク担当が行う。README・AGENTS.md の道と画面の節を直す。要望の下書きを report.md に書く。試しの orca-web で `/`・`/inbox`・`/apexes`・`/runs/<id>` を開き、木の根が結べた Run の数を前後で比べて report.md に記録する。確かめ：T-06", realizes: ["R-04"], after: ["S-02"], session: "doc"}
+	"S-01": {status: "done", title: "道とリンク（D-01、D-02）", text: "対象：`src/server/app.ts`、`web/*.html` の見出し、`web/runs-view.js`・`web/apexes-view.js`、`test/server/`・`test/web/` の道とリンクのテスト。確かめ：T-01〜T-03。コミットして次へ", realizes: ["R-01", "R-02", "F-01"], session: "impl"}
+	"S-02": {status: "done", title: "Run の木の根（D-03）", text: "対象：`src/runs/links.ts`・`src/runs/tree.ts`（`buildRunTree`・`buildRunList` の引数）、`src/server/app.ts`（`/api/runs/<id>/tree` と `/api/runs` に内部の値と対応表を渡す）、`test/runs/`・`test/server/`。確かめ：T-04・T-05・T-07。実装担当の最後の手順。区切りのレビュー：あり（cp1）", realizes: ["R-03"], after: ["S-01"], session: "impl"}
+	"S-03": {status: "done", title: "README・AGENTS.md、要望の下書き、試しの orca-web（タスク担当。D-04）", text: "タスク担当が行う。README・AGENTS.md の道と画面の節を直す。要望の下書きを report.md に書く。試しの orca-web で `/`・`/inbox`・`/apexes`・`/runs/<id>` を開き、木の根が結べた Run の数を前後で比べて report.md に記録する。確かめ：T-06", realizes: ["R-04"], after: ["S-02"], session: "doc"}
 }
 
 tests: {
