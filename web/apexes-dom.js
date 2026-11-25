@@ -39,6 +39,28 @@ export function newTabLink(doc, href, text, className) {
   return a;
 }
 
+/** 稼働中の内訳の木（iss-00092 D-02）。選ぶボタンの中に置くので span だけで組む。字下げは --depth。 */
+export function renderLiveTeam(doc, live) {
+  const box = make(doc, 'span', null, 'apex-live');
+  for (const row of live.rows) {
+    const node = make(doc, 'span', null, row.dim ? 'apex-live-node apex-live-node--dim' : 'apex-live-node');
+    node.dataset.liveKey = row.key;
+    node.style.setProperty('--depth', String(row.depth));
+    const kind = make(doc, 'span', null, 'apex-live-kind');
+    if (row.kind === 'agent') kind.append(appIcon(doc, row.icon, undefined, AGENT_ICONS));
+    else kind.append(make(doc, 'span', null, 'apex-live-dot'));
+    node.append(
+      kind,
+      make(doc, 'span', row.title, 'apex-live-title'),
+      make(doc, 'span', row.statusLabel, `apex-live-mark apex-live-mark--${row.status}`),
+    );
+    if (row.elapsed) node.append(make(doc, 'span', row.elapsed, 'apex-live-elapsed'));
+    box.append(node);
+  }
+  if (live.moreLabel) box.append(make(doc, 'span', live.moreLabel, 'apex-live-more'));
+  return box;
+}
+
 /**
  * 1つの行。頂点の行は、押すと右のペインに出す選ぶボタン（data-apex）と、小さな「新しいタブで開く」のリンク。
  * 結べない行は、行の全体が /embed/agent?id=（結べない束は /runs/<id>）を新しいタブで開くリンク。
@@ -92,6 +114,7 @@ export function renderRow(doc, row) {
     for (const text of badges) chips.append(make(doc, 'span', text, 'chip badge'));
     a.append(chips);
   }
+  if (row.live) a.append(renderLiveTeam(doc, row.live));
   li.append(a);
   if (row.selectable) li.append(newTabLink(doc, row.href, '新しいタブで開く', 'apex-newtab'));
   return li;

@@ -822,6 +822,74 @@ a {
   padding-left: 70px;
 }
 
+/* 頂点の行の下の稼働中の内訳の木（iss-00092）。字下げは --depth。 */
+.apexes-page .apex-live {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.apexes-page .apex-live-node {
+  --indent: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding-left: calc((var(--depth, 1) - 1) * var(--indent));
+}
+
+.apexes-page .apex-live-node--dim {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.apexes-page .apex-live-kind {
+  flex: none;
+  display: inline-flex;
+}
+
+.apexes-page .apex-live-kind svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.apexes-page .apex-live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 3px;
+  border-radius: 1px;
+  background: var(--muted);
+}
+
+.apexes-page .apex-live-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apexes-page .apex-live-mark,
+.apexes-page .apex-live-elapsed {
+  flex: none;
+  color: var(--muted);
+}
+
+.apexes-page .apex-live-mark--working,
+.apexes-page .apex-live-mark--live {
+  color: var(--ok);
+}
+
+.apexes-page .apex-live-mark--waiting {
+  color: var(--warn);
+}
+
+.apexes-page .apex-live-more {
+  color: var(--muted);
+}
+
 @media (min-width: 900px) {
   .apexes-page .apex-layout {
     grid-template-columns: 320px minmax(0, 1fr);
