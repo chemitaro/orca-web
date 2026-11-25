@@ -171,3 +171,36 @@ test('T-01: エージェントの節の下に孫のエージェントが深さ 2
     { key: 'agent:impl', kind: 'agent', parentKey: 'agent:lead', depth: 2, status: 'working' },
   ]);
 });
+
+test('FQG-01: 束から昇格した親の見えない作業者は、親の task の最後の Dispatch の節の下に出る（タブを閉じたタスク担当）', () => {
+  const o = orchestration({
+    tasks: [
+      { id: 't-root', paneKey: 'pane-c', createdAt: '2026-01-02T09:00:00.000Z' },
+      { id: 't-owner', parent: 't-root', createdAt: '2026-01-02T09:10:00.000Z' },
+      { id: 't-impl', parent: 't-owner', createdAt: '2026-01-02T09:20:00.000Z' },
+    ],
+    dispatches: [
+      { id: 'd-owner', task: 't-owner', state: 'working' },
+      { id: 'd-impl', task: 't-impl', state: 'working' },
+    ],
+  });
+  const impl = tabbedWorker('impl', 'd-impl', 't-impl', { parentPaneKey: fact('pane-owner-closed') });
+  assert.deepEqual(shape(team([coordinator(), impl], o)), [
+    { key: 'dispatch:d-owner', kind: 'dispatch', parentKey: null, depth: 1, status: 'live' },
+    { key: 'agent:impl', kind: 'agent', parentKey: 'dispatch:d-owner', depth: 2, status: 'working' },
+  ]);
+});
+
+test('FQG-01: 昇格した作業者の親の task に Dispatch がなければ頂点の直下', () => {
+  const o = orchestration({
+    tasks: [
+      { id: 't-root', paneKey: 'pane-c' },
+      { id: 't-impl', parent: 't-root' },
+    ],
+    dispatches: [{ id: 'd-impl', task: 't-impl', state: 'working' }],
+  });
+  const impl = tabbedWorker('impl', 'd-impl', 't-impl', { parentPaneKey: fact('gone') });
+  assert.deepEqual(shape(team([coordinator(), impl], o)), [
+    { key: 'agent:impl', kind: 'agent', parentKey: null, depth: 1, status: 'working' },
+  ]);
+});

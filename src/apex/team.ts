@@ -10,6 +10,8 @@ export interface TeamInput {
   apexId: string;
   /** 頂点のメンバー（生きた辺と束で結んだエージェント）。 */
   members: readonly LinkedMember[];
+  /** 束で頂点のメンバーにした（生きた辺で結べなかった）エージェントの id。親は task の親の Dispatch の節で決める。 */
+  promoted: ReadonlySet<string>;
   /** 頂点に結んだ Dispatch（worker-list の並び）。 */
   dispatches: readonly WorkerState[];
   /** 状態の文書の worker-list（親の task の最後の Dispatch を探す）。 */
@@ -54,7 +56,7 @@ interface Draft {
 }
 
 export function buildTeam(input: TeamInput): ApexTeamNode[] {
-  const { apexId, members, dispatches, workers, tasks } = input;
+  const { apexId, members, promoted, dispatches, workers, tasks } = input;
   const workerIndex = new Map(workers.map((worker, index) => [worker.dispatchId, index]));
   const agentKeyOfDispatch = new Map<string, string>();
   const drafts = new Map<string, Draft>();
@@ -78,7 +80,7 @@ export function buildTeam(input: TeamInput): ApexTeamNode[] {
         completedAt: dispatchId === null ? null : (task?.completedAt.value ?? null),
         stateStartedAt: agent.stateStartedAt.value,
       },
-      parent: parentId === apexId ? null : `agent:${parentId}`,
+      parent: promoted.has(agent.id) ? null : parentId === apexId ? null : `agent:${parentId}`,
       order: dispatchId === null ? workers.length + index : (workerIndex.get(dispatchId) ?? workers.length + index),
     });
   }
@@ -90,6 +92,13 @@ export function buildTeam(input: TeamInput): ApexTeamNode[] {
     const last = workers.filter((worker) => worker.taskId === parentTask).at(-1);
     return last === undefined ? null : keyOfDispatch(last.dispatchId);
   };
+
+  // 束で昇格したエージェントは Dispatch と同じ規則：task の parent_id の task の最後の Dispatch の節、なければ頂点の直下。
+  for (const { agent } of members) {
+    if (!promoted.has(agent.id)) continue;
+    const draft = drafts.get(`agent:${agent.id}`);
+    if (draft) draft.parent = parentOfTask(agent.worker?.taskId ?? null);
+  }
 
   for (const worker of dispatches) {
     if (agentKeyOfDispatch.has(worker.dispatchId)) continue;

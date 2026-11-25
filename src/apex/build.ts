@@ -481,6 +481,7 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
       team: buildTeam({
         apexId: agent.id,
         members: team,
+        promoted: links.promoted,
         dispatches: links.dispatches.get(agent.id) ?? [],
         workers: state.workers,
         tasks,
