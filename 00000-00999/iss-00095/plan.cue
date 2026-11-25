@@ -3,7 +3,7 @@ package spec
 goal: "プロセスのない Chat のタブが眠っているに、プロセスがあって状態の分からない頂点が不明の段に入り、作業中の段には動いているものだけが並ぶことがテストと常駐の画面で確かめられている。"
 
 steps: {
-	"S-01": {title: "眠っている・不明の判定と段、画面（D-01〜D-03）", text: "対象：`src/apex/build.ts`・`model.ts`、`web/apexes-view.js`、テスト（既存の unverified と sleeping のテストを新しい決まりに合わせる）、README・AGENTS.md の該当の文。確かめ：T-01〜T-04。完了：`npm run lint`、`npm test`、`npm run build`。実装担当の最後の手順", realizes: ["R-01", "R-02", "R-03"], session: "impl"}
+	"S-01": {status: "done", title: "眠っている・不明の判定と段、画面（D-01〜D-03）", text: "対象：`src/apex/build.ts`・`model.ts`、`web/apexes-view.js`、テスト（既存の unverified と sleeping のテストを新しい決まりに合わせる）、README・AGENTS.md の該当の文。確かめ：T-01〜T-04。完了：`npm run lint`、`npm test`、`npm run build`。実装担当の最後の手順", realizes: ["R-01", "R-02", "R-03"], session: "impl"}
 }
 
 tests: {
