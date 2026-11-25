@@ -435,7 +435,7 @@ a {
   }
 }
 
-/* 指揮の画面（/apexes）。行の全体が新しいタブで開くリンク。 */
+/* 指揮の画面（/apexes）。頂点の行は右のペインに出す選ぶボタンと「新しいタブで開く」、結べない行は新しいタブで開くリンク。 */
 .apexes-page .apex-counts {
   margin: 0;
   display: flex;
@@ -452,6 +452,29 @@ a {
   display: block;
   color: inherit;
   text-decoration: none;
+}
+
+.apexes-page .apex-select {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.apexes-page .apex--selected {
+  border-color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--fg);
+}
+
+.apexes-page .apex-newtab {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .apexes-page .apex-head {
@@ -501,6 +524,7 @@ a {
 .apexes-page .apex-title {
   font-weight: 600;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .apexes-page .apex-link:hover .apex-title,
@@ -520,4 +544,117 @@ a {
 
 .apexes-page .empty {
   color: var(--muted);
+}
+
+/* 指揮の画面の2ペイン（iss-00077 D-07）。900px 以上は一覧 320px と右のペイン。900px 未満は1列で、
+   選んでいなければ一覧だけ、選んでいれば（body.apexes--selected）右のペインだけを出し、「← 一覧」で戻る。 */
+.apexes-page .bar > *,
+.apexes-page .links a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.apexes-page .apex-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.apexes-page .apex-list {
+  min-width: 0;
+}
+
+.apexes-page .apex-list .items {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.apexes-page .apex-pane {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.apexes-page .apex-pane-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+
+.apexes-page .apex-pane-title {
+  flex: 1 1 auto;
+}
+
+.apexes-page .apex-pane-open {
+  margin-left: auto;
+}
+
+.apexes-page .apex-back {
+  font: inherit;
+}
+
+.apexes-page .apex-pane-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+.apexes-page .apex-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.apexes-page .apex-guide {
+  margin: 16px;
+  color: var(--muted);
+}
+
+@media (min-width: 900px) {
+  .apexes-page .apex-layout {
+    grid-template-columns: 320px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .apexes-page .apex-pane {
+    position: sticky;
+    top: 16px;
+    height: calc(100dvh - 32px);
+  }
+
+  .apexes-page .apex-back {
+    display: none;
+  }
+}
+
+@media (max-width: 899.98px) {
+  body.apexes-page:not(.apexes--selected) .apex-pane {
+    display: none;
+  }
+
+  body.apexes-page.apexes--selected .apex-list,
+  body.apexes-page.apexes--selected > header {
+    display: none;
+  }
+
+  body.apexes-page.apexes--selected .apex-pane {
+    height: calc(100dvh - 32px);
+  }
+}
+
+@media (max-width: 390px) {
+  body.apexes-page.apexes--selected .apex-pane {
+    height: calc(100dvh - 24px);
+  }
+
+  .apexes-page .apex-pane-open {
+    display: none;
+  }
 }

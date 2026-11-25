@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { buildApexList } from '../../src/apex/build.ts';
-import { renderHeadline, renderSection, startApexPolling } from '../../web/apexes-dom.js';
+import {
+  clearAgentFrame,
+  mayLeaveFrame,
+  mountAgentFrame,
+  renderHeadline,
+  renderPaneHead,
+  renderSection,
+  startApexPolling,
+} from '../../web/apexes-dom.js';
 import { buildApexesView } from '../../web/apexes-view.js';
 import { agent, fact, input, NOW, repo, worktree } from '../inbox/fixture.ts';
 
@@ -21,6 +29,11 @@ class FakeElement {
   rel = '';
   target = '';
   open = false;
+  type = '';
+  src = '';
+  referrerPolicy = '';
+  ownerDocument: unknown = null;
+  parent: FakeElement | null = null;
   #text = '';
 
   constructor(tag: string, ns: string | null = null) {
@@ -59,8 +72,21 @@ class FakeElement {
   append(...nodes: (FakeElement | string)[]): void {
     for (const node of nodes) {
       if (typeof node === 'string') throw new Error('append a string is not expected');
+      node.parent?.removeChild(node);
+      node.parent = this;
       this.children.push(node);
     }
+  }
+
+  removeChild(node: FakeElement): void {
+    const at = this.children.indexOf(node);
+    if (at >= 0) this.children.splice(at, 1);
+    node.parent = null;
+  }
+
+  replaceChildren(...nodes: FakeElement[]): void {
+    for (const child of [...this.children]) this.removeChild(child);
+    this.append(...nodes);
   }
 
   all(): FakeElement[] {
@@ -69,12 +95,30 @@ class FakeElement {
 }
 
 const fakeDocument = {
-  createElement: (tag: string) => new FakeElement(tag),
+  createElement: (tag: string) => {
+    const node = new FakeElement(tag);
+    node.ownerDocument = fakeDocument;
+    return node;
+  },
   createElementNS: (ns: string, tag: string) => new FakeElement(tag, ns),
 };
 
 const DANGER = '<script>alert(1)</script><img src=x onerror=alert(2)>';
-const ALLOWED = new Set(['SECTION', 'H2', 'DETAILS', 'SUMMARY', 'UL', 'LI', 'DIV', 'SPAN', 'P', 'A', 'svg', 'path']);
+const ALLOWED = new Set([
+  'SECTION',
+  'H2',
+  'DETAILS',
+  'SUMMARY',
+  'UL',
+  'LI',
+  'DIV',
+  'SPAN',
+  'P',
+  'A',
+  'BUTTON',
+  'svg',
+  'path',
+]);
 
 function dangerousView() {
   const doc = buildApexList({
@@ -91,7 +135,7 @@ function dangerousView() {
     now: NOW,
     project: null,
   });
-  return buildApexesView(doc, { now: NOW });
+  return { ...buildApexesView(doc, { now: NOW }), doc };
 }
 
 test('T-10: 題名などの <script> は文字のまま描かれ、決めた要素のほかを作らない', () => {
@@ -106,7 +150,7 @@ test('T-10: 題名などの <script> は文字のまま描かれ、決めた要�
   assert.ok(text.includes('バックグラウンドタスクを監視中'));
 });
 
-test('T-10: 行のリンクは /embed/agent?id= を _blank・noopener noreferrer で開く', () => {
+test('T-10: 行の「新しいタブで開く」と結べない行のリンクは /embed/agent?id= を _blank・noopener noreferrer で開く', () => {
   const view = dangerousView();
   const links = view.sections
     .flatMap((s: unknown) => (renderSection(fakeDocument, s) as FakeElement).all())
@@ -119,6 +163,116 @@ test('T-10: 行のリンクは /embed/agent?id= を _blank・noopener noreferrer
     assert.equal(a.target, '_blank');
     assert.equal(a.rel, 'noopener noreferrer');
   }
+});
+
+test('iss-00077 R-01：頂点の行は選ぶボタン（data-apex）と小さな「新しいタブで開く」、選んだ行に印', () => {
+  const view = buildApexesView(dangerousView().doc, { now: NOW, selectedId: 'm' });
+  const nodes = view.sections.flatMap((s: unknown) => (renderSection(fakeDocument, s) as FakeElement).all());
+  const buttons = nodes.filter((e: FakeElement) => e.tagName === 'BUTTON');
+  assert.deepEqual(
+    buttons.map((b: FakeElement) => b.dataset.apex),
+    ['a', 'm'],
+  );
+  for (const b of buttons) assert.equal(b.type, 'button');
+  const newTabs = nodes.filter((e: FakeElement) => e.className === 'apex-newtab');
+  assert.deepEqual(
+    newTabs.map((a: FakeElement) => [a.tagName, a.textContent, a.href]),
+    [
+      ['A', '新しいタブで開く', '/embed/agent?id=a'],
+      ['A', '新しいタブで開く', '/embed/agent?id=m'],
+    ],
+  );
+  const selected = nodes.filter((e: FakeElement) => e.tagName === 'LI' && e.dataset.selected === 'true');
+  assert.deepEqual(
+    selected.map((li: FakeElement) => li.dataset.key),
+    ['m'],
+  );
+});
+
+function slot(): FakeElement {
+  return fakeDocument.createElement('div');
+}
+
+test('T-05：mountAgentFrame を別の id で3回呼ぶと iframe は1つで src は最後の id。同じ id では作り直さない', () => {
+  const box = slot();
+  const first = mountAgentFrame(box, 'a') as FakeElement;
+  assert.equal(first.tagName, 'IFRAME');
+  assert.equal(first.src, '/embed/agent?id=a');
+  assert.equal(first.referrerPolicy, 'same-origin');
+  assert.ok(first.title.length > 0);
+  const second = mountAgentFrame(box, 'b c') as FakeElement;
+  const third = mountAgentFrame(box, 'd') as FakeElement;
+  assert.notEqual(first, second);
+  assert.notEqual(second, third);
+  assert.deepEqual(
+    box.children.map((c) => c.tagName),
+    ['IFRAME'],
+  );
+  assert.equal(box.children[0], third);
+  assert.equal(third.src, '/embed/agent?id=d');
+  assert.equal(second.src, '/embed/agent?id=b%20c', '外した枠の src は書き換えない');
+  assert.equal(mountAgentFrame(box, 'd'), third, '同じ id では作り直さない');
+  clearAgentFrame(box, '案内');
+  assert.deepEqual(
+    box.children.map((c) => [c.tagName, c.textContent]),
+    [['P', '案内']],
+  );
+});
+
+test('T-06：枠の body に data-unsettled があれば確かめ、取り消せば替えない。印がない・読めない・枠がないなら替える', () => {
+  const asked: string[] = [];
+  const confirmWith = (answer: boolean) => (text: string) => {
+    asked.push(text);
+    return answer;
+  };
+  const withFrame = (contentDocument: unknown) => {
+    const box = slot();
+    const frame = mountAgentFrame(box, 'a') as FakeElement & { contentDocument?: unknown };
+    Object.defineProperty(frame, 'contentDocument', {
+      get: () => {
+        if (contentDocument instanceof Error) throw contentDocument;
+        return contentDocument;
+      },
+    });
+    return box;
+  };
+  const marked = { body: { getAttribute: (name: string) => (name === 'data-unsettled' ? 'true' : null) } };
+  assert.equal(mayLeaveFrame(withFrame(marked), confirmWith(false)), false);
+  assert.deepEqual(asked, ['送信の処理中か結果不明の表示があります。切り替えると表示を失います']);
+  assert.equal(mayLeaveFrame(withFrame(marked), confirmWith(true)), true);
+  asked.length = 0;
+  assert.equal(mayLeaveFrame(withFrame({ body: { getAttribute: () => null } }), confirmWith(false)), true);
+  assert.equal(mayLeaveFrame(withFrame(new Error('blocked')), confirmWith(false)), true);
+  assert.equal(mayLeaveFrame(slot(), confirmWith(false)), true);
+  assert.deepEqual(asked, [], '印がなければ聞かない');
+});
+
+test('R-01：右のペインの見出しに「← 一覧」・題名・状態の印・「一覧にありません」・開く部品の置き場', () => {
+  const openRoot = fakeDocument.createElement('span');
+  const head = renderPaneHead(
+    fakeDocument,
+    {
+      id: 'a',
+      title: DANGER,
+      mark: 'waiting',
+      markLabel: '入力待ち',
+      monitoring: false,
+      missing: true,
+      missingLabel: '一覧にありません',
+      newTab: '/embed/agent?id=a',
+      open: null,
+    },
+    { openRoot },
+  ) as FakeElement;
+  const all = head.all();
+  const back = all.find((e) => e.tagName === 'BUTTON' && e.dataset.action === 'back');
+  assert.equal(back?.textContent, '← 一覧');
+  assert.equal(back?.type, 'button');
+  assert.ok(head.textContent.includes(DANGER));
+  assert.ok(head.textContent.includes('入力待ち'));
+  assert.ok(head.textContent.includes('一覧にありません'));
+  assert.ok(all.includes(openRoot));
+  for (const tag of new Set(all.map((e) => e.tagName))) assert.ok(ALLOWED.has(tag), tag);
 });
 
 test('T-10: 畳む段は details で、expanded なら開く。空の段は「なし」', () => {
