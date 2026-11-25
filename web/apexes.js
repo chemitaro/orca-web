@@ -1,12 +1,15 @@
 // 指揮の画面（/apexes）。/api/apexes を 10 秒ごとに読み（輪は apexes-dom.js の startApexPolling）、
-// 頂点を段に分けて textContent だけで描く。画面が隠れている間は読まず、見えたらすぐ読み直す。
+// 頂点を段に分けて textContent だけで描く。画面が隠れている間は読まず（通知を許可していれば 30 秒ごと）、見えたらすぐ読み直す。
 // ?project= があればその repo に絞る。読めなければ前の内容を残して「更新できない」と示す。
 // 頂点の行を押すと、右のペインに見出しと /embed/agent の枠を出し、?apex= で覚える（履歴は増やさない。iss-00077）。
 // 選びの移り変わりは apexes-view.js の reduceSelection、枠の作り直しと切り替えの確かめは apexes-dom.js。
 // 幅 900px 以上は2ペイン、狭い幅は1列で、選ぶと会話だけを出し「← 一覧」で戻る（CSS の apexes--selected）。
 // 新着の点：選んだ頂点を 10 秒続けて出したら、見た時刻を localStorage に覚える（id と時刻だけ。使えなければ点を出さない）。
+// 対応が必要の知らせ（iss-00081）：favicon を印付きに替え、通知を許可したタブでは、隠れている間も 30 秒ごとに読み、
+// 対応が必要に入った頂点を1回だけデスクトップに通知する（判断は apexes-notify.js、出す口は apexes-dom.js）。
 import {
   clearAgentFrame,
+  createApexNotifier,
   createSeenStore,
   createSeenTracker,
   mayLeaveFrame,
@@ -16,6 +19,7 @@ import {
   renderSection,
   startApexPolling,
 } from './apexes-dom.js';
+import { createNotifyTracker } from './apexes-notify.js';
 import {
   apexesApiPath,
   apexesFavicon,
@@ -36,6 +40,7 @@ import { projectFromSearch } from './inbox-view.js';
 import { createWriter } from './write.js';
 
 const POLL_MS = 10_000;
+const HIDDEN_POLL_MS = 30_000;
 
 const els = {
   counts: /** @type {HTMLElement} */ (document.querySelector('#counts')),
@@ -44,6 +49,7 @@ const els = {
   paneHead: /** @type {HTMLElement} */ (document.querySelector('#pane-head')),
   paneFrame: /** @type {HTMLElement} */ (document.querySelector('#pane-frame')),
   favicon: /** @type {HTMLLinkElement | null} */ (document.querySelector('#favicon')),
+  notify: /** @type {HTMLElement | null} */ (document.querySelector('#notify')),
 };
 
 const project = projectFromSearch(location.search);
@@ -178,6 +184,24 @@ els.paneHead.addEventListener('click', (event) => {
   changeSelection({ type: 'clear' });
 });
 
+// 通知の判断と出す口。押すと窓を前に出し、その頂点を選ぶ（切り替えの確かめは changeSelection が持つ）。
+const notifyTracker = createNotifyTracker();
+const notifier = createApexNotifier({
+  doc: document,
+  env: {
+    Notification: globalThis.Notification,
+    isSecureContext: window.isSecureContext,
+    focus: () => window.focus(),
+  },
+  onOpen: (id) => changeSelection({ type: 'select', id }),
+});
+/** 見出しの「通知を許可」のボタン。許可が default のときだけ出し、答えが出たら描き直す。 */
+function renderNotifyControl() {
+  const control = notifier.renderControl(renderNotifyControl);
+  els.notify?.replaceChildren(...(control ? [control] : []));
+}
+renderNotifyControl();
+
 /** 1回の読み。輪が新しい読みを始めていたら（isCurrent が偽）、古い結果で描かない。 */
 async function load(isCurrent) {
   try {
@@ -188,9 +212,11 @@ async function load(isCurrent) {
     lastDoc = doc;
     lastError = null;
     pruneStoredSeen(doc);
+    notifier.deliver(notifyTracker.observe(doc), (key) => notifyTracker.markShown(key));
   } catch (error) {
     if (!isCurrent()) return;
     lastError = error.message;
+    notifyTracker.observeFailure();
   }
   const next = lastDoc ? reduceSelection(selection, { type: 'document', doc: lastDoc }) : selection;
   if (next !== selection) applySelection(next);
@@ -198,4 +224,10 @@ async function load(isCurrent) {
 }
 
 render();
-startApexPolling({ doc: document, load, delayMs: POLL_MS });
+startApexPolling({
+  doc: document,
+  load,
+  delayMs: POLL_MS,
+  keepAliveWhenHidden: () => notifier.keepAliveWhenHidden(),
+  hiddenDelayMs: HIDDEN_POLL_MS,
+});

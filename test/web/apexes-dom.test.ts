@@ -309,27 +309,31 @@ class FakeDocument {
   }
 }
 
-function pollHarness(hidden = false) {
+function pollHarness(hidden = false, keep: { alive: boolean } | null = null) {
   const doc = new FakeDocument();
   doc.hidden = hidden;
   let loads = 0;
   let next = 1;
   const timers = new Map<number, () => void>();
+  const delays = new Map<number, number>();
   const poller = startApexPolling({
     doc,
     delayMs: 10_000,
+    ...(keep ? { keepAliveWhenHidden: () => keep.alive, hiddenDelayMs: 30_000 } : {}),
     load: async () => {
       loads++;
     },
-    setTimer: (fn: () => void) => {
+    setTimer: (fn: () => void, ms: number) => {
       const id = next++;
       timers.set(id, fn);
+      delays.set(id, ms);
       return id;
     },
     clearTimer: (id: number) => {
       timers.delete(id);
     },
   });
+  const pendingDelays = () => [...timers.keys()].map((id) => delays.get(id));
   const settle = () => new Promise((resolve) => setImmediate(resolve));
   const tick = async () => {
     const pending = [...timers.entries()];
@@ -337,7 +341,7 @@ function pollHarness(hidden = false) {
     for (const [, fn] of pending) fn();
     await settle();
   };
-  return { doc, poller, timers, settle, tick, loads: () => loads };
+  return { doc, poller, timers, settle, tick, pendingDelays, loads: () => loads };
 }
 
 test('T-10: 隠れたら予約を取り消して読まず、見えたらすぐ読み直す', async () => {
@@ -375,9 +379,70 @@ test('T-10: 最初から隠れていれば、見えるまで読まない。読�
   h.poller.stop();
 });
 
+test('T-05: 隠れて keepAliveWhenHidden が真なら hiddenDelayMs で読み続け、見えたら今の間隔に戻る', async () => {
+  const keep = { alive: true };
+  const h = pollHarness(false, keep);
+  await h.settle();
+  assert.equal(h.loads(), 1);
+  assert.deepEqual(h.pendingDelays(), [10_000]);
+  h.doc.hidden = true;
+  h.doc.fire('visibilitychange');
+  assert.deepEqual(h.pendingDelays(), [30_000], '隠れたら 30 秒の予約1つに替える');
+  await h.tick();
+  assert.equal(h.loads(), 2);
+  assert.deepEqual(h.pendingDelays(), [30_000]);
+  await h.tick();
+  assert.equal(h.loads(), 3);
+  assert.deepEqual(h.pendingDelays(), [30_000]);
+  h.doc.hidden = false;
+  h.doc.fire('visibilitychange');
+  await h.settle();
+  assert.equal(h.loads(), 4, '見えたらすぐ読む');
+  assert.deepEqual(h.pendingDelays(), [10_000]);
+  h.poller.stop();
+  assert.equal(h.timers.size, 0);
+});
+
+test('T-05: 隠れて keepAliveWhenHidden が偽なら予約しない。呼ぶたびに読み直す', async () => {
+  const keep = { alive: false };
+  const h = pollHarness(false, keep);
+  await h.settle();
+  h.doc.hidden = true;
+  h.doc.fire('visibilitychange');
+  assert.equal(h.timers.size, 0);
+  h.doc.hidden = false;
+  h.doc.fire('visibilitychange');
+  await h.settle();
+  keep.alive = true;
+  h.doc.hidden = true;
+  h.doc.fire('visibilitychange');
+  assert.deepEqual(h.pendingDelays(), [30_000], '許可した後は読み続ける');
+  keep.alive = false;
+  await h.tick();
+  assert.equal(h.timers.size, 0, '許可がなくなれば次を予約しない');
+  h.poller.stop();
+});
+
+test('T-05: 最初から隠れていて keepAliveWhenHidden が真なら hiddenDelayMs の後に読む。読みの途中で隠れても予約は1つ', async () => {
+  const h = pollHarness(true, { alive: true });
+  await h.settle();
+  assert.equal(h.loads(), 0);
+  assert.deepEqual(h.pendingDelays(), [30_000]);
+  await h.tick();
+  assert.equal(h.loads(), 1);
+  assert.deepEqual(h.pendingDelays(), [30_000]);
+  h.doc.hidden = false;
+  h.doc.fire('visibilitychange');
+  h.doc.hidden = true;
+  h.doc.fire('visibilitychange');
+  await h.settle();
+  assert.deepEqual(h.pendingDelays(), [30_000]);
+  h.poller.stop();
+});
+
 test('T-10: 入口は startApexPolling で読み、題名を view から付け、innerHTML を使わない', async () => {
   const entry = await readFile(new URL('../../web/apexes.js', import.meta.url), 'utf8');
-  assert.match(entry, /startApexPolling\(\{ doc: document/);
+  assert.match(entry, /startApexPolling\(\{\s+doc: document,/);
   assert.match(entry, /document\.title = view\.title/);
   for (const path of ['apexes.js', 'apexes-dom.js', 'apexes-view.js', 'apexes.html']) {
     const text = await readFile(new URL(`../../web/${path}`, import.meta.url), 'utf8');
