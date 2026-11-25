@@ -10,9 +10,17 @@ import { iconKey, STATE_ICONS } from './embed/agent-marks-icons.js';
 import { MARK_LABELS } from './embed/agent-marks-view.js';
 import { formatElapsed } from './embed/elapsed.js';
 
-/** 画面の段の順。先の3つは開き、後の3つは畳む。 */
-export const SECTION_ORDER = ['needs_action', 'working', 'done_recent', 'done_older', 'sleeping', 'unlinked'];
-const COLLAPSED = new Set(['done_older', 'sleeping', 'unlinked']);
+/** 画面の段の順。先の3つは開き、後の4つは畳む。 */
+export const SECTION_ORDER = [
+  'needs_action',
+  'working',
+  'done_recent',
+  'done_older',
+  'sleeping',
+  'unknown',
+  'unlinked',
+];
+const COLLAPSED = new Set(['done_older', 'sleeping', 'unknown', 'unlinked']);
 
 export const SECTION_LABELS = {
   needs_action: '対応が必要',
@@ -20,6 +28,7 @@ export const SECTION_LABELS = {
   done_recent: '完了',
   done_older: '以前の完了',
   sleeping: '眠っている',
+  unknown: '不明',
   unlinked: '結べない仕事',
 };
 

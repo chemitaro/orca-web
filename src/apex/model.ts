@@ -7,7 +7,7 @@ import type { BundleOwners } from './owners.ts';
 export const APEXES_SCHEMA = 'orca-web.apexes/v1';
 
 export type ApexStatus = 'needs_action' | 'working' | 'done';
-export type ApexGroup = 'needs_action' | 'working' | 'done_recent' | 'done_older' | 'sleeping';
+export type ApexGroup = 'needs_action' | 'working' | 'done_recent' | 'done_older' | 'sleeping' | 'unknown';
 /** 並びは判定の順（R-02）。文書の reasons もこの順。 */
 export type ApexReason =
   | 'apex_blocked'
