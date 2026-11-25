@@ -50,3 +50,8 @@ ID: "iss-00076"
   - 合格した文書の sha256：requirement.cue `4f5e7dcef899cb716fe8da19398252eb90c1a74c233788ce3485e9a0d456df54`、design.cue `10d3f86748d20cbc2790a6ae4e0455e858253d6ea214c7b34da41e98fc0202c1`、plan.cue `20510f6ae9cdd0d6dde7aa0d69a3b5bcfcc8b2498c319a9d53caa213c1dc2cee`
   - 結果：タスク担当の Workbench `.workbench/spec-review/iss-00076/round-1.json`（fail、P1 1）、`round-2.json`（pass）、応答 `review-response.md`
   - P2（Epic R-03 の文言と、復元待ちで state null を完了とする扱い）は、Epic の要件の文言を直して合わせた（Epic の decisions に記録）
+- 最終品質ゲート：合格（2026-11-25）。合格のコミット e7d857c、キャンペーン iss-00076-fqg-2（closure はタスク担当の Workbench `.workbench/final-quality-gate/iss-00076-2/closure.md`）。レビュー pass（P0〜P3 0）、テスト lint・test・build すべて 0（Node 24.14.0）。
+  - 前のキャンペーンの attempt 01 で、負荷による時間超過と既存の `test/tools/trial.test.ts` の待ち合わせの不具合（基準 ac35101 でも失敗）が出た。trial のテストを直した（e7d857c）。
+  - この Mac の Homebrew の Node 26 が途中で起動できなくなった（libsimdjson の不足）。以後は nodenv の Node 24.14.0 で確かめた。
+- マージの許し：利用者（2026-11-25、会話）。AGENTS.md の守ることに、merge.md の条件でエージェントがマージしてよい旨を足した（49508d2）。計画の merge を agent にした。
+- マージ：PR #83 を merge.md の条件でタスク担当がマージした（2026-11-25、マージのコミット 1da3c6c、head e7d857c、CI OBSERVED_CI_PASS・READY）。
