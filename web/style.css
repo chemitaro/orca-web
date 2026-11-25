@@ -636,6 +636,139 @@ a {
   color: var(--muted);
 }
 
+/* チームの帯（iss-00079 D-02）。見出しの下、会話の上。開くと履歴の帯と字下げの木を出し、高さは画面の 40% までで中を巻く。 */
+.apexes-page .team-band {
+  border-bottom: 1px solid var(--line);
+  padding: 4px 10px;
+  min-width: 0;
+}
+
+.apexes-page .team-summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.apexes-page .team-body {
+  max-height: 40dvh;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.apexes-page .team-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.apexes-page .team-cell {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--muted);
+}
+
+.apexes-page .team-cell--working,
+.apexes-page .team-cell--live {
+  background: var(--ok);
+}
+
+.apexes-page .team-cell--waiting {
+  background: var(--warn);
+}
+
+.apexes-page .team-cell--failed {
+  background: var(--bad);
+}
+
+.apexes-page .team-cell--done {
+  background: var(--line);
+}
+
+.apexes-page .team-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.apexes-page .team-node {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 1px 0;
+}
+
+.apexes-page .team-node--target {
+  outline: 2px solid var(--line);
+}
+
+.apexes-page .team-title {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.apexes-page .team-elapsed,
+.apexes-page .team-group > details > summary {
+  color: var(--muted);
+}
+
+.apexes-page .team-group > details > summary {
+  cursor: pointer;
+}
+
+.apexes-page .team-mark {
+  flex: none;
+  font-size: 0.85em;
+}
+
+.apexes-page .team-mark--working,
+.apexes-page .team-mark--live {
+  color: var(--ok);
+}
+
+.apexes-page .team-mark--waiting {
+  color: var(--warn);
+}
+
+.apexes-page .team-mark--failed {
+  color: var(--bad);
+}
+
+.apexes-page .team-mark--done,
+.apexes-page .team-mark--unknown {
+  color: var(--muted);
+}
+
+/* 字下げ。まとめは見出しだけを字下げし、中の行は節の深さで置く。 */
+.apexes-page .team-depth-1 {
+  padding-left: 0;
+}
+
+.apexes-page .team-depth-2 {
+  padding-left: 14px;
+}
+
+.apexes-page .team-depth-3 {
+  padding-left: 28px;
+}
+
+.apexes-page .team-depth-4 {
+  padding-left: 42px;
+}
+
+.apexes-page .team-depth-5 {
+  padding-left: 56px;
+}
+
+.apexes-page .team-depth-6 {
+  padding-left: 70px;
+}
+
 @media (min-width: 900px) {
   .apexes-page .apex-layout {
     grid-template-columns: 320px minmax(0, 1fr);

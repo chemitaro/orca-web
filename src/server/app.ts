@@ -152,6 +152,9 @@ const STATIC_FILES: Readonly<
   '/apexes-view.js': { file: 'apexes-view.js', type: 'text/javascript; charset=utf-8' },
   '/apexes-dom.js': { file: 'apexes-dom.js', type: 'text/javascript; charset=utf-8' },
   '/apexes-notify.js': { file: 'apexes-notify.js', type: 'text/javascript; charset=utf-8' },
+  // チームの帯（iss-00079 D-02）。
+  '/apexes-team-view.js': { file: 'apexes-team-view.js', type: 'text/javascript; charset=utf-8' },
+  '/apexes-team-dom.js': { file: 'apexes-team-dom.js', type: 'text/javascript; charset=utf-8' },
   // タブの印（iss-00081 D-01）。対応が必要があれば /apexes が印付きに差し替える。
   '/favicon.svg': { file: 'favicon.svg', type: 'image/svg+xml' },
   '/favicon-alert.svg': { file: 'favicon-alert.svg', type: 'image/svg+xml' },
