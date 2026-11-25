@@ -42,10 +42,11 @@ function fullDocument(): ApexListDocument {
     agent('older', { state: fact('done'), stateStartedAt: fact(ago(25 * HOUR)) }),
     agent('asleep', { state: fact('done'), terminal: fact('awaiting-restore') }),
     agent('lost', { parentPaneKey: fact('gone') }),
+    agent('unsure', { state: fact(null) }),
   ]);
 }
 
-test('T-08: 段は開く3つと畳む3つの順で、見出しの数を持つ', () => {
+test('T-08: 段は開く3つと畳む4つの順で、見出しの数を持つ。不明は作業中に数えない', () => {
   const view = buildApexesView(fullDocument(), { now: NOW });
   assert.deepEqual(
     view.sections.map((s: { key: string; title: string; count: number; collapsed: boolean }) => [
@@ -60,6 +61,7 @@ test('T-08: 段は開く3つと畳む3つの順で、見出しの数を持つ', 
       ['done_recent', '完了', 1, false],
       ['done_older', '以前の完了', 1, true],
       ['sleeping', '眠っている', 1, true],
+      ['unknown', '不明', 1, true],
       ['unlinked', '結べない仕事', 1, true],
     ],
   );
@@ -91,7 +93,7 @@ test('T-08: 行の題名・理由の札・配下の数・経過・リンク先�
   assert.deepEqual(rows.get('lost').reasons, ['親が見つからない']);
   assert.equal(rows.get('lost').href, '/embed/agent?id=lost');
   const odd = buildApexesView(documentOf([agent('a b/&', { state: fact(null) })]), { now: NOW });
-  const row = odd.sections[1].rows[0];
+  const row = odd.sections.find((s: { key: string }) => s.key === 'unknown').rows[0];
   assert.equal(row.href, '/embed/agent?id=a%20b%2F%26');
   assert.deepEqual(row.tags, ['確かめられない']);
   const monitoring = buildApexesView(documentOf([agent('m', { workingMode: fact('monitoring') })]), { now: NOW });
@@ -297,7 +299,7 @@ test('T-07：行の点と見出しの「新着 n」は完了と以前の完了�
   );
 });
 
-test('T-10：見出しの数は段の件数。確かめられず眠っているに入った作業中の頂点は作業中に数えない。対応が必要 0 は強調しない', () => {
+test('T-10：見出しの数は段の件数。不明の段の作業中の頂点は作業中に数えない。対応が必要 0 は強調しない', () => {
   // biome-ignore lint/suspicious/noExplicitAny: a hand-made apexes document
   const doc: any = {
     ...documentOf([]),
@@ -305,7 +307,7 @@ test('T-10：見出しの数は段の件数。確かめられず眠っている�
     items: [
       item({ id: 'w1', group: 'working', status: 'working' }),
       item({ id: 'w2', group: 'working', status: 'working' }),
-      item({ id: 'z', group: 'sleeping', status: 'working', tags: ['unverified'] }),
+      item({ id: 'z', group: 'unknown', status: 'working', tags: ['unverified'] }),
     ],
   };
   const view = buildApexesView(doc, { now: NOW });

@@ -155,14 +155,71 @@ test('T-04: 復元待ちの端末のメンバーの blocked は数えず、構�
   assert.deepEqual([chat.status, chat.reasons], ['needs_action', ['member_blocked']]);
 });
 
-test('T-05: state null・配下なし・復元待ちでない頂点は working・unverified で done に数えない', () => {
+test('T-05: state null・配下なし・プロセスのある頂点は working・unverified・段 unknown で done に数えない', () => {
   const result = build([agent('r', { state: fact(null), stateStartedAt: fact(ago(HOUR)) })]);
   const item = result.items[0];
   assert.equal(item?.status, 'working');
   assert.deepEqual(item?.reasons, []);
   assert.deepEqual(item?.tags, ['unverified']);
   assert.equal(item?.mark, 'unknown');
+  assert.equal(item?.group, 'unknown');
   assert.deepEqual(result.counts, { needs_action: 0, working: 1, done: 0 });
+});
+
+const unknownChat = (patch: Partial<AgentState> = {}) =>
+  agent('r', {
+    kind: 'chat-tab',
+    paneKey: null,
+    terminalHandle: null,
+    state: fact(null),
+    stateStartedAt: fact(ago(HOUR)),
+    terminal: fact(null, 'no-source'),
+    ...patch,
+  });
+
+function withSource(name: 'worktreePs' | 'tabs', patch: Partial<StateDocument['sources'][typeof name]>) {
+  const base = state().sources;
+  return { sources: { ...base, [name]: { ...base[name], ...patch } } };
+}
+
+test('T-01（iss-00095）: プロセスのない state null の chat-tab は眠っている（done・sleeping・札なし）', () => {
+  const result = build([unknownChat()]);
+  const item = result.items[0];
+  assert.deepEqual(
+    [item?.status, item?.reasons, item?.group, item?.tags, item?.mark],
+    ['done', ['sleeping'], 'sleeping', [], 'unknown'],
+  );
+  assert.deepEqual(result.counts, { needs_action: 0, working: 0, done: 1 });
+});
+
+test('T-01（iss-00095）: terminal が null でも attached でもない state null の terminal-tab は眠っている', () => {
+  const item = only([agent('r', { state: fact(null), stateStartedAt: fact(ago(HOUR)), terminal: fact('exited') })]);
+  assert.deepEqual([item.status, item.reasons, item.group, item.tags], ['done', ['sleeping'], 'sleeping', []]);
+  const unread = only([agent('r', { state: fact(null), terminal: fact(null, 'not-linked') })]);
+  assert.deepEqual([unread.status, unread.group, unread.tags], ['working', 'unknown', ['unverified']]);
+  const stale = only(
+    [agent('r', { state: fact(null), terminal: fact('exited') })],
+    withSource('tabs', { stale: true }),
+  );
+  assert.deepEqual([stale.status, stale.group, stale.tags], ['working', 'unknown', ['unverified']]);
+});
+
+test('T-01（iss-00095）: worktreePs が stale か一度も読めていなければ、プロセスのない chat-tab も不明の段', () => {
+  for (const patch of [{ stale: true }, { lastSuccessAt: null }]) {
+    const item = only([unknownChat()], withSource('worktreePs', patch));
+    assert.deepEqual([item.status, item.reasons, item.group, item.tags], ['working', [], 'unknown', ['unverified']]);
+  }
+  const untabbed = only([unknownChat({ kind: 'untabbed', paneKey: null })]);
+  assert.deepEqual([untabbed.status, untabbed.group, untabbed.tags], ['working', 'unknown', ['unverified']]);
+});
+
+test('T-02（iss-00095）: プロセスのある state null の chat-tab は不明の段で、30 時間たっても不明。メンバーが working なら作業中', () => {
+  const recent = only([unknownChat({ paneKey: 'pane-r' })]);
+  assert.deepEqual([recent.status, recent.group, recent.tags], ['working', 'unknown', ['unverified']]);
+  const old = only([unknownChat({ paneKey: 'pane-r', stateStartedAt: fact(ago(30 * HOUR)) })]);
+  assert.deepEqual([old.status, old.group, old.tags], ['working', 'unknown', ['unverified']]);
+  const busy = only([unknownChat({ paneKey: 'pane-r' }), child('k', 'pane-r')]);
+  assert.deepEqual([busy.status, busy.reasons, busy.group], ['working', ['members_working'], 'working']);
 });
 
 test('T-05: 状態の文書が stale か接続が unreachable なら一覧も stale', () => {
@@ -187,8 +244,8 @@ test('T-06: 段の決め方', () => {
   assert.equal(group({ state: fact('done'), stateStartedAt: fact(ago(8 * DAY)) }), 'sleeping');
   assert.equal(group({ state: fact('done'), terminal: fact('awaiting-restore') }), 'sleeping');
   assert.equal(group({ state: fact('waiting'), stateStartedAt: fact(ago(8 * DAY)) }), 'needs_action');
-  assert.equal(group({ state: fact(null), stateStartedAt: fact(ago(25 * HOUR)) }), 'sleeping');
-  assert.equal(group({ state: fact(null), stateStartedAt: fact(ago(23 * HOUR)) }), 'working');
+  assert.equal(group({ state: fact(null), stateStartedAt: fact(ago(25 * HOUR)) }), 'unknown');
+  assert.equal(group({ state: fact(null), stateStartedAt: fact(ago(23 * HOUR)) }), 'unknown');
   assert.equal(
     group({ state: fact('done'), terminal: fact('awaiting-restore') }, [
       child('k', 'r', { stateStartedAt: fact(ago(HOUR)) }),

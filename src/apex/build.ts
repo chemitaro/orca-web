@@ -34,7 +34,7 @@ function asksOrGates(worker: { attention: readonly string[] } | undefined): bool
   return worker !== undefined && (worker.attention.includes('input') || worker.attention.includes('approval'));
 }
 
-const GROUPS: readonly ApexGroup[] = ['needs_action', 'working', 'done_recent', 'done_older', 'sleeping'];
+const GROUPS: readonly ApexGroup[] = ['needs_action', 'working', 'done_recent', 'done_older', 'sleeping', 'unknown'];
 const REASONS: readonly ApexReason[] = [
   'apex_blocked',
   'apex_waiting',
@@ -311,7 +311,29 @@ function questionsOf(
   return result;
 }
 
-function judge(apex: AgentState, members: readonly AgentState[], work: Work, now: number) {
+/**
+ * 頂点のプロセスがないと新しい取得元で分かる（iss-00095 D-01）。構造化 Chat は ps の行と対応しない（paneKey が null）、
+ * 端末のタブは terminal が null でも attached でもない。取得元が古い・読めていない・untabbed は偽（判定できない）。
+ */
+export function processAbsent(apex: AgentState, sources: StateDocument['sources']): boolean {
+  if (apex.kind === 'chat-tab') {
+    const ps = sources.worktreePs;
+    return apex.paneKey === null && ps.lastSuccessAt !== null && !ps.stale;
+  }
+  if (apex.kind === 'terminal-tab') {
+    const terminal = apex.terminal.value;
+    return terminal !== null && terminal !== 'attached' && !sources.tabs.stale;
+  }
+  return false;
+}
+
+function judge(
+  apex: AgentState,
+  members: readonly AgentState[],
+  work: Work,
+  now: number,
+  sources: StateDocument['sources'],
+) {
   const mark = agentMark(apex);
   const found = new Set<ApexReason>();
   if (mark === 'blocked') found.add('apex_blocked');
@@ -325,10 +347,15 @@ function judge(apex: AgentState, members: readonly AgentState[], work: Work, now
   else if (members.some((member) => agentMark(member) === 'working')) found.add('members_working');
   judgeWork(apex, members, work, now, found);
   let status: ApexStatus;
+  let asleep = false;
   if ([...found].some((reason) => NEEDS_ACTION.has(reason))) {
     status = 'needs_action';
   } else if ([...found].some((reason) => WORKING.has(reason))) {
     status = 'working';
+  } else if (mark === 'unknown' && processAbsent(apex, sources)) {
+    status = 'done';
+    asleep = true;
+    found.add('sleeping');
   } else if (mark === 'unknown') {
     status = 'working';
   } else {
@@ -343,7 +370,9 @@ function judge(apex: AgentState, members: readonly AgentState[], work: Work, now
     fresh: reasons.filter((reason) => FRESH_ONLY.has(reason)),
     /** 生きた仕事か問いがある。眠っているにしない。 */
     active: found.has('live_work') || found.has('question') || found.has('decision') || found.has('grace'),
-    tags: mark === 'unknown' ? (['unverified'] as const) : ([] as const),
+    /** プロセスのない unknown の頂点。段は眠っている。 */
+    asleep,
+    tags: mark === 'unknown' && !asleep ? (['unverified'] as const) : ([] as const),
   };
 }
 
@@ -392,18 +421,27 @@ function lastActivity(apex: AgentState, members: readonly AgentState[], state: S
 
 function groupOf(
   apex: AgentState,
-  judged: { status: ApexStatus; reasons: readonly ApexReason[]; active: boolean },
+  judged: {
+    status: ApexStatus;
+    reasons: readonly ApexReason[];
+    active: boolean;
+    asleep: boolean;
+    tags: readonly string[];
+  },
   last: string | null,
   now: number,
 ): ApexGroup {
   if (judged.status === 'needs_action') return 'needs_action';
+  if (judged.asleep) return 'sleeping';
   const quiet = !judged.active && (judged.status === 'done' || judged.reasons.length === 0);
   const at = time(last);
   if (quiet) {
     if (apex.terminal.value === 'awaiting-restore') return 'sleeping';
     if (at !== null && judged.status === 'done' && at < now - SLEEP_MS) return 'sleeping';
-    if (at !== null && judged.status === 'working' && at < now - RECENT_MS) return 'sleeping';
   }
+  // 静かな unknown（理由がなく札 unverified）は不明の段。時間で眠っているに移さない（iss-00095 D-02）。
+  if (judged.status === 'working' && judged.reasons.length === 0 && judged.tags.includes('unverified'))
+    return 'unknown';
   if (judged.status === 'working') return 'working';
   return at !== null && at < now - RECENT_MS ? 'done_older' : 'done_recent';
 }
@@ -536,7 +574,7 @@ export function buildApexList(input: BuildApexListInput): ApexListDocument {
       remembered: input.memo?.recall(agent.id) ?? [],
       tasks,
     };
-    verdicts.set(agent.id, judge(agent, members, work, now));
+    verdicts.set(agent.id, judge(agent, members, work, now, state.sources));
   }
   if (fresh && input.memo) input.memo.replace(new Map([...verdicts].map(([id, verdict]) => [id, verdict.fresh])));
   const inProject = (repoId: string | null) => input.project === null || repoId === input.project;
