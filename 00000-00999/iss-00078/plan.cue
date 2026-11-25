@@ -4,12 +4,14 @@ goal: "頂点に閉じた子を含む配下が結ばれ、問い・止まった�
 
 steps: {
 	"S-01": {
+		status:   "done"
 		title:    "読む項目の追加と内部の値（D-01）"
 		text:     "対象：`src/orca/read-state.ts`（pick の追加だけ）、新しい `src/apex/extras.ts`、`src/state/poller.ts`（`snapshot()` は変えず、内部の値を同じ世代で返す口を足す）、録画の fixture（既存の録画に項目があれば使い、なければ仮の値を足した小さな fixture を `test/apex/` に）、テスト。`/api/state` の JSON に新しい鍵が出ないテストを足す。確かめ：T-01、T-02。完了：`npm run lint`、`npm test`、`npm run build`。コミットして次へ"
 		realizes: ["R-01"]
 		session:  "impl"
 	}
 	"S-02": {
+		status:   "done"
 		title:    "束と対応表（D-02）"
 		text:     "対象：新しい `src/apex/bundles.ts`・`src/apex/owners.ts`、`src/apex/build.ts`（引数の追加）、テスト。確かめ：T-03〜T-05、T-13。完了：lint・test・build。コミットして次へ"
 		realizes: ["R-02", "F-01"]
@@ -17,6 +19,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-03": {
+		status:   "done"
 		title:    "判定 A3〜A6 と札・結べない束（D-03、D-04）"
 		text:     "対象：`src/apex/build.ts`・`src/apex/model.ts`、新しい `src/apex/memo.ts`、テスト。確かめ：T-06〜T-10、T-14。完了：lint・test・build。コミットして次へ"
 		realizes: ["R-03", "R-04", "R-05", "R-06", "F-02"]
@@ -24,6 +27,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-04": {
+		status:   "done"
 		title:    "API の接続と画面（D-01 の口、D-05）"
 		text:     "対象：`src/server/app.ts`（`/api/apexes` が内部の値と対応表と memo を渡す。対応表と memo は `createAppHandler` が作り、app の生存の間1つ）、`web/apexes-view.js`・`web/apexes-dom.js`、テスト。確かめ：T-11。完了：lint・test・build。実装担当 impl の最後の手順。止まって HEAD を報告する。区切りのレビュー：あり（cp1、開始のコミット..HEAD）"
 		realizes: ["R-07"]
@@ -31,6 +35,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-05": {
+		status:   "done"
 		title:    "README・AGENTS.md と試しの orca-web での集計（タスク担当）"
 		text:     "タスク担当が行う。README と AGENTS.md の `src/apex/` の節を直す。別のポートの試しの orca-web で `/api/apexes` を読み、頂点に結べた束の数、閉じた子を含む配下の数、理由ごとの頂点の数、結べない束の数、端末の統括の `created_by_pane_key` と頂点の paneKey の一致の数、consumer_generation が 2 以上の Run ごとに今の世代の根の task があるか（作成者の有無）と、生きた Dispatch がどの世代の束にあるかを集計し、Epic の問いの答えか未決として記録し、report.md に記録する（題名・パス・会話を書かない）。確かめ：T-12。完了：lint・test・build が通り、report.md に結論がある"
 		realizes: ["R-02", "R-07"]
