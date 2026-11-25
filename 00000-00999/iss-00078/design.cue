@@ -26,9 +26,9 @@ design: {
 			- 端末の統括：束の根の task（`parentId` なし）の `createdByPaneKey` が、頂点の `paneKey` に一致すれば、束 → 頂点。
 			- 構造化 Chat：生きた辺のメンバー（と worker_without_parent のエージェント）の `worker.taskId` の task の束 → そのメンバーの頂点。
 			- 対応表 `BundleOwners`（メモリだけ、状態のある小さな部品。`src/apex/owners.ts`）：`observe(bundleKey, apexId, now)` で覚え（値は頂点のエージェントの id。paneKey ではない）、`resolve(bundleKey)` で引く。生きた辺や作成者で今わかる結びは、覚えたものより先に使う。捨てる：`sweep(state, extras, generation, now)` が、渡された読みの世代が前と同じなら何もしない。新しい世代で、tabs が stale でなく接続が connected の文書のときだけ「消えた」を数え、頂点が2世代続けて文書にない、束の task がすべて終わり最後の `completed_at` から 24 時間、上限 1,000 件を超えた古いもの、を捨てる。
-			- 生きた仕事の結び：生きた辺のメンバーのエージェントに結ばれた Dispatch は、そのメンバーの頂点に数える（付け替えない）。それ以外の生きた Dispatch で、Run の `consumerGeneration` がわかり、その世代でない束のものは、今の世代の束の頂点に結ぶ（今の世代の束の頂点がわからなければ結べない束）。
+			- 生きた仕事の結び：タブのあるエージェント（`agent.worker.dispatchId` を持つもの。生きた辺のメンバーも、親の見つからないエージェントも）に結ばれた Dispatch は付け替えない（メンバーならその頂点に、結べないエージェントならその束の持ち主の頂点か結べない仕事に）。タブのあるエージェントに結ばれていない生きた Dispatch で、Run の `consumerGeneration` がわかり、その世代でない束のものは、今の世代の束の頂点に結ぶ（今の世代の束の頂点がわからなければ結べない束）。
 			- 数え方：頂点ごとに Dispatch の id の集合を作り、メンバーのエージェントの `worker.dispatchId` と束の Dispatch を重ねない。
-			- worker_without_parent のエージェントで、その task の束の頂点がわかれば、メンバーにする（depth は束の task の `parent_id` の深さ＋1）。
+			- 結べないエージェントのうち `worker` を持つもの（parent_missing も worker_without_parent も）で、その task の束の頂点がわかれば、メンバーにする（depth は束の task の `parent_id` の深さ＋1）。
 			"""
 		satisfies: ["R-02", "F-01"]
 	}
@@ -36,10 +36,10 @@ design: {
 		title: "判定（`src/apex/build.ts` の広げ）"
 		text: """
 			R-03 のとおり。F は状態の文書の `sources.tasks.stale` と `sources.workers.stale` がどちらも偽。生きた仕事の終わった状態の集合は `succeeded`・`failed`・`stopped`・`abandoned`・`cancelled`（大文字小文字を区別しない。知らない値は生きているとみなす）。
-			A3 の起点：max(頂点の stateStartedAt, task の createdAt)。A4 の起点：max(頂点の stateStartedAt, メンバーの stateStartedAt の最大)。A6 の起点：task の completedAt（頂点の stateStartedAt より後のもの）。起点が読めなければ、その規則は猶予なしで当たる（A3・A6）、当たらない（A4）。
+			A3 の起点：max(頂点の stateStartedAt, task の createdAt)。A4 の起点：max(頂点の stateStartedAt, メンバーの stateStartedAt の最大)。A3・A4・A6 の起点と、読めないときの扱いは R-03 のとおり（A3 は読めるものの最大、どれも読めなければ猶予なし。A4 は読めるものの最大、どれも読めなければ当てない。A6 は completedAt と頂点の stateStartedAt の両方が読めるときだけ）。
 			理由の順：apex_blocked、apex_waiting、member_blocked、member_waiting、question、decision、stalled、apex_closed、failed、working、monitoring、members_working、live_work、member_grace、grace、done、sleeping。
 			A5 は kind `terminal-tab` で terminal が null でも `attached` でもないときだけ。A6 は task ごとに最後の Dispatch の workerState が failed で、completedAt と頂点の stateStartedAt の両方が読めるときだけ。
-			鮮度が偽の間：`ApexVerdictMemo`（メモリだけ、`src/apex/memo.ts`）が、F が真だった最後の判定で頂点ごとに当たった A3〜A6 の理由を覚え、F が偽の間はそれを使う。F が真の判定のたびに上書きし、文書にない頂点は捨てる。
+			判定はいつも全部の頂点について行い、`project` は出す文書を絞るだけにする（memo の上書きと捨てる判断は絞る前の全部の頂点で行う）。鮮度が偽の間：`ApexVerdictMemo`（メモリだけ、`src/apex/memo.ts`。app の生存の間に1つ、BundleOwners と同じく `createAppHandler` が作る）が、F が真だった最後の判定で頂点ごとに当たった A3〜A6 の理由を覚え、F が偽の間はそれを使う。F が真の判定のたびに上書きし、文書にない頂点は捨てる。
 			眠っている・以前の完了の段の決め方（iss-00076）は、生きた仕事・問いがある頂点を眠っているにしない、を足す。
 			"""
 		satisfies: ["R-03", "R-04", "F-02"]

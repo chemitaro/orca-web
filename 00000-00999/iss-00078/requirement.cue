@@ -52,8 +52,8 @@ requirements: {
 			2. 端末の統括：束の根の task（`parent_id` なし）の `created_by_pane_key` が頂点の `paneKey` に一致すれば、その束は頂点のもの。
 			3. 構造化 Chat の統括：1 で頂点に結べたメンバーの `worker`（dispatchId・taskId・runId）から task をたどり、その task の束を頂点に結ぶ。この対応（束 → 頂点の id）をメモリだけに持ち、メンバーのタブが閉じた後も使う。
 			4. 束の生きた仕事は、Run の今の世代（`consumer_generation`）の束の頂点にだけ結ぶ。古い世代の束の頂点には、終わった履歴だけを結ぶ。
-			5. `worker` があり親の見つからないエージェント（iss-00076 の worker_without_parent）は、その task の束の頂点が分かれば、その頂点のメンバーにする。
-			6. 1つのエージェントは1つの頂点にだけ入る（生きた辺が先）。1つの Dispatch は1つの頂点にだけ数える：生きた辺のメンバーのエージェントの Dispatch（`agent.worker.dispatchId`）は、そのメンバーの頂点に数え、4 の付け替えをしない。4 は、タブのあるエージェントに結ばれていない生きた Dispatch にだけ当てる。
+			5. `worker` があり親の見つからないエージェント（iss-00076 の parent_missing と worker_without_parent のうち worker を持つもの）は、その task の束の頂点が分かれば、その頂点のメンバーにする。
+			6. 1つのエージェントは1つの頂点にだけ入る（生きた辺が先）。1つの Dispatch は1つの頂点にだけ数える：生きた辺のメンバーのエージェントの Dispatch（`agent.worker.dispatchId`）は、そのメンバーの頂点に数え、4 の付け替えをしない。4 は、タブのあるエージェント（worker を持つもの）に結ばれていない生きた Dispatch にだけ当てる。
 			7. 配下の数（counts）は、生きた辺のメンバーと束の Dispatch を、Dispatch の id で重ねずに数える（メンバーのエージェントと同じ Dispatch は1つ）。
 			"""
 		acceptance: [
@@ -73,7 +73,7 @@ requirements: {
 			- A5 統括のタブ：頂点が端末のタブ（kind `terminal-tab`）で、`terminal` が null でも `attached` でもない値（`awaiting-restore` を含む）で、生きた仕事か問いがある。構造化 Chat とタブのない行には当てない（terminal の取得元がない）。理由 `apex_closed`。
 			- A6 新しい失敗：束の task ごとに最後の Dispatch（worker-list の並びで最後）の `workerState` が `failed` で、その task の `completed_at` と頂点の stateStartedAt の両方が読めて、completed_at が後で、頂点が動いていない状態が completed_at から G を超えた。どちらかが読めなければ当てない。理由 `failed`。
 			- A3 の起点は、頂点の stateStartedAt とその task の createdAt のうち読めるものの最大。どちらも読めなければ猶予なし。A4 の起点は、頂点とメンバーの stateStartedAt のうち読めるものの最大。どれも読めなければ当てない。
-			- 鮮度 F が偽の間：A3〜A6 を新しく判定せず、F が真だった最後の判定でその頂点に当たっていた A3〜A6 の理由をそのまま使う（その頂点が文書にある間）。F が偽の間に、A3〜A6 だけで対応が必要だった頂点が完了へ移ることはない。最後の判定はメモリだけに持つ（F-01 と同じく捨てる）。
+			- 鮮度 F が偽の間：A3〜A6 を新しく判定せず、F が真だった最後の判定でその頂点に当たっていた A3〜A6 の理由をそのまま使う（その頂点が文書にある間）。F が偽の間に、A3〜A6 だけで対応が必要だった頂点が完了へ移ることはない。最後の判定はメモリだけに持つ（F-01 と同じく捨てる）。判定はいつも全部の頂点について行い、`?project=` は出す文書を絞るだけで、最後の判定の上書きと捨てる判断には使わない。
 			作業中には、生きた仕事がある、または A3・A4・A6 の猶予の中、を足す（理由 `live_work`・`grace`）。
 			"""
 		acceptance: [

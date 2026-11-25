@@ -18,14 +18,14 @@ steps: {
 	}
 	"S-03": {
 		title:    "判定 A3〜A6 と札・結べない束（D-03、D-04）"
-		text:     "対象：`src/apex/build.ts`・`src/apex/model.ts`、テスト。確かめ：T-06〜T-10、T-14。完了：lint・test・build。コミットして次へ"
+		text:     "対象：`src/apex/build.ts`・`src/apex/model.ts`、新しい `src/apex/memo.ts`、テスト。確かめ：T-06〜T-10、T-14。完了：lint・test・build。コミットして次へ"
 		realizes: ["R-03", "R-04", "R-05", "R-06", "F-02"]
 		after:    ["S-02"]
 		session:  "impl"
 	}
 	"S-04": {
 		title:    "API の接続と画面（D-01 の口、D-05）"
-		text:     "対象：`src/server/app.ts`（`/api/apexes` が内部の値と対応表を渡す。対応表は app の生存の間1つ）、`web/apexes-view.js`・`web/apexes-dom.js`、テスト。確かめ：T-11。完了：lint・test・build。実装担当 impl の最後の手順。止まって HEAD を報告する。区切りのレビュー：あり（cp1、開始のコミット..HEAD）"
+		text:     "対象：`src/server/app.ts`（`/api/apexes` が内部の値と対応表と memo を渡す。対応表と memo は `createAppHandler` が作り、app の生存の間1つ）、`web/apexes-view.js`・`web/apexes-dom.js`、テスト。確かめ：T-11。完了：lint・test・build。実装担当 impl の最後の手順。止まって HEAD を報告する。区切りのレビュー：あり（cp1、開始のコミット..HEAD）"
 		realizes: ["R-07"]
 		after:    ["S-03"]
 		session:  "impl"
@@ -52,7 +52,7 @@ tests: {
 	"T-10": {title: "放置と札：ready・blocked の task だけの束の done の頂点は完了で remaining_tasks が付く。PR open・CI failure で ci_failed、CI success で merge_pending、failed の Dispatch で failed_members。終わった Dispatch だけの結べない束は unlinked に出ず、生きた Dispatch のある結べない束は出る", verifies: ["R-04", "R-05", "R-06"]}
 	"T-11": {title: "画面：新しい理由と札の言葉が行に出る。結べない束の行が `/runs/<id>` にリンクする。配下の数が束の Dispatch を含む", verifies: ["R-07"]}
 	"T-13": {title: "重ならない数え方：タブのある作業者（生きた辺のメンバーで worker.dispatchId がある）は counts.total に1回。古い世代の束の、生きた辺のメンバーの Dispatch は付け替えず元の頂点に数え、タブのない生きた Dispatch だけ今の世代の頂点に数える。BundleOwners の sweep は同じ世代で2回呼んでも1回分、tabs が stale の文書では消えたと数えない", verifies: ["R-02", "F-01"]}
-	"T-14": {title: "A5 は構造化 Chat の頂点に当たらない。A6 は completedAt か頂点の stateStartedAt が null なら当たらず、task に2つの Dispatch があれば最後のものだけを見る。鮮度が偽になった直後、A6・A3 で needs_action だった頂点は needs_action のまま（memo）で、F が真に戻ると新しく判定する。?project= で結べない束は Dispatch の worktree の repo で絞られる", verifies: ["R-03", "R-06", "F-02"]}
+	"T-14": {title: "A5 は構造化 Chat の頂点に当たらない。A6 は completedAt か頂点の stateStartedAt が null なら当たらず、task に2つの Dispatch があれば最後のものだけを見る。鮮度が偽になった直後、A6・A3 で needs_action だった頂点は needs_action のまま（memo）で、F が真に戻ると新しく判定する。?project= で結べない束は Dispatch の worktree の repo で絞られる。?project=A の判定の後に F が偽になっても、B の頂点の memo が残り needs_action のまま。親のタブが消えた（parent_missing）worker 持ちのエージェントの Dispatch は付け替えず、その束の頂点がわかればその頂点のメンバーになり、working なら A4 が当たらない", verifies: ["R-03", "R-06", "F-02"]}
 	"T-12": {title: "試しの orca-web（実物の Orca を読むだけ）：集計が report.md にある", verifies: ["R-02", "R-07"]}
 }
 
