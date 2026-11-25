@@ -435,7 +435,7 @@ test('部品のファイルは固定の対応だけで返り、ほかのパス�
       '/embed/%2e%2e/package.json',
       '/embed/',
       '/embed/open-button.html',
-      '/web/index.html',
+      '/web/inbox.html',
     ]) {
       assert.equal((await h.send({ path })).status, 404, path);
     }
@@ -514,11 +514,11 @@ test('GET /api/health は、渡された pid と待ち受けの状態（listener
   }
 });
 
-test('/ は受け箱の画面、/settings は一覧の表と項目の選択の画面を、inline を許さない CSP で配る', async () => {
+test('/inbox は受け箱の画面、/settings は一覧の表と項目の選択の画面を、inline を許さない CSP で配る', async () => {
   await withApp(async (h) => {
-    const inbox = await h.send({ path: '/' });
+    const inbox = await h.send({ path: '/inbox' });
     assert.equal(inbox.status, 200);
-    assert.match(inbox.text, /src="\.\/inbox\.js"/);
+    assert.match(inbox.text, /src="\/inbox\.js"/);
     assert.ok(!inbox.text.includes('main.js'));
     assert.match(inbox.text, /href="\/settings"/);
     const settings = await h.send({ path: '/settings' });

@@ -236,7 +236,7 @@ test('木・一覧・プロジェクトの画面は絶対パスのスクリプ�
       assert.equal(reply.status, 200, path);
       assert.equal(reply.headers['content-type'], 'text/javascript; charset=utf-8');
     }
-    const inbox = await send('/');
+    const inbox = await send('/inbox');
     assert.match(inbox.text, /href="\/runs"/);
     assert.match(inbox.text, /id="project-link"/);
   });

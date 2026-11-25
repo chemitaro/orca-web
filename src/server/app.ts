@@ -135,8 +135,10 @@ export const OPEN_ERROR_STATUS: Record<OpenErrorCode, number> = {
 const STATIC_FILES: Readonly<
   Record<string, { file: string; type: string; page?: 'index' | 'embed'; cors?: 'read'; frameSelf?: true }>
 > = {
-  '/': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
-  '/index.html': { file: 'index.html', type: 'text/html; charset=utf-8', page: 'index' },
+  // 最初の画面は指揮の画面（iss-00082 D-01）。/apexes は別名として残す。受け箱は /inbox。
+  '/': { file: 'apexes.html', type: 'text/html; charset=utf-8', page: 'index' },
+  '/index.html': { file: 'apexes.html', type: 'text/html; charset=utf-8', page: 'index' },
+  '/inbox': { file: 'inbox.html', type: 'text/html; charset=utf-8', page: 'index' },
   '/inbox.js': { file: 'inbox.js', type: 'text/javascript; charset=utf-8' },
   '/inbox-view.js': { file: 'inbox-view.js', type: 'text/javascript; charset=utf-8' },
   '/inbox-dom.js': { file: 'inbox-dom.js', type: 'text/javascript; charset=utf-8' },
