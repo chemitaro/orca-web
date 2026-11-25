@@ -234,7 +234,7 @@ test('統括の worktree は terminals を優先し、なければ agents に結
     counting.overrides.runs = async () => ({
       ok: true,
       truncated: false,
-      data: [{ id: 'r1', objective: null, updatedAt: null, coordinatorHandle: handle }],
+      data: [{ id: 'r1', objective: null, updatedAt: null, coordinatorHandle: handle, consumerGeneration: null }],
     });
     if (terminals === 'different')
       counting.overrides.terminals = async () => ({
@@ -281,6 +281,8 @@ function coordinatorTask(patch: Partial<OrcaTask> = {}): OrcaTask {
     createdAt: '2026-01-02T10:00:00Z',
     completedAt: null,
     createdByTerminalHandle: 'term-current',
+    createdByPaneKey: null,
+    createdByRunGeneration: null,
     ...patch,
   };
 }
@@ -290,7 +292,15 @@ async function coordinatorReader(handle: string | null, tasks: OrcaTask[]) {
   reader.overrides.runs = async () => ({
     ok: true,
     truncated: false,
-    data: [{ id: 'run-current', objective: '仮の統括', updatedAt: null, coordinatorHandle: handle }],
+    data: [
+      {
+        id: 'run-current',
+        objective: '仮の統括',
+        updatedAt: null,
+        coordinatorHandle: handle,
+        consumerGeneration: null,
+      },
+    ],
   });
   reader.overrides.tasks = async () => ({ ok: true, truncated: false, data: tasks });
   reader.overrides.terminals = async () => ({
@@ -380,4 +390,50 @@ test('terminals が一度も読めなければ task の作り手を採用せず�
     assert.equal(run?.coordinatorResolvedBy, null);
     assert.equal(run?.coordinatorWorktreeId.missing, handle === null ? 'not-provided' : 'source-failed');
   }
+});
+
+const NEW_KEYS = [
+  'consumerGeneration',
+  'consumer_generation',
+  'createdByPaneKey',
+  'created_by_pane_key',
+  'createdByRunGeneration',
+  'created_by_run_generation',
+  'attentionCategories',
+  'attention',
+];
+
+function keysOf(value: unknown, into = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) for (const item of value) keysOf(item, into);
+  else if (typeof value === 'object' && value !== null)
+    for (const [key, item] of Object.entries(value)) {
+      into.add(key);
+      keysOf(item, into);
+    }
+  return into;
+}
+
+test('状態の文書に、内部の値（世代、作成者の paneKey、attention）の鍵が出ない（T-02）', async () => {
+  const { reader } = replayReader();
+  const doc = JSON.parse(JSON.stringify(await poller(reader).snapshot()));
+  const keys = keysOf(doc);
+  for (const key of NEW_KEYS) assert.ok(!keys.has(key), `${key} must not appear`);
+  assert.deepEqual(keys, keysOf(expectedState));
+});
+
+test('snapshotWithExtras は、同じ読みの状態の文書と内部の値と、読み終えるたびに増える世代を返す', async () => {
+  const { reader } = replayReader();
+  const clock = new Clock();
+  const p = poller(reader, clock);
+  const first = await p.snapshotWithExtras();
+  assert.deepEqual(JSON.parse(JSON.stringify(first.state)), expectedState);
+  assert.deepEqual(first.extras.runs.get('run_hex-3'), { generation: 2 });
+  assert.deepEqual(first.extras.tasks.get('task_hex-2'), { paneKey: 'uuid-10:uuid-11', generation: 2 });
+  assert.deepEqual(first.extras.workers.get('ctx_hex-1'), { workerState: 'ready', attention: ['input'] });
+  const again = await p.snapshotWithExtras();
+  assert.equal(again.generation, first.generation);
+  clock.advance(60);
+  await p.tick();
+  const later = await p.snapshotWithExtras();
+  assert.ok(later.generation > first.generation);
 });

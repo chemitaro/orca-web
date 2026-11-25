@@ -11,6 +11,7 @@ const run = (id: string, updatedAt: string | null = OLD): OrcaRun => ({
   updatedAt,
   coordinatorHandle: null,
   objective: null,
+  consumerGeneration: null,
 });
 const worker = (runId: string, patch: Partial<OrcaWorker> = {}): OrcaWorker => ({
   runId,
@@ -23,6 +24,7 @@ const worker = (runId: string, patch: Partial<OrcaWorker> = {}): OrcaWorker => (
   liveness: null,
   worktreeId: null,
   structuredSessionId: null,
+  attentionCategories: [],
   ...patch,
 });
 

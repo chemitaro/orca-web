@@ -1,6 +1,7 @@
 // 共有のポーリング。Orca を読むのはここだけで、要求（/api/state）はキャッシュから正規化して返す。
 // 取得元を3つの組に分け、組ごとに間隔と次の時刻を持つ。見る人がいなければ間隔を遅くする。
 // 失敗しても、取得元ごとに最後に成功した値を残す。
+import { buildOrchestrationExtras, type OrchestrationExtras } from '../apex/extras.ts';
 import type { InboxGate, InboxInputs, InboxMessage, MailSnapshot } from '../inbox/model.ts';
 import { selectMailRuns } from '../inbox/select-runs.ts';
 import type { CapabilityReport } from '../orca/capabilities.ts';
@@ -52,6 +53,13 @@ const GROUP_OF: Record<SourceName, PollGroup> = {
   repos: 'slow',
   worktrees: 'slow',
 };
+
+/** 同じ読みの状態の文書と内部の値。generation は読み終えるたびに増える。 */
+export interface StateWithExtras {
+  state: StateDocument;
+  extras: OrchestrationExtras;
+  generation: number;
+}
 
 export interface StatePollerOptions {
   reader: StateReader;
@@ -134,6 +142,8 @@ export class StatePoller {
   /** 一度でも読み終えた組。 */
   readonly #completed = new Set<PollGroup>();
   #timer: NodeJS.Timeout | null = null;
+  /** 読みの世代。組の読みが終わるたびに増える。 */
+  #generation = 0;
 
   constructor(options: StatePollerOptions) {
     this.#reader = options.reader;
@@ -190,6 +200,20 @@ export class StatePoller {
       await Promise.all(pending.map((g) => this.#refresh(g, capabilities)));
     }
     return this.snapshotSync();
+  }
+
+  /** snapshot() と同じ文書に、頂点の一覧のための内部の値と読みの世代を添える。`/api/state` は使わない。 */
+  async snapshotWithExtras(): Promise<StateWithExtras> {
+    await this.snapshot();
+    return {
+      state: this.snapshotSync(),
+      extras: buildOrchestrationExtras({
+        runs: this.#sources.runs.data as OrcaRun[] | null,
+        tasks: this.#sources.tasks.data as OrcaTask[] | null,
+        workers: this.#sources.workers.data as OrcaWorker[] | null,
+      }),
+      generation: this.#generation,
+    };
   }
 
   noteInboxViewer(): void {
@@ -281,6 +305,7 @@ export class StatePoller {
         if (g === 'orchestration' && this.#inboxViewing()) await this.#readMail(started);
       } finally {
         this.#completed.add(g);
+        this.#generation++;
         this.#next[g] = started + this.#interval(g);
         this.#inflight[g] = null;
       }

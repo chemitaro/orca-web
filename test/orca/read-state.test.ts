@@ -108,6 +108,8 @@ test('read-state は取得元ごとの記録を返し、本文や transcript の
     runId: 'run_hex-3',
     parentId: 'task_hex-2',
     createdByTerminalHandle: null,
+    createdByPaneKey: null,
+    createdByRunGeneration: null,
     title: null,
     displayName: 'text-18',
     status: 'completed',
@@ -140,6 +142,7 @@ test('run-list と worker-list はカーソルを最後まで読む', async () =
     terminalState: 'retained',
     worktreeId: WT1,
     structuredSessionId: null,
+    attentionCategories: ['input'],
   });
 });
 
@@ -336,6 +339,68 @@ test('agentStatus の firstStateStartedAt と stateHistory の先頭の startedA
       [null, null],
       [null, null],
       [null, null],
+    ],
+  );
+});
+
+test('run の consumer_generation、task の created_by_pane_key・created_by_run_generation、worker の attention.categories を拾い、形が違えば null・空の配列にする（T-01）', async () => {
+  const { reader: r } = reader({
+    version: 1,
+    kind: 'cli',
+    entries: [
+      okEntry(['orchestration', 'run-list', '--full', '--limit', '100'], {
+        runs: [
+          { id: 'r1', consumer_generation: 3 },
+          { id: 'r2', consumer_generation: '3' },
+          { id: 'r3', consumer_generation: 1.5 },
+          { id: 'r4' },
+        ],
+      }),
+      okEntry(['orchestration', 'task-list', '--run', 'r1', '--full'], {
+        tasks: [
+          { id: 't1', created_by_pane_key: 'uuid-1:uuid-2', created_by_run_generation: 2 },
+          { id: 't2', created_by_pane_key: 7, created_by_run_generation: 'x' },
+          { id: 't3' },
+        ],
+      }),
+      okEntry(['orchestration', 'worker-list', '--full', '--limit', '100'], {
+        workers: [
+          {
+            dispatchId: 'd1',
+            workerState: 'running',
+            projection: { attention: { requiresAction: true, categories: ['input', 'approval', 'novel', 3] } },
+          },
+          { dispatchId: 'd2', projection: { attention: { categories: 'input' } } },
+          { dispatchId: 'd3' },
+        ],
+        page: { hasMore: false },
+      }),
+    ],
+  });
+  const runs = await r.runs();
+  assert.ok(runs.ok);
+  assert.deepEqual(
+    runs.data.map((run) => run.consumerGeneration),
+    [3, null, null, null],
+  );
+  const tasks = await r.tasks('r1');
+  assert.ok(tasks.ok);
+  assert.deepEqual(
+    tasks.data.map((task) => [task.createdByPaneKey, task.createdByRunGeneration]),
+    [
+      ['uuid-1:uuid-2', 2],
+      [null, null],
+      [null, null],
+    ],
+  );
+  const workers = await r.workers();
+  assert.ok(workers.ok);
+  assert.deepEqual(
+    workers.data.map((w) => [w.workerState, w.attentionCategories]),
+    [
+      ['running', ['input', 'approval', 'novel']],
+      [null, []],
+      [null, []],
     ],
   );
 });
