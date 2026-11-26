@@ -63,8 +63,11 @@ test('buildDetail は親と子を、詳細の画面へのリンクで示す', ()
   assert.deepEqual(byLabel(orphan, '親'), { label: '親', text: 'uuid-60:uuid-61', note: 'not-linked', href: null });
 });
 
-test('buildDetail は、構造化 Chat のタブでは agent を付けずに開き、知らない id には null', () => {
-  assert.deepEqual(buildDetail(expectedState, 'chat:uuid-80')?.open, { worktree: 'uuid-1::/p-1/p-2' });
+test('iss-00108 T-02：buildDetail は、構造化 Chat のタブでは会話（chat: の id）を指して開き、知らない id には null', () => {
+  assert.deepEqual(buildDetail(expectedState, 'chat:uuid-80')?.open, {
+    worktree: 'uuid-1::/p-1/p-2',
+    agent: 'chat:uuid-80',
+  });
   assert.equal(buildDetail(expectedState, 'nope'), null);
 });
 

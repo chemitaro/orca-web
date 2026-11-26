@@ -135,11 +135,23 @@ function lastViewed(snapshot: TabsSnapshot): Tab | null {
   return snapshot.tabs.find((t) => t.id === id || (isTerminal(t) && t.parentTabId === id)) ?? null;
 }
 
+/** 構造化 Chat のエージェントの id の頭（`chat:<タブの id>`。src/state/normalize.ts と同じ形）。 */
+export const CHAT_AGENT_PREFIX = 'chat:';
+
+/** 頼まれたエージェントのタブ。`chat:<T>` なら id が T の端末でないタブ、ほかは paneKey が同じ端末のタブ（iss-00108 D-01）。 */
+function requestedTab(snapshot: TabsSnapshot, agent: string): Tab | undefined {
+  if (agent.startsWith(CHAT_AGENT_PREFIX)) {
+    const tabId = agent.slice(CHAT_AGENT_PREFIX.length);
+    return snapshot.tabs.find((t) => !isTerminal(t) && t.id === tabId);
+  }
+  return snapshot.tabs.find((t): t is TerminalTab => isTerminal(t) && paneKeyOf(t) === agent);
+}
+
 /** R-01 の順で1つを選ぶ。 */
 export function chooseTarget(snapshot: TabsSnapshot, agent?: string): Choice {
   let requestedAgentFound: boolean | undefined;
   if (agent !== undefined) {
-    const tab = snapshot.tabs.find((t): t is TerminalTab => isTerminal(t) && paneKeyOf(t) === agent);
+    const tab = requestedTab(snapshot, agent);
     requestedAgentFound = tab !== undefined;
     if (tab) return { target: routeFor(tab, 'requested-agent'), requestedAgentFound };
   }

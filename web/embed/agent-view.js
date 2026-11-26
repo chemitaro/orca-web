@@ -130,10 +130,13 @@ export function buildDetail(state, agentId, options = {}) {
     rows.push({ label: 'PR', text: '—', note: 'not-linked', href: null });
     rows.push({ label: 'CI', text: '—', note: 'not-linked', href: null });
   }
+  // 構造化 Chat は会話のタブ（id は chat:<タブの id>）を指す（iss-00108 D-02）。
   const open = worktree
     ? agent.kind === 'terminal-tab' && agent.paneKey
       ? { worktree: agent.worktreeId, agent: agent.paneKey }
-      : { worktree: agent.worktreeId }
+      : agent.kind === 'chat-tab'
+        ? { worktree: agent.worktreeId, agent: String(agent.id) }
+        : { worktree: agent.worktreeId }
     : null;
   return { title: agentLabel(agent, worktreeNames), rows, open };
 }
