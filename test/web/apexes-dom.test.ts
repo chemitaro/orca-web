@@ -12,6 +12,7 @@ import {
   mayLeaveFrame,
   mountAgentFrame,
   renderApexCards,
+  renderBoard,
   renderDraftNotice,
   renderHeadline,
   renderMemberBand,
@@ -21,7 +22,7 @@ import {
   renderSection,
   startApexPolling,
 } from '../../web/apexes-dom.js';
-import { buildApexesView, SEEN_DWELL_MS, SEEN_STORAGE_KEY } from '../../web/apexes-view.js';
+import { boardColumns, buildApexesView, SEEN_DWELL_MS, SEEN_STORAGE_KEY } from '../../web/apexes-view.js';
 import { createDraftSender } from '../../web/embed/draft-receiver.js';
 import { agent, fact, input, NOW, repo, worktree } from '../inbox/fixture.ts';
 
@@ -1063,4 +1064,41 @@ test('iss-00104 T-05：見出しの詳細の切り替えは aria-expanded・aria
   assert.deepEqual(box.children, [team]);
   assert.equal((renderPaneExtras(fakeDocument, [team], true) as unknown as { hidden: boolean }).hidden, false);
   assert.equal(renderPaneExtras(fakeDocument, [null, null], true), null, '中身がなければ欄を出さない');
+});
+
+test('iss-00106 T-02：renderBoard は列ごとの div.apex-column に段を描き、畳んだ段は opened に従い、行に onOpen を渡す', () => {
+  const view = buildApexesView(dangerousView().doc, { now: NOW });
+  const opens: unknown[] = [];
+  const columns = renderBoard(fakeDocument, boardColumns(view.sections), {
+    opened: new Set(['unlinked']),
+    onOpen: (target: unknown) => opens.push(target),
+  }) as FakeElement[];
+  assert.deepEqual(
+    columns.map((c) => [c.tagName, c.className, c.dataset.column]),
+    [
+      ['DIV', 'apex-column', 'needs_action'],
+      ['DIV', 'apex-column', 'working'],
+      ['DIV', 'apex-column', 'done'],
+    ],
+  );
+  const stagesOf = (c: FakeElement) => c.children.map((s) => s.dataset.stage);
+  assert.deepEqual(stagesOf(columns[2] as FakeElement), [
+    'done_recent',
+    'done_older',
+    'sleeping',
+    'unknown',
+    'unlinked',
+  ]);
+  const details = (columns[2] as FakeElement).all().filter((e) => e.tagName === 'DETAILS');
+  assert.deepEqual(
+    details.map((d) => d.open),
+    [false, false, false, true],
+    'opened の段だけ開く',
+  );
+  const all = columns.flatMap((c) => c.all());
+  const withOpen = all.filter((e) => e.className === 'orca-open').length;
+  const expected = view.sections
+    .flatMap((s: { rows: { selectable: boolean; open: unknown }[] }) => s.rows)
+    .filter((r) => r.selectable && r.open).length;
+  assert.equal(withOpen, expected, '行に onOpen が渡る');
 });

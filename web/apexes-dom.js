@@ -177,6 +177,24 @@ export function renderSection(doc, section, { expanded = false, onOpen, onOpenMo
 }
 
 /**
+ * 3列（iss-00106 D-02）。列ごとに div.apex-column（data-column）を作り、中に段を描く。
+ * 段の expanded は opened（開いていた段の key の集まり）に従う。onOpen・onOpenMount は行に渡す。
+ * @param {any} doc
+ * @param {{ key: string, sections: any[] }[]} columns apexes-view.js の boardColumns
+ * @param {{ opened?: Set<string>, onOpen?: (target: any, control: any) => void,
+ *   onOpenMount?: (target: any, control: any) => void }} [options]
+ */
+export function renderBoard(doc, columns, { opened = new Set(), onOpen, onOpenMount } = {}) {
+  return columns.map((column) => {
+    const box = make(doc, 'div', null, 'apex-column');
+    box.dataset.column = column.key;
+    for (const section of column.sections)
+      box.append(renderSection(doc, section, { expanded: opened.has(section.key), onOpen, onOpenMount }));
+    return box;
+  });
+}
+
+/**
  * 右のペインの見出し（「← 一覧」、状態の印、題名、「一覧にありません」の札、「Orca で開く」の部品の置き場）。
  * openRoot は呼び手が持つ共有の部品（web/embed/open-control.js）の root で、描き直しても同じ要素を移して使う。
  * @param {any} doc

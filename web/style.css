@@ -990,8 +990,32 @@ a {
     min-height: 40%;
   }
 
-  .apexes-page .apex-back {
+  /* 選んでいないときは3列（iss-00106 D-04）：右のペインを出さず、一覧を対応が必要・作業中・完了の列に分け、
+     列はそれぞれの中で巻く。選んだときは今の 320px の一覧（列を縦に重ねる）と会話。「← 一覧」で3列に戻る。 */
+  body.apexes-page:not(.apexes--selected) .apex-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.apexes-page:not(.apexes--selected) .apex-pane {
     display: none;
+  }
+
+  body.apexes-page:not(.apexes--selected) .apex-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    overflow: hidden;
+  }
+
+  body.apexes-page:not(.apexes--selected) .apex-column {
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  body.apexes-page:not(.apexes--selected) .apex-column > .stage:first-child {
+    margin-top: 0;
   }
 }
 

@@ -45,7 +45,8 @@ test('R-01：入口は ?apex= を履歴を増やさない replaceState で覚え
   assert.match(entry, /const target = paneFrameTarget\(pane\.header\.id, memberView\);/);
   assert.match(
     entry,
-    /initialSelection\(location\.search, \{\s*wide: window\.matchMedia\(`\(min-width: \$\{WIDE_MIN_PX\}px\)`\)\.matches,/,
+    /let selection = initialSelection\(location\.search\);/,
+    '広い画面でも自動で選ばない（iss-00106）',
   );
   assert.match(entry, /createOpenControl\(document, \{ size: 'md' \}\)/, '「Orca で開く」は共有の部品');
   const html = readFileSync(new URL('../../web/apexes.html', import.meta.url), 'utf8');
@@ -73,7 +74,7 @@ test('T-08：900px 未満は選択の class で一覧と右のペインの片方
   assert.match(narrow, /body\.apexes-page\.apexes--selected \.apex-list,[^{]*\{\s*display: none;/);
   const wide = mediaBlock(css, '(min-width: 900px)');
   assert.match(wide, /grid-template-columns: 320px minmax\(0, 1fr\);/);
-  assert.match(wide, /\.apex-back \{\s*display: none;/);
+  assert.doesNotMatch(wide, /\.apex-back \{\s*display: none;/, '「← 一覧」は広い画面でも出す（iss-00106）');
   assert.match(css, /\.apexes-page \.apex-title \{[^}]*overflow-wrap: anywhere;/);
   const entry = read('apexes.js');
   assert.match(entry, /document\.body\.classList\.toggle\('apexes--selected', pane\.selected\)/);
@@ -130,10 +131,7 @@ test('iss-00102 T-02：行の「Orca で開く」は板（createOpenBoard）を�
   assert.match(entry, /const rowOpenBoard = createOpenBoard\(\);/);
   assert.match(entry, /onOpenMount: \(target, control\) => rowOpenBoard\.mount\(target\.agent, control\)/);
   assert.match(entry, /rowOpenBoard\.open\(target\.agent, control, \(\) => sendOpen\(target\)\)/);
-  assert.match(
-    entry,
-    /renderSection\(document, section, \{ expanded: opened\.has\(section\.key\), \.\.\.rowOpenOptions \}\)/,
-  );
+  assert.match(entry, /renderBoard\(document, boardColumns\(view\.sections\), \{ opened, \.\.\.rowOpenOptions \}\)/);
   assert.match(entry, /runOpen\(openControl, \(\) => sendOpen\(target\)\)/, '見出しも同じ送る口');
 });
 
@@ -202,4 +200,24 @@ test('iss-00104 T-05：詳細はチームの帯と対応のカードを1つの�
   assert.match(entry, /extrasOpen = !currentExtrasOpen\(\);\s*renderPane\(\);/);
   assert.match(entry, /renderPaneHead\(document, pane\.header, \{ openRoot: openControl\.root, extras: toggle \}\)/);
   assert.match(entry, /querySelector\('button\[data-action="extras"\]'\)\)\?\.focus\(\)/);
+});
+
+test('iss-00106 T-04：900px 以上・選んでいないときは3列で右のペインを隠し、列がそれぞれ巻く', () => {
+  const css = withoutComments(readFileSync(new URL('../../web/style.css', import.meta.url), 'utf8'));
+  const wide = mediaBlock(css, '(min-width: 900px)');
+  const not = 'body.apexes-page:not(.apexes--selected)';
+  assert.match(ruleIn(wide, `${not} .apex-layout`), /grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(ruleIn(wide, `${not} .apex-pane`), /display: none;/);
+  const list = ruleIn(wide, `${not} .apex-list`);
+  for (const decl of ['display: grid;', 'grid-template-columns: repeat(3, minmax(0, 1fr));', 'overflow: hidden;'])
+    assert.ok(list.includes(decl), decl);
+  const column = ruleIn(wide, `${not} .apex-column`);
+  for (const decl of ['min-height: 0;', 'overflow-y: auto;', 'overscroll-behavior: contain;'])
+    assert.ok(column.includes(decl), decl);
+  assert.match(ruleIn(wide, `${not} .apex-column > .stage:first-child`), /margin-top: 0;/);
+  const entry = read('apexes.js');
+  assert.match(
+    entry,
+    /els\.sections\.replaceChildren\(\.\.\.renderBoard\(document, boardColumns\(view\.sections\), \{ opened, \.\.\.rowOpenOptions \}\)\);/,
+  );
 });
