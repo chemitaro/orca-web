@@ -158,6 +158,8 @@ const STATIC_FILES: Readonly<
   '/apexes-team-view.js': { file: 'apexes-team-view.js', type: 'text/javascript; charset=utf-8' },
   '/apexes-team-dom.js': { file: 'apexes-team-dom.js', type: 'text/javascript; charset=utf-8' },
   '/apexes-live-view.js': { file: 'apexes-live-view.js', type: 'text/javascript; charset=utf-8' },
+  // 対応が必要なメンバーの節の印（iss-00097 D-01）。
+  '/apexes-attention-view.js': { file: 'apexes-attention-view.js', type: 'text/javascript; charset=utf-8' },
   // 対応のカード（iss-00080 D-01）。
   '/apexes-cards-view.js': { file: 'apexes-cards-view.js', type: 'text/javascript; charset=utf-8' },
   // タブの印（iss-00081 D-01）。対応が必要があれば /apexes が印付きに差し替える。

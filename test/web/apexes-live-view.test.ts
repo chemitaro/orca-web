@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ApexMember, ApexTeamNode } from '../../src/apex/model.ts';
+import { memberAttention } from '../../web/apexes-attention-view.js';
 import { buildLiveTeam, LIVE_TEAM_LIMIT } from '../../web/apexes-live-view.js';
 
 const NOW = Date.parse('2026-01-02T12:00:00.000Z');
@@ -48,6 +49,7 @@ type LiveRow = {
   title: string;
   elapsed: string | null;
   dim: boolean;
+  marks?: unknown;
 };
 type Live = { rows: LiveRow[]; more: number; moreLabel: string | null };
 
@@ -172,4 +174,45 @@ test('T-02: 同じ深さで 8 を超えるときは新しい順に選ぶ', () =>
     ['agent:a2', 'agent:a3', 'agent:a4', 'agent:a5', 'agent:a6', 'agent:a7', 'agent:a8', 'agent:a9'],
   );
   assert.equal(live.moreLabel, 'ほか 2');
+});
+
+test('iss-00097 T-02：status done で未回答の ask の節は、稼働中 12 でも最初に選ばれ、祖先も出て、印を持ち薄くしない', () => {
+  const team: ApexTeamNode[] = [];
+  for (let i = 0; i < 12; i += 1) {
+    team.push(node(`agent:a${i}`, { status: 'working', stateStartedAt: iso(NOW - i * MIN) }));
+  }
+  team.push(node('dispatch:p', { status: 'done' }));
+  team.push(node('dispatch:q', { status: 'done', parentKey: 'dispatch:p', depth: 2, createdAt: iso(NOW - 600 * MIN) }));
+  const attention = memberAttention({
+    questions: [{ dispatchId: 'q', taskTitle: null, kind: 'ask', working: false }],
+    waitingMembers: [],
+  });
+  const live = buildLiveTeam(team, { now: NOW, attention }) as Live;
+  assert.ok(live);
+  const keys = live.rows.map((row) => row.key);
+  assert.ok(keys.includes('dispatch:q'));
+  assert.ok(keys.includes('dispatch:p'));
+  // 印のある節 1 と稼働中の新しい 7 を選ぶ。祖先 p は数えない。
+  assert.equal(keys.filter((key) => key.startsWith('agent:')).length, 7);
+  assert.equal(live.moreLabel, 'ほか 5');
+  const q = live.rows.find((row) => row.key === 'dispatch:q');
+  assert.equal(q?.dim, false);
+  assert.deepEqual(q?.marks, [{ kind: 'question', label: '対応が必要：質問', urgent: true }]);
+  assert.equal(live.rows.find((row) => row.key === 'dispatch:p')?.dim, true);
+  assert.deepEqual(live.rows.find((row) => row.key === 'agent:a0')?.marks, []);
+});
+
+test('iss-00097 T-02：稼働中がなくても印のある節があれば木を出す。控えめの印だけの done の節は出さない', () => {
+  const team = [node('agent:x', { status: 'done' }), node('dispatch:w', { status: 'done' })];
+  const quiet = memberAttention({
+    questions: [{ dispatchId: 'w', taskTitle: null, kind: 'ask', working: true }],
+    waitingMembers: [],
+  });
+  assert.equal(buildLiveTeam(team, { now: NOW, attention: quiet }), null);
+  const waiting = memberAttention({ questions: [], waitingMembers: [{ id: 'x', title: null, mark: 'blocked' }] });
+  const live = buildLiveTeam(team, { now: NOW, attention: waiting }) as Live;
+  assert.deepEqual(
+    live.rows.map((row) => row.marks),
+    [[{ kind: 'waiting', label: '対応が必要：許可待ち', urgent: true }]],
+  );
 });

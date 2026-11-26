@@ -1,6 +1,8 @@
 // 指揮の画面の左の一覧の、頂点の行の下に出す「稼働中の内訳の木」（iss-00092 D-01）の組み立て（純粋な関数）。
 // 頂点の `team`（orca-web.apexes/v1）から、稼働中の節（working・waiting・live・unknown）とその祖先だけを選ぶ。
 // 祖先は止まっていても構成を示すために薄く出し、上限と「ほか n」には数えない。DOM、時計、fetch に触らない。描くのは apexes-dom.js。
+// 対応が必要の印（iss-00097、apexes-attention-view.js）のある節は status に関わらず出し、選びの最初にする。
+import { attentionFor } from './apexes-attention-view.js';
 import { iconKey } from './embed/agent-marks-icons.js';
 import { formatElapsed } from './embed/elapsed.js';
 
@@ -41,17 +43,24 @@ const isAgent = (node) => node.kind === 'agent' && typeof node.agentId === 'stri
 const startOf = (node) => (isAgent(node) ? node.stateStartedAt : node.createdAt);
 
 /**
- * 稼働中の内訳の木。稼働中の節がなければ null（木を出さない）。
- * 選ぶ優先は、深さの浅い順・同じ深さは起点の新しい順（同じなら文書の並び）。出す並びは文書の並び（木の順）。
+ * 稼働中の内訳の木。稼働中の節も対応が必要の印のある節もなければ null（木を出さない）。
+ * 選ぶ優先は、対応が必要の印のある節、深さの浅い順・同じ深さは起点の新しい順（同じなら文書の並び）。出す並びは文書の並び（木の順）。
  * @param {any} team 頂点の team
- * @param {{ now: number, limit?: number, members?: any[] }} options members は頂点の members（agentType を引く）
+ * @param {{ now: number, limit?: number, members?: any[], attention?: any }} options members は頂点の members（agentType を引く）。
+ *   attention は memberAttention の結果（なければ印を付けない）
  */
-export function buildLiveTeam(team, { now, limit = LIVE_TEAM_LIMIT, members = [] }) {
+export function buildLiveTeam(team, { now, limit = LIVE_TEAM_LIMIT, members = [], attention = null }) {
   const nodes = Array.isArray(team) ? team : [];
-  const live = nodes.map((node, index) => ({ node, index })).filter(({ node }) => LIVE.has(statusOf(node.status)));
+  const marksOf = new Map(nodes.map((node) => [node, attentionFor(node, attention)]));
+  const urgent = (node) => marksOf.get(node).some((mark) => mark.urgent);
+  const live = nodes
+    .map((node, index) => ({ node, index }))
+    .filter(({ node }) => LIVE.has(statusOf(node.status)) || urgent(node));
   if (live.length === 0) return null;
   const depthOf = (node) => Number(node.depth) || 1;
   live.sort((a, b) => {
+    const first = Number(urgent(b.node)) - Number(urgent(a.node));
+    if (first !== 0) return first;
     const depth = depthOf(a.node) - depthOf(b.node);
     if (depth !== 0) return depth;
     const at = time(startOf(a.node));
@@ -88,7 +97,8 @@ export function buildLiveTeam(team, { now, limit = LIVE_TEAM_LIMIT, members = []
         statusLabel: LIVE_STATUS_LABELS[status],
         title: titleOf(node.title),
         elapsed: formatElapsed(startOf(node), now, { clampFuture: true }),
-        dim: !LIVE.has(status),
+        dim: !LIVE.has(status) && !urgent(node),
+        marks: marksOf.get(node),
       };
     });
   const more = live.length - chosen.length;

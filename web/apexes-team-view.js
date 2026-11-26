@@ -1,6 +1,8 @@
 // 指揮の画面の右のペインの「チームの帯」（iss-00079 D-02）の組み立て（純粋な関数）。頂点の `team`（orca-web.apexes/v1）から、
-// 数の要約、字下げの木の行（動いている・待ち・不明・24 時間以内の失敗とその祖先だけを出し、ほかは親ごとの「完了 n」のまとめ）、
+// 数の要約、字下げの木の行（動いている・待ち・不明・24 時間以内の失敗・対応が必要の印のある節とその祖先だけを出し、ほかは親ごとの「完了 n」のまとめ）、
 // 履歴の帯の四角の並びを作る。DOM、時計、fetch に触らない。描くのは apexes-team-dom.js。
+// 対応が必要の印（iss-00097、apexes-attention-view.js）のある節もいつも出し、節の行に印を添える。
+import { attentionFor, memberAttention } from './apexes-attention-view.js';
 import { detailHref } from './apexes-view.js';
 import { formatElapsed } from './embed/elapsed.js';
 
@@ -48,7 +50,7 @@ function summaryOf(team) {
   return `チーム ${team.length}（${parts.join('・')}）`;
 }
 
-function nodeRow(node, now) {
+function nodeRow(node, now, attention) {
   const status = statusOf(node.status);
   const agent = node.kind === 'agent' && typeof node.agentId === 'string';
   const from = agent ? node.stateStartedAt : (node.completedAt ?? node.createdAt);
@@ -61,6 +63,7 @@ function nodeRow(node, now) {
     title: typeof node.title === 'string' && node.title !== '' ? node.title : '題名なし',
     elapsed: formatElapsed(from, now, { clampFuture: true }),
     href: agent ? detailHref(node.agentId) : null,
+    marks: attentionFor(node, attention),
   };
 }
 
@@ -76,10 +79,12 @@ export function buildTeamBand(item, now) {
   const keys = new Set(team.map((node) => node.key));
   const parentOf = (node) => (node.parentKey !== null && keys.has(node.parentKey) ? node.parentKey : null);
   const byKey = new Map(team.map((node) => [node.key, node]));
+  const attention = memberAttention(item);
+  const urgent = (node) => attentionFor(node, attention).some((mark) => mark.urgent);
   // いつも出す節とその祖先。
   const visible = new Set();
   for (const node of team) {
-    if (!ALWAYS.has(statusOf(node.status)) && !recentFailure(node, now)) continue;
+    if (!ALWAYS.has(statusOf(node.status)) && !recentFailure(node, now) && !urgent(node)) continue;
     let current = node;
     while (current && !visible.has(current.key)) {
       visible.add(current.key);
@@ -93,12 +98,12 @@ export function buildTeamBand(item, now) {
     children.set(parent, [...(children.get(parent) ?? []), node]);
   }
   /** 節とその子孫を、文書の並びの深さ優先で並べる（まとめの中身）。 */
-  const subtree = (node) => [nodeRow(node, now), ...(children.get(node.key) ?? []).flatMap(subtree)];
+  const subtree = (node) => [nodeRow(node, now, attention), ...(children.get(node.key) ?? []).flatMap(subtree)];
   const walk = (parent, depth) => {
     const rows = [];
     const hidden = [];
     for (const node of children.get(parent) ?? []) {
-      if (visible.has(node.key)) rows.push(nodeRow(node, now), ...walk(node.key, depth + 1));
+      if (visible.has(node.key)) rows.push(nodeRow(node, now, attention), ...walk(node.key, depth + 1));
       else hidden.push(...subtree(node));
     }
     if (hidden.length > 0) {

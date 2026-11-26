@@ -949,3 +949,22 @@ a {
     display: none;
   }
 }
+
+/* 対応が必要の印の札（iss-00097 D-02）。内訳の木とチームの帯の節で、状態の言葉の横に置く。 */
+.apexes-page .member-attention {
+  flex: none;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.apexes-page .member-attention--urgent {
+  padding: 0 4px;
+  border-radius: 3px;
+  font-weight: 600;
+  color: var(--bad);
+  border: 1px solid var(--bad);
+}
+
+.apexes-page .member-attention--quiet {
+  color: var(--muted);
+}
