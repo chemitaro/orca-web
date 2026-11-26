@@ -27,7 +27,7 @@ import {
   createTerminalApprover,
   readOnlyApprover,
 } from './approval-view.js';
-import { createDraftReceiver, isComposeOff } from './draft-receiver.js';
+import { createDraftReceiver, isComposeOff, isHeadCompact } from './draft-receiver.js';
 import { createOpenBoard, createOpenControl, runOpen } from './open-control.js';
 import {
   buildQuestionCard,
@@ -50,6 +50,8 @@ const params = new URLSearchParams(location.search);
 const agentId = params.get('id') ?? '';
 /** 送る欄を出すか（compose=off の枠は答えるだけ）。 */
 const composeOn = !isComposeOff(params);
+// head=compact は題名と Open の行を隠す（指揮の画面の枠。題名と Open は外の見出しにある）。
+if (isHeadCompact(params)) document.body.classList.add('head-compact');
 const theme = params.get('theme');
 if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
 

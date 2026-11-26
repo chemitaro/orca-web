@@ -181,9 +181,10 @@ export function renderSection(doc, section, { expanded = false, onOpen, onOpenMo
  * openRoot は呼び手が持つ共有の部品（web/embed/open-control.js）の root で、描き直しても同じ要素を移して使う。
  * @param {any} doc
  * @param {any} header buildPane の header
- * @param {{ openRoot?: any }} [options]
+ * @param {{ openRoot?: any, extras?: { expanded: boolean, label: string, badge: string | null, alert: boolean } | null }} [options]
+ *   extras は詳細の切り替えのボタンの表示（apexes-view.js の paneExtrasToggle）。null なら置かない（iss-00104 D-03）。
  */
-export function renderPaneHead(doc, header, { openRoot = null } = {}) {
+export function renderPaneHead(doc, header, { openRoot = null, extras = null } = {}) {
   const box = make(doc, 'div', null, 'apex-pane-bar');
   const back = make(doc, 'button', '← 一覧', 'apex-back');
   back.type = 'button';
@@ -194,11 +195,45 @@ export function renderPaneHead(doc, header, { openRoot = null } = {}) {
   mark.append(make(doc, 'span', header.markLabel));
   box.append(mark, make(doc, 'span', header.title, 'apex-title apex-pane-title'));
   if (header.missingLabel) box.append(make(doc, 'span', header.missingLabel, 'chip tag apex-missing'));
+  if (extras) {
+    const toggle = make(
+      doc,
+      'button',
+      null,
+      extras.alert ? 'apex-extras-toggle apex-extras-toggle--alert' : 'apex-extras-toggle',
+    );
+    toggle.type = 'button';
+    toggle.dataset.action = 'extras';
+    toggle.setAttribute('aria-expanded', extras.expanded ? 'true' : 'false');
+    toggle.setAttribute('aria-controls', PANE_EXTRAS_ID);
+    toggle.append(make(doc, 'span', extras.label, 'apex-extras-label'));
+    if (extras.badge) toggle.append(make(doc, 'span', extras.badge, 'apex-extras-badge'));
+    box.append(toggle);
+  }
   if (openRoot) {
     const slot = make(doc, 'span', null, 'apex-pane-open');
     slot.append(openRoot);
     box.append(slot);
   }
+  return box;
+}
+
+/** 詳細の欄の id（切り替えのボタンの aria-controls）。 */
+export const PANE_EXTRAS_ID = 'pane-extras';
+
+/**
+ * 詳細の欄（チームの帯と対応のカード）。中身がなければ null。open が偽なら hidden で畳む（iss-00104 D-03）。
+ * @param {any} doc
+ * @param {any[]} parts null を除いた要素
+ * @param {boolean} open
+ */
+export function renderPaneExtras(doc, parts, open) {
+  const items = parts.filter((part) => part !== null && part !== undefined);
+  if (items.length === 0) return null;
+  const box = make(doc, 'div', null, 'apex-pane-extras');
+  box.id = PANE_EXTRAS_ID;
+  box.hidden = open !== true;
+  box.append(...items);
   return box;
 }
 

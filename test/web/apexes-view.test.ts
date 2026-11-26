@@ -10,8 +10,10 @@ import {
   buildPane as buildPaneView,
   buildApexesView as buildView,
   frameSrc,
+  initialExtrasOpen,
   initialSelection,
   isUnseen,
+  paneExtrasToggle,
   pickSelection,
   pruneSeen,
   reduceSelection,
@@ -227,7 +229,7 @@ test('T-04：selectionUrl は apex を足す・替える・外し、ほかの引
   assert.equal(selectionUrl('?apex=a&project=p', 'b'), '?apex=b&project=p');
   assert.equal(selectionUrl('?project=p&apex=a', null), '?project=p');
   assert.equal(selectionUrl('?apex=a', null), '');
-  assert.equal(frameSrc('a b/&'), '/embed/agent?id=a%20b%2F%26');
+  assert.equal(frameSrc('a b/&'), '/embed/agent?id=a%20b%2F%26&head=compact');
 });
 
 test('T-06：切り替えの確かめの文', () => {
@@ -490,4 +492,24 @@ test('iss-00102 T-01：右のペインの見出しの開く先は、行と同じ
   const row: any = view.sections.flatMap((s: { rows: unknown[] }) => s.rows).find((r: any) => r.selectable && r.open);
   const pane = buildPane(doc, { id: row.key, checked: true }, { now: NOW, remembered: null });
   assert.deepEqual(pane.header.open, row.open);
+});
+
+test('iss-00104 T-04：詳細の切り替えは、畳んで対応のカードがあれば「対応 n」と対応が必要の色。窓の条件で始めの開閉を決める', () => {
+  assert.deepEqual(paneExtrasToggle({ open: false, cards: [1, 2] }), {
+    expanded: false,
+    label: '詳細',
+    badge: '対応 2',
+    alert: true,
+  });
+  assert.deepEqual(paneExtrasToggle({ open: true, cards: [1, 2] }), {
+    expanded: true,
+    label: '詳細',
+    badge: null,
+    alert: false,
+  });
+  assert.equal(paneExtrasToggle({ open: false, cards: [] }).badge, null);
+  assert.equal(paneExtrasToggle({ open: false, cards: [] }).alert, false);
+  assert.equal(initialExtrasOpen(true), false, '狭い窓・低い窓では畳む');
+  assert.equal(initialExtrasOpen(false), true);
+  assert.equal(initialExtrasOpen(undefined), true, '読めなければ開く');
 });

@@ -640,6 +640,37 @@ a {
   min-width: 0;
 }
 
+/* 詳細の切り替え（iss-00104 D-03）。畳んでいて対応のカードがあれば「対応 n」を対応が必要の色で添える。 */
+.apexes-page .apex-extras-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.apexes-page .apex-extras-toggle::after {
+  content: "▾";
+  font-size: 0.8em;
+}
+
+.apexes-page .apex-extras-toggle[aria-expanded="true"]::after {
+  content: "▴";
+}
+
+.apexes-page .apex-extras-badge {
+  font-size: 0.85em;
+}
+
+.apexes-page .apex-extras-toggle--alert {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.apexes-page .apex-pane-extras[hidden] {
+  display: none;
+}
+
 .apexes-page .apex-pane-frame {
   flex: 1 1 auto;
   min-height: 0;
@@ -967,10 +998,33 @@ a {
 @media (max-width: 899.98px) {
   /* 狭い幅でも横に流れない：見出しの nav、右のペインの見出しの帯は折り返し、行の題名は残りの幅で折り返す。 */
   .apexes-page .bar,
-  .apexes-page .links,
-  .apexes-page .apex-pane-bar {
+  .apexes-page .links {
     flex-wrap: wrap;
     min-width: 0;
+  }
+
+  /* 選んだ頂点の見出しの帯は1行（iss-00104 D-04）。題名は1行に収めて省略し、ほかは縮めない。 */
+  .apexes-page .apex-pane-bar {
+    flex-wrap: nowrap;
+    min-width: 0;
+    padding: 4px 8px;
+  }
+
+  .apexes-page .apex-pane-bar > * {
+    flex: none;
+  }
+
+  .apexes-page .apex-pane-bar .apex-pane-title {
+    flex: 1 1 0;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    overflow-wrap: normal;
+  }
+
+  .apexes-page .apex-pane-open {
+    margin-left: 0;
   }
 
   .apexes-page .links a,
@@ -992,16 +1046,19 @@ a {
     display: none;
   }
 
+  /* 選んだときは余白と枠線をなくし、右のペインを画面いっぱいに出す（iss-00104 D-04）。 */
+  body.apexes-page.apexes--selected {
+    padding: 0;
+  }
+
   body.apexes-page.apexes--selected .apex-pane {
-    height: calc(100dvh - 32px);
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
   }
 }
 
 @media (max-width: 390px) {
-  body.apexes-page.apexes--selected .apex-pane {
-    height: calc(100dvh - 24px);
-  }
-
   .apexes-page .apex-pane-open,
   .apexes-page .apex-actions .orca-open {
     display: none;

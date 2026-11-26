@@ -108,8 +108,8 @@ test('T-04：メンバーの枠は compose=off と帯、頂点の枠は帯なし
     compose: false,
     band: { text: 'メンバー「子」（答えるだけ）', back: '頂点に戻る' },
   });
-  assert.equal(frameSrc('m 1', { compose: false }), '/embed/agent?id=m%201&compose=off');
-  assert.equal(frameSrc('m 1'), '/embed/agent?id=m%201');
+  assert.equal(frameSrc('m 1', { compose: false }), '/embed/agent?id=m%201&head=compact&compose=off');
+  assert.equal(frameSrc('m 1'), '/embed/agent?id=m%201&head=compact');
 });
 
 test('T-08：/apexes-cards-view.js を STATIC_FILES に登録する', () => {

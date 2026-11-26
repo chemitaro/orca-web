@@ -17,6 +17,11 @@ export function isComposeOff(params) {
   return params.get('compose') === 'off';
 }
 
+/** 見出しを詰める枠か（題名の行を隠す）。`head=compact` のときだけ（iss-00104 D-02）。 */
+export function isHeadCompact(params) {
+  return params.get('head') === 'compact';
+}
+
 const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /** 改行（\n）のほかの制御文字を除く。 */

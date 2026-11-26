@@ -89,10 +89,13 @@ test('R-06：900px 未満のメディアクエリに、見出しの nav・行の
     return narrow.slice(at, narrow.indexOf('}', at));
   };
   const wraps = rule('.apexes-page .bar,');
-  assert.match(wraps, /\.apexes-page \.links,/);
-  assert.match(wraps, /\.apexes-page \.apex-pane-bar \{/);
+  assert.match(wraps, /\.apexes-page \.links \{/);
   assert.match(wraps, /flex-wrap: wrap;/);
   assert.match(wraps, /min-width: 0;/);
+  // 右のペインの見出しの帯は1行で、題名を省略して横に流れない（iss-00104 D-04）。
+  const bar = rule('.apexes-page .apex-pane-bar {');
+  assert.match(bar, /flex-wrap: nowrap;/);
+  assert.match(bar, /min-width: 0;/);
   const words = rule('.apexes-page .links a,');
   assert.match(words, /\.apexes-page \.apex-title \{/);
   assert.match(words, /min-width: 0;/);
@@ -176,4 +179,27 @@ test('iss-00102 T-04：900px 以上はページを巻かず、一覧と右のペ
   const head = ruleIn(wide, '.apexes-page .apex-pane-head');
   assert.match(head, /overflow-y: auto;/);
   assert.match(head, /max-height: 60%;/);
+});
+
+test('iss-00104 T-06：900px 未満で選んだときは余白と枠線をなくし 100dvh、見出しの帯の題名は1行で省略', () => {
+  const css = withoutComments(readFileSync(new URL('../../web/style.css', import.meta.url), 'utf8'));
+  const narrow = mediaBlock(css, '(max-width: 899.98px)');
+  assert.match(ruleIn(narrow, 'body.apexes-page.apexes--selected'), /padding: 0;/);
+  const pane = ruleIn(narrow, 'body.apexes-page.apexes--selected .apex-pane');
+  for (const decl of ['height: 100dvh;', 'border: 0;', 'border-radius: 0;']) assert.ok(pane.includes(decl), decl);
+  const title = ruleIn(narrow, '.apexes-page .apex-pane-bar .apex-pane-title');
+  for (const decl of ['white-space: nowrap;', 'overflow: hidden;', 'text-overflow: ellipsis;', 'min-width: 0;'])
+    assert.ok(title.includes(decl), decl);
+  assert.doesNotMatch(css, /100dvh - (?:24|32)px/, '狭い幅の calc の高さは残さない');
+  assert.match(ruleIn(css, '.apexes-page .apex-pane-extras[hidden]'), /display: none;/);
+});
+
+test('iss-00104 T-05：詳細はチームの帯と対応のカードを1つの欄に入れ、切り替えで開閉を反転し、フォーカスを戻す', () => {
+  const entry = read('apexes.js');
+  assert.match(entry, /renderPaneExtras\(document, \[team, renderApexCards\(document, cards\)\], open\)/);
+  assert.match(entry, /initialExtrasOpen\(window\.matchMedia\(COMPACT_PANE_QUERY\)\.matches\)/);
+  assert.match(entry, /\} catch \{\s*extrasOpen = true;/, 'matchMedia の例外では開く');
+  assert.match(entry, /extrasOpen = !currentExtrasOpen\(\);\s*renderPane\(\);/);
+  assert.match(entry, /renderPaneHead\(document, pane\.header, \{ openRoot: openControl\.root, extras: toggle \}\)/);
+  assert.match(entry, /querySelector\('button\[data-action="extras"\]'\)\)\?\.focus\(\)/);
 });

@@ -442,3 +442,13 @@ test('iss-00061：.md の中の ul の印は段ごとに disc・circle・square�
   assert.equal(only('.md ul ul', (m) => m === null).get('list-style-type'), 'circle');
   assert.equal(only('.md ul ul ul', (m) => m === null).get('list-style-type'), 'square');
 });
+
+test('iss-00104 T-01：巻きの箱（header・main・#send）は position: relative で、絶対配置の子が文書を伸ばさない', () => {
+  for (const selector of ['header', 'main', '#send'])
+    assert.equal(only(selector, (m) => m === null).get('position'), 'relative', selector);
+});
+
+test('iss-00104 T-01：head-compact の枠は題名の行を隠し、見出しの余白を詰める', () => {
+  assert.equal(only('body.head-compact .title-row', (m) => m === null).get('display'), 'none');
+  assert.equal(only('body.head-compact header', (m) => m === null).get('padding'), '2px 12px');
+});
