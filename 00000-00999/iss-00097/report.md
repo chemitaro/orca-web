@@ -26,3 +26,4 @@ ID: "iss-00097"
 
 - S-01 a3893ad：`web/apexes-attention-view.js`（memberAttention・attentionFor）、buildLiveTeam・buildTeamBand が対応が必要の印の節を status に関わらず出して最初に選ぶ、apexes-dom.js の attentionMarks、style.css・README・AGENTS.md。実装担当：Claude（ctx_2a4944df2311、claude-opus-5-5、medium）。answered は true のときだけ返事済み。
 - 最終品質ゲート：合格（2026-11-26）。a3893ad、レビュー pass（P0〜P3 0）、テスト lint・test（1385）・build すべて 0。
+- マージ：PR #99（2026-11-26、61df0ea、head a3893ad、CI OBSERVED_CI_PASS・READY）。常駐の orca-web をタスク担当が入れ替えた。
