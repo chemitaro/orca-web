@@ -7,6 +7,7 @@ import {
   apexesApiPath,
   apexesFavicon,
   apexesTitle,
+  boardColumns,
   buildPane as buildPaneView,
   buildApexesView as buildView,
   frameSrc,
@@ -153,24 +154,19 @@ test('T-04：pickSelection は要求の id（一覧になければ missing 付�
   assert.equal(pickSelection(documentOf([agent('w')]), null, { autoPick: true }), null, '対応が必要がなければ選ばない');
 });
 
-test('T-04：広い幅で ?apex= なしに開くと、最初の文書で対応が必要の先頭を1回だけ選ぶ', () => {
+test('iss-00106 T-03：広い幅でも ?apex= なしに開くと自動で選ばない（3列が標準）。選ぶ・「← 一覧」は今のとおり', () => {
   let sel: Selection = initialSelection('', { wide: true });
   assert.equal(sel.id, null);
+  assert.equal(sel.autoPick, false);
   sel = reduceSelection(sel, { type: 'document', doc: needsDoc() });
-  const picked = sel.id;
-  assert.ok(picked === 'n1' || picked === 'n2');
+  assert.equal(sel.id, null, '対応が必要があっても選ばない');
   sel = reduceSelection(sel, { type: 'select', id: 'w' });
   sel = reduceSelection(sel, { type: 'document', doc: needsDoc() });
   assert.equal(sel.id, 'w', '以後は利用者が選んだときだけ変わる');
   sel = reduceSelection(sel, { type: 'clear' });
   sel = reduceSelection(sel, { type: 'document', doc: needsDoc() });
   assert.equal(sel.id, null, '「← 一覧」の後の描き直しで選び直さない');
-  const none = reduceSelection(initialSelection('', { wide: true }), {
-    type: 'document',
-    doc: documentOf([agent('w')]),
-  });
-  assert.equal(none.id, null);
-  assert.equal(reduceSelection(none, { type: 'document', doc: needsDoc() }).id, null, '自動の選びは1回だけ');
+  assert.equal(reduceSelection(initialSelection(''), { type: 'document', doc: needsDoc() }).id, null);
 });
 
 test('T-04：狭い幅で開くと何も選ばない', () => {
@@ -512,4 +508,31 @@ test('iss-00104 T-04：詳細の切り替えは、畳んで対応のカードが
   assert.equal(initialExtrasOpen(true), false, '狭い窓・低い窓では畳む');
   assert.equal(initialExtrasOpen(false), true);
   assert.equal(initialExtrasOpen(undefined), true, '読めなければ開く');
+});
+
+test('iss-00106 T-01：boardColumns は対応が必要・作業中・完了の3列で、完了の列の下に畳む段をこの順に置く', () => {
+  const view = buildApexesView(fullDocument(), { now: NOW });
+  // biome-ignore lint/suspicious/noExplicitAny: columns are untyped JS objects
+  const columns: any[] = boardColumns(view.sections);
+  assert.deepEqual(
+    columns.map((c: { key: string; sections: { key: string }[] }) => [c.key, c.sections.map((s) => s.key)]),
+    [
+      ['needs_action', ['needs_action']],
+      ['working', ['working']],
+      ['done', ['done_recent', 'done_older', 'sleeping', 'unknown', 'unlinked']],
+    ],
+  );
+  const done = columns[2].sections;
+  assert.deepEqual(
+    done.map((s: { collapsed: boolean }) => s.collapsed),
+    [false, true, true, true, true],
+    '完了のほかは畳む',
+  );
+  // biome-ignore lint/suspicious/noExplicitAny: columns are untyped JS objects
+  const extra: any[] = boardColumns([...view.sections, { key: 'new_stage', rows: [] }]);
+  assert.equal(extra[2].sections.at(-1).key, 'new_stage', '知らない段は最後の列に足す');
+  assert.deepEqual(
+    boardColumns(null as unknown as { key: string }[]).map((c: { sections: unknown[] }) => c.sections.length),
+    [0, 0, 0],
+  );
 });

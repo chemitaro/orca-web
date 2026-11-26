@@ -4,6 +4,8 @@
 // 頂点の行を押すと、右のペインに見出しと /embed/agent の枠を出し、?apex= で覚える（履歴は増やさない。iss-00077）。
 // 選びの移り変わりは apexes-view.js の reduceSelection、枠の作り直しと切り替えの確かめは apexes-dom.js。
 // 幅 900px 以上は2ペイン、狭い幅は1列で、選ぶと会話だけを出し「← 一覧」で戻る（CSS の apexes--selected）。
+// 3列（iss-00106）：選んでいない広い画面は、対応が必要・作業中・完了の列（完了の下に畳んだ段）。選ぶと一覧1列と会話、
+// 「← 一覧」で3列に戻る。列の組み立ては apexes-view.js の boardColumns、描くのは apexes-dom.js の renderBoard。
 // 詳細の切り替え（iss-00104）：チームの帯と対応のカードは見出しの「詳細」で出し入れする。狭い窓・低い窓では畳んで始める。
 // 枠は head=compact で作り、枠の中の題名と Open の行を隠す（見出しと重なるため）。
 // 行の「Orca で開く」（iss-00102）：開く先のある頂点の行ごとに共有の部品を置き、見出しと同じ1つの送る口で /api/open を呼ぶ。
@@ -25,12 +27,12 @@ import {
   mayLeaveFrame,
   mountAgentFrame,
   renderApexCards,
+  renderBoard,
   renderDraftNotice,
   renderHeadline,
   renderMemberBand,
   renderPaneExtras,
   renderPaneHead,
-  renderSection,
   startApexPolling,
 } from './apexes-dom.js';
 import { createNotifyTracker } from './apexes-notify.js';
@@ -41,6 +43,7 @@ import {
   apexesFavicon,
   apexesTitle,
   apexFromSearch,
+  boardColumns,
   buildApexesView,
   buildPane,
   COMPACT_PANE_QUERY,
@@ -51,7 +54,6 @@ import {
   reduceSelection,
   SEEN_DWELL_MS,
   selectionUrl,
-  WIDE_MIN_PX,
 } from './apexes-view.js';
 import { createDraftSender } from './embed/draft-receiver.js';
 import { createOpenBoard, createOpenControl, runOpen } from './embed/open-control.js';
@@ -75,9 +77,8 @@ const els = {
 const project = projectFromSearch(location.search);
 let lastDoc = null;
 let lastError = null;
-let selection = initialSelection(location.search, {
-  wide: window.matchMedia(`(min-width: ${WIDE_MIN_PX}px)`).matches,
-});
+// 広い画面でも自動で選ばない（選んでいないときは3列。iss-00106）。
+let selection = initialSelection(location.search);
 /** 前に見えた選んだ頂点（一覧から消えても見出しに題名を出す）。 */
 let remembered = null;
 /** 今の見出しの開く先（押したときに読む）。 */
@@ -238,11 +239,7 @@ function render() {
       (details) => details.closest('section')?.dataset.stage,
     ),
   );
-  els.sections.replaceChildren(
-    ...view.sections.map((section) =>
-      renderSection(document, section, { expanded: opened.has(section.key), ...rowOpenOptions }),
-    ),
-  );
+  els.sections.replaceChildren(...renderBoard(document, boardColumns(view.sections), { opened, ...rowOpenOptions }));
 }
 
 /** 選びを移し、URL の ?apex= を合わせて（履歴は増やさない）描き直す。 */

@@ -23,6 +23,34 @@ export const SECTION_ORDER = [
 ];
 const COLLAPSED = new Set(['done_older', 'sleeping', 'unknown', 'unlinked']);
 
+/**
+ * 3列の組み立て（iss-00106 D-01）：対応が必要・作業中・完了の列。完了の列の下に、畳む段を SECTION_ORDER の順で置く。
+ * 選んでいない広い画面では横に並べ、選んだときと狭い画面では縦に重ねる（段の並びは SECTION_ORDER と同じ）。
+ */
+export const BOARD_COLUMNS = [
+  { key: 'needs_action', stages: ['needs_action'] },
+  { key: 'working', stages: ['working'] },
+  { key: 'done', stages: ['done_recent', 'done_older', 'sleeping', 'unknown', 'unlinked'] },
+];
+
+/**
+ * 段を列に分ける。列の中の段は stages の順。どの列にもない段は捨てず、最後の列の後ろに足す。
+ * @param {{ key: string }[]} sections buildApexesView の sections
+ * @returns {{ key: string, sections: any[] }[]}
+ */
+export function boardColumns(sections) {
+  const all = Array.isArray(sections) ? sections : [];
+  const byKey = new Map(all.map((section) => [section.key, section]));
+  const placed = new Set(BOARD_COLUMNS.flatMap((column) => column.stages));
+  const columns = BOARD_COLUMNS.map((column) => ({
+    key: column.key,
+    sections: column.stages.map((key) => byKey.get(key)).filter((section) => section !== undefined),
+  }));
+  const rest = all.filter((section) => !placed.has(section.key));
+  columns[columns.length - 1].sections.push(...rest);
+  return columns;
+}
+
 export const SECTION_LABELS = {
   needs_action: '対応が必要',
   working: '作業中',
@@ -377,9 +405,10 @@ export function pickSelection(doc, requestedId, { autoPick = false } = {}) {
  * @param {string} search
  * @param {{ wide: boolean }} options
  */
-export function initialSelection(search, { wide }) {
+export function initialSelection(search, _options = {}) {
+  // 広い画面でも自動で選ばない（3列が標準。iss-00106 D-03）。autoPick はいつも偽。
   const id = apexFromSearch(search);
-  return { id, autoPick: wide === true && id === null, checked: id === null };
+  return { id, autoPick: false, checked: id === null };
 }
 
 /**
