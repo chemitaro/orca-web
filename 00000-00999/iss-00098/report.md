@@ -27,3 +27,4 @@ ID: "iss-00098"
 - (2) 本当の返事のある質問だけの頂点：needs_action の理由 question を持たず、状態は working、理由に question_answered が付いた。
 - (3) 最新の質問の返事が Orca の自動の知らせだけの Dispatch：その時点で該当なし。古い質問に自動の知らせだけが返った例は1件あり、R-01 の古い質問の条件どおり片付いたものとして数えた。
 - 試しの orca-web は止めた。
+- 最終品質ゲート：合格（campaign iss-00098-fqg-1、e7b8b7f、レビュー P0〜P3 0、lint・test 1408・build 合格）
