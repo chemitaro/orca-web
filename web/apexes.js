@@ -4,6 +4,7 @@
 // 頂点の行を押すと、右のペインに見出しと /embed/agent の枠を出し、?apex= で覚える（履歴は増やさない。iss-00077）。
 // 選びの移り変わりは apexes-view.js の reduceSelection、枠の作り直しと切り替えの確かめは apexes-dom.js。
 // 幅 900px 以上は2ペイン、狭い幅は1列で、選ぶと会話だけを出し「← 一覧」で戻る（CSS の apexes--selected）。
+// 行の「Orca で開く」（iss-00102）：開く先のある頂点の行ごとに共有の部品を置き、見出しと同じ1つの送る口で /api/open を呼ぶ。
 // 新着の点：選んだ頂点を 10 秒続けて出したら、見た時刻を localStorage に覚える（id と時刻だけ。使えなければ点を出さない）。
 // 対応が必要の知らせ（iss-00081）：favicon を印付きに替え、通知を許可したタブでは、隠れている間も 30 秒ごとに読み、
 // 対応が必要に入った頂点を1回だけデスクトップに通知する（判断は apexes-notify.js、出す口は apexes-dom.js）。
@@ -47,7 +48,7 @@ import {
   WIDE_MIN_PX,
 } from './apexes-view.js';
 import { createDraftSender } from './embed/draft-receiver.js';
-import { createOpenControl, runOpen } from './embed/open-control.js';
+import { createOpenBoard, createOpenControl, runOpen } from './embed/open-control.js';
 import { renderFreshness } from './inbox-dom.js';
 import { projectFromSearch } from './inbox-view.js';
 import { createWriter } from './write.js';
@@ -135,12 +136,20 @@ function pruneStoredSeen(doc) {
 
 // 「Orca で開く」の共有の部品。描き直しても同じ要素を見出しへ移す（要求の途中の表示を保つ）。
 const writer = createWriter();
+/** 開く口に送る1か所（見出しと行の両方が使う）。target は {worktree, agent}。 */
+const sendOpen = (target) => writer.send('/api/open', 'POST', target);
 const openControl = createOpenControl(document, { size: 'md' });
 openControl.button.addEventListener('click', () => {
   const target = openTarget;
   if (!target) return;
-  void runOpen(openControl, () => writer.send('/api/open', 'POST', target)).then(syncOpen);
+  void runOpen(openControl, () => sendOpen(target)).then(syncOpen);
 });
+// 行ごとの「Orca で開く」（iss-00102）。描き直しで部品を作り直すので、頂点の id ごとの最後の状態を板に持ち、新しい部品へ戻す。
+const rowOpenBoard = createOpenBoard();
+const rowOpenOptions = {
+  onOpenMount: (target, control) => rowOpenBoard.mount(target.agent, control),
+  onOpen: (target, control) => void rowOpenBoard.open(target.agent, control, () => sendOpen(target)),
+};
 function syncOpen() {
   if (openControl.state === 'busy') return;
   if (!openTarget) openControl.setState('missing', '開く先が分かりません');
@@ -204,7 +213,9 @@ function render() {
     ),
   );
   els.sections.replaceChildren(
-    ...view.sections.map((section) => renderSection(document, section, { expanded: opened.has(section.key) })),
+    ...view.sections.map((section) =>
+      renderSection(document, section, { expanded: opened.has(section.key), ...rowOpenOptions }),
+    ),
   );
 }
 

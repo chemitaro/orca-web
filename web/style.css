@@ -487,6 +487,24 @@ a {
   color: var(--muted);
 }
 
+/* 行の操作の箱（iss-00102）。「新しいタブで開く」と「Orca で開く」を並べ、狭ければ折り返す。Open は右に寄せる。 */
+.apexes-page .apex-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 4px;
+  min-width: 0;
+}
+
+.apexes-page .apex-actions .apex-newtab {
+  margin-top: 0;
+}
+
+.apexes-page .apex-actions .orca-open {
+  margin-left: auto;
+}
+
 .apexes-page .apex-head {
   display: flex;
   align-items: center;
@@ -616,6 +634,10 @@ a {
 
 .apexes-page .apex-notify {
   font: inherit;
+}
+
+.apexes-page .apex-pane-head {
+  min-width: 0;
 }
 
 .apexes-page .apex-pane-frame {
@@ -890,16 +912,51 @@ a {
   color: var(--muted);
 }
 
+/* 900px 以上（iss-00102）：ページは縦に巻かない。body を窓の高さに収め、見出しの下の残りに一覧と右のペインを並べる。
+   一覧は一覧の中で巻き（スクロールバーは一覧の右の縁＝画面の左側）、会話は右のペインの枠の中で巻く。
+   右のペインの見出し（チームの帯・対応のカード）が高ければ見出しの中で巻き、会話の枠に高さを残す。 */
 @media (min-width: 900px) {
+  body.apexes-page {
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body.apexes-page > header {
+    flex: none;
+  }
+
   .apexes-page .apex-layout {
+    flex: 1 1 auto;
+    min-height: 0;
     grid-template-columns: 320px minmax(0, 1fr);
-    align-items: start;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .apexes-page .apex-list {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .apexes-page .apex-pane {
-    position: sticky;
-    top: 16px;
-    height: calc(100dvh - 32px);
+    height: 100%;
+    min-height: 0;
+  }
+
+  .apexes-page .apex-pane-head {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 60%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .apexes-page .apex-pane-frame {
+    min-height: 40%;
   }
 
   .apexes-page .apex-back {
@@ -945,7 +1002,8 @@ a {
     height: calc(100dvh - 24px);
   }
 
-  .apexes-page .apex-pane-open {
+  .apexes-page .apex-pane-open,
+  .apexes-page .apex-actions .orca-open {
     display: none;
   }
 }

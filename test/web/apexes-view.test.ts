@@ -455,3 +455,39 @@ test('iss-00098 T-06: 理由 question_answered・decision_resolved の言葉', a
   assert.equal(labels.question_answered, '質問の印あり（返事済み）');
   assert.equal(labels.decision_resolved, '判断の印あり（門は解決済み）');
 });
+
+test('iss-00102 T-01：頂点の行は worktreeId があれば Orca で開く先 {worktree, agent}、なければ null。結べない行と束は null', () => {
+  const doc = fullDocument();
+  const view = buildApexesView(doc, { now: NOW });
+  // biome-ignore lint/suspicious/noExplicitAny: rows are untyped JS objects
+  const rows: any[] = view.sections.flatMap((s: { rows: unknown[] }) => s.rows);
+  const apexRows = rows.filter((row) => row.selectable);
+  assert.ok(apexRows.length > 0);
+  for (const row of apexRows) {
+    const item = doc.items.find((i) => String(i.id) === row.key);
+    assert.deepEqual(row.open, item?.worktreeId ? { worktree: item.worktreeId, agent: row.key } : null);
+  }
+  for (const row of rows.filter((r) => !r.selectable)) assert.equal(row.open, null, `${row.key} は開く先を持たない`);
+  const noTree = buildApexesView(
+    { ...doc, items: doc.items.map((i) => ({ ...i, worktreeId: null })) } as unknown as ApexListDocument,
+    { now: NOW },
+  );
+  for (const row of noTree.sections.flatMap((s: { rows: { open: unknown }[] }) => s.rows)) assert.equal(row.open, null);
+  const bundles = buildApexesView(
+    {
+      ...documentOf([]),
+      unlinked: [{ id: 'r#1', kind: 'bundle', runId: 'r', objective: null, generation: 1, live: 1, questions: 0 }],
+    } as unknown as ApexListDocument,
+    { now: NOW },
+  );
+  assert.equal(bundles.sections.find((s: { key: string }) => s.key === 'unlinked').rows[0].open, null);
+});
+
+test('iss-00102 T-01：右のペインの見出しの開く先は、行と同じ決め方', () => {
+  const doc = fullDocument();
+  const view = buildApexesView(doc, { now: NOW });
+  // biome-ignore lint/suspicious/noExplicitAny: rows are untyped JS objects
+  const row: any = view.sections.flatMap((s: { rows: unknown[] }) => s.rows).find((r: any) => r.selectable && r.open);
+  const pane = buildPane(doc, { id: row.key, checked: true }, { now: NOW, remembered: null });
+  assert.deepEqual(pane.header.open, row.open);
+});

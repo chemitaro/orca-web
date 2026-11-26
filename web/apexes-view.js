@@ -120,6 +120,11 @@ function markOf(value) {
   return Object.hasOwn(MARK_LABELS, value) ? value : 'unknown';
 }
 
+/** Orca で開く先（頂点の worktree と id）。worktreeId がなければ null。行と右のペインの見出しが使う1か所。 */
+export function openTargetOf(item) {
+  return item && str(item.worktreeId) ? { worktree: item.worktreeId, agent: String(item.id) } : null;
+}
+
 function baseRow(item) {
   const mark = markOf(item.mark);
   return {
@@ -185,6 +190,7 @@ function apexRow(item, now, selectedId = null, seen = null) {
   return {
     ...baseRow(item),
     selectable: true,
+    open: openTargetOf(item),
     selected: selectedId !== null && String(item.id) === selectedId,
     unseen: isUnseen(item, seen),
     monitoring: reasons.includes('monitoring'),
@@ -217,6 +223,7 @@ function bundleRow(item) {
     issue: null,
     href: `${RUN_PREFIX}${encodeURIComponent(runId)}`,
     selectable: false,
+    open: null,
     selected: false,
     unseen: false,
     monitoring: false,
@@ -235,6 +242,7 @@ function unlinkedRow(item) {
   return {
     ...baseRow(item),
     selectable: false,
+    open: null,
     selected: false,
     unseen: false,
     monitoring: false,
@@ -399,7 +407,7 @@ export function buildPane(doc, selection, { now, remembered }) {
       missing,
       missingLabel: missing ? MISSING_LABEL : null,
       newTab: frameSrc(selection.id),
-      open: item && str(item.worktreeId) ? { worktree: item.worktreeId, agent: String(item.id) } : null,
+      open: openTargetOf(item),
     },
     guide: null,
     remember: item,

@@ -9,6 +9,7 @@
 // 選んだ頂点を続けて出した時間を数える口（createSeenTracker）。
 import { frameSrc, SEEN_STORAGE_KEY, SEEN_VERSION, SWITCH_CONFIRM_TEXT, UNSEEN_LABEL } from './apexes-view.js';
 import { AGENT_ICONS, appIcon, stateIcon } from './embed/agent-marks.js';
+import { createOpenControl } from './embed/open-control.js';
 import { frameUnsettled } from './embed/unsettled.js';
 import { createPollLoop } from './poll-loop.js';
 
@@ -73,10 +74,14 @@ export function renderLiveTeam(doc, live) {
 }
 
 /**
- * 1つの行。頂点の行は、押すと右のペインに出す選ぶボタン（data-apex）と、小さな「新しいタブで開く」のリンク。
+ * 1つの行。頂点の行は、押すと右のペインに出す選ぶボタン（data-apex）と、行の操作の箱（小さな「新しいタブで開く」のリンクと、
+ * 開く先が分かり options.onOpen があるときの「Orca で開く」の共有の部品。iss-00102）。部品は選ぶボタンの外に置く。
  * 結べない行は、行の全体が /embed/agent?id=（結べない束は /runs/<id>）を新しいタブで開くリンク。
+ * @param {any} doc
+ * @param {any} row
+ * @param {{ onOpen?: (target: any, control: any) => void, onOpenMount?: (target: any, control: any) => void }} [options]
  */
-export function renderRow(doc, row) {
+export function renderRow(doc, row, options = {}) {
   const li = make(doc, 'li', null, row.selected ? 'item apex apex--selected' : 'item apex');
   li.dataset.key = row.key;
   if (row.selected) li.dataset.selected = 'true';
@@ -127,12 +132,29 @@ export function renderRow(doc, row) {
   }
   if (row.live) a.append(renderLiveTeam(doc, row.live));
   li.append(a);
-  if (row.selectable) li.append(newTabLink(doc, row.href, '新しいタブで開く', 'apex-newtab'));
+  if (row.selectable) {
+    const actions = make(doc, 'span', null, 'apex-actions');
+    actions.append(newTabLink(doc, row.href, '新しいタブで開く', 'apex-newtab'));
+    if (row.open && typeof options.onOpen === 'function') {
+      const control = createOpenControl(doc, { size: 'sm' });
+      const target = row.open;
+      options.onOpenMount?.(target, control);
+      control.button.addEventListener('click', () => options.onOpen?.(target, control));
+      actions.append(control.root);
+    }
+    li.append(actions);
+  }
   return li;
 }
 
-/** 1つの段。collapsed の段は details で畳み、expanded なら開いて描く。 */
-export function renderSection(doc, section, { expanded = false } = {}) {
+/**
+ * 1つの段。collapsed の段は details で畳み、expanded なら開いて描く。onOpen・onOpenMount は行に渡す。
+ * @param {any} doc
+ * @param {any} section
+ * @param {{ expanded?: boolean, onOpen?: (target: any, control: any) => void,
+ *   onOpenMount?: (target: any, control: any) => void }} [options]
+ */
+export function renderSection(doc, section, { expanded = false, onOpen, onOpenMount } = {}) {
   const node = make(doc, 'section', null, 'stage');
   node.dataset.stage = section.key;
   const heading = `${section.title}（${section.count}）`;
@@ -140,7 +162,7 @@ export function renderSection(doc, section, { expanded = false } = {}) {
   if (section.rows.length === 0) body.push(make(doc, 'p', 'なし', 'empty'));
   else {
     const ul = make(doc, 'ul', null, 'items');
-    for (const row of section.rows) ul.append(renderRow(doc, row));
+    for (const row of section.rows) ul.append(renderRow(doc, row, { onOpen, onOpenMount }));
     body.push(ul);
   }
   if (section.collapsed) {
