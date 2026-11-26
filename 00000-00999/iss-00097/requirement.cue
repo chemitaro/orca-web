@@ -14,35 +14,41 @@ assurance: {
 	reason: "画面の表示だけを足す。文書と判定と送信は変えない"
 }
 
-// 目的と背景（任意）。
-// purpose:    "この Issue が実現する価値"
-// background: "解く問題と、関係者"
+purpose: "頂点が対応が必要なとき、配下のどのメンバー（どの作業者・タスク担当）に対応が要るのかを、行の下の稼働中の内訳の木（iss-00092）と右のペインのチームの帯（iss-00079）の、そのメンバー自身に印で示す。"
 
-// 対象と対象外（任意）。
-// includes: ["..."]
-// excludes: ["..."]
+background: """
+	利用者の指摘（2026-11-26）：頂点に「未回答の質問」と出ても、配下のどのワーカーが質問しているのかが分からない。メンバーの状態（作業中・停止・完了）の表示の中に、対応が必要の表示もほしい。
+	読むだけで確かめると、質問を出したタスク担当は番を終えて答えを待つので、チームの節の status が done になり、稼働中の内訳の木（`web/apexes-live-view.js` は working・waiting・live・unknown だけを選ぶ）に出ていなかった。
+	頂点の文書には、対応の材料 `questions`（dispatchId・kind・working、iss-00080・iss-00091）と `waitingMembers`（id、iss-00080）がある。iss-00098 が questions に answered を足す。
+	"""
 
-// 観測できる要件。番号（R-01、R-02、…）をキーにする。
-// title は必須。acceptance（観測できる受け入れの条件）は standard 以上で必須。
+includes: ["内訳の木とチームの帯の節に、対応が必要の印（質問・判断・許可待ち）を付け、その節をいつも出す（文書は変えず、画面だけ）"]
+excludes: ["判定（build.ts）と文書の変更", "答える操作（対応のカード iss-00080 のまま）"]
+
 requirements: {
-	// "R-01": {
-	// 	title: "利用者が〜できる"
-	// 	text:  "詳しい説明"
-	// 	acceptance: ["〜が観測できる"]
-	// }
+	"R-01": {
+		title: "対応が必要なメンバーの節に印を付ける"
+		text: """
+			節ごとの印（画面の純粋な関数で決める）：
+			- `question`：節の dispatchId が、頂点の questions のうち kind ask・working 偽・answered が真でない項目の dispatchId と同じ。
+			- `decision`：同じく kind gate・working 偽・answered が真でない項目。
+			- `waiting`：節の agentId が頂点の waitingMembers の id と同じ（許可待ち・入力待ち）。
+			印のある節には、状態の言葉の横に「対応が必要：質問」「対応が必要：判断」「対応が必要：許可待ち」を目立つ色で出す。working 真か answered 真の問いは「質問あり（作業は継続中）」「質問の印あり（返事済み）」を控えめに出す。
+			"""
+		acceptance: [
+			"未回答の ask を出して done になったタスク担当の節に「対応が必要：質問」が出る",
+			"許可待ちのメンバーの節に「対応が必要：許可待ち」が出る",
+		]
+	}
+	"R-02": {
+		title: "印のある節はいつも出し、先に選ぶ"
+		text:  "内訳の木（buildLiveTeam）では、対応が必要の印のある節を status に関わらず稼働中と同じく出し、8 の選びで最初に選ぶ（祖先も出す）。チームの帯（buildTeamBand）でも、いつも出す節に入れる。"
+		acceptance: [
+			"status done で印のある節が内訳の木に出て、稼働中が 12 あっても選ばれる",
+			"チームの帯で、印のある done の節が「完了 n」にまとめられない",
+		]
+	}
 }
 
-// 失敗・境界の条件。番号（F-01、…）をキーにする。
-// title は必須。impact（起きたときの影響）と recovery（回復のしかた）は strict 以上で必須。
-failures: {
-	// "F-01": {
-	// 	title:    "〜のときは、何も書かずに止まる"
-	// 	impact:   "〜"
-	// 	recovery: "〜"
-	// }
-}
-
-// 制約・前提、合意した判断、未解決事項（任意）。
-// constraints: ["..."]
-// decisions: ["..."]
-// questions: ["..."]
+constraints: ["DOM は textContent と createElement・createElementNS だけ", "AGENTS.md の守ること"]
+decisions: ["配下のどのメンバーに対応が必要かを、そのメンバーの表示に出す（利用者、2026-11-26、会話）"]

@@ -4,4 +4,6 @@ design: {
 	"D-01": {title: "A3 の判定に worker の activity を足す", satisfies: ["R-01"]}
 	"D-02": {title: "行の下に稼働中の内訳の木", satisfies: ["R-02"]}
 	"D-03": {title: "段 unknown とプロセスの有無", satisfies: ["R-03"]}
+	"D-04": {title: "メンバーの節の対応の印", satisfies: ["R-04"]}
+	"D-05": {title: "やり取りと門で確かめる", satisfies: ["R-05"]}
 }

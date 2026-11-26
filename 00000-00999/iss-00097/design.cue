@@ -1,23 +1,6 @@
 package spec
 
-// 設計（Issue）。型 specdock/v1。
-
-// 設計目標、今の状態と、この Issue の後の状態（任意）。
-// goals: ["..."]
-// current: "..."
-// target:  "..."
-
-// 設計の単位（責務、interface、data など）。番号（D-01、…）をキーにする。
-// title と satisfies（満たす要件・失敗の条件の番号）が必須。
-// standard 以上では、すべての要件に、それを満たす設計が要る。
 design: {
-	// "D-01": {
-	// 	title:     "〜の部品"
-	// 	text:      "責務と interface"
-	// 	satisfies: ["R-01"]
-	// }
+	"D-01": {title: "印の決め方（新しい純粋な関数 `web/apexes-attention-view.js`）", text: "`memberAttention(item)` が、頂点の questions と waitingMembers から、dispatchId → 印と agentId → 印の表を返す（question・decision・waiting と、控えめの question_working・question_answered）。`attentionFor(node, table)` が節の印を返す（agent の節は agentId と dispatchId の両方で引く）。STATIC_FILES に登録。", satisfies: ["R-01"]}
+	"D-02": {title: "内訳の木とチームの帯", text: "`buildLiveTeam` と `buildTeamBand` に印の表を渡し、対応が必要の印の節を選びの最初とし、いつも出す節に入れる。行と節の描き方（apexes-dom.js・apexes-team-dom.js）に印の札を足す（textContent だけ、色は CSS の class）。", satisfies: ["R-01", "R-02"]}
 }
-
-// 移行・互換性、リスク（任意）。
-// compatibility: "..."
-// risks: ["..."]

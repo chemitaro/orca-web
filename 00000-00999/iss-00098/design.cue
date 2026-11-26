@@ -1,23 +1,8 @@
 package spec
 
-// 設計（Issue）。型 specdock/v1。
-
-// 設計目標、今の状態と、この Issue の後の状態（任意）。
-// goals: ["..."]
-// current: "..."
-// target:  "..."
-
-// 設計の単位（責務、interface、data など）。番号（D-01、…）をキーにする。
-// title と satisfies（満たす要件・失敗の条件の番号）が必須。
-// standard 以上では、すべての要件に、それを満たす設計が要る。
 design: {
-	// "D-01": {
-	// 	title:     "〜の部品"
-	// 	text:      "責務と interface"
-	// 	satisfies: ["R-01"]
-	// }
+	"D-01": {title: "読む口（`src/orca/orca-cli.ts`・新しい `src/orca/read-threads.ts`）", text: "READ_COMMANDS に `['orchestration','inbox']`。検査で `--run` と `--limit` と `--json` のほかの引数（`--terminal`、`--full` を含む）を拒む。`readThreads(runId)`：`orchestration inbox --run <id> --limit 1000 --json` を読み、各メッセージから id・type・from_handle・to_handle・thread_id・created_at だけを拾う。`readGates(runId)`：既存の read-mail の gate-list の読みを使い、task id と status だけ。", satisfies: ["R-03"]}
+	"D-02": {title: "読む時と置き場（`src/state/poller.ts`・`src/apex/extras.ts`）", text: "orchestration の読みの世代の後、attention input・approval のある worker の Run の集合を作り、その Run だけを読む（同時に 2 まで）。結果は内部の値 `threads: Map<runId, {ok, questions: Map<dispatchId, {latestId, latestAt, answered}>}>`、`gates: Map<runId, {ok, pendingTasks: Set}>` として `snapshotWithExtras()` に添える。状態の文書には出さない。", satisfies: ["R-03", "F-01"]}
+	"D-03": {title: "判定（`src/apex/build.ts`）", text: "A3 の asks・gates を作るとき、ask は threads の answered が true なら外して `question_answered`、gate は gates の ok が真で pendingTasks にその task がなければ外して `decision_resolved`。どちらも読めなければ今のとおり。A4・A5 の入力は今のまま（iss-00091 と同じ）。`ApexReason` に2つを足し、question_working の後。questions の各項目に `answered`。", satisfies: ["R-01", "R-02", "F-01"]}
+	"D-04": {title: "画面（`web/apexes-view.js`・`apexes-cards-view.js`）", text: "理由の言葉に question_answered「質問の印あり（返事済み）」、decision_resolved「判断の印あり（門は解決済み）」。カードの answered に添え書き。", satisfies: ["R-04"]}
 }
-
-// 移行・互換性、リスク（任意）。
-// compatibility: "..."
-// risks: ["..."]
