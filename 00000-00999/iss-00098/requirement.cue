@@ -16,25 +16,28 @@ background: """
 	"""
 
 includes: [
-	"印のある Dispatch のいる Run だけの `orchestration inbox --run <id> --limit 1000 --json`（既読にしない読み）と、`orchestration gate-list --run <id>`（今の受け箱が使う読み）を、頂点の一覧のために読む",
-	"ReadOnlyOrcaCli の許す命令に `orchestration inbox` を足す（`--run` と `--limit` と `--json` だけ）",
+	"印のある Dispatch のいる Run だけの `orchestration inbox --run <id> --limit 1000 --full --json`（Orca で access が reads の RPC。既読にしない）と、`orchestration gate-list --run <id>`（今の受け箱が使う読み）を、頂点の一覧のために読む",
+	"ReadOnlyOrcaCli の許す命令に `orchestration inbox` を足す（`--run`・`--limit`・`--full`・`--json` だけ）",
 	"A3 の ask・gate を、やり取りと門の事実で確かめてから数える",
 	"返事済みの印を控えめに示す理由と、questions の `answered`",
 ]
-excludes: ["本文の読み取りと保存（質問と返事は id・送り手・宛先・スレッド・時刻だけを拾う）", "統括の連絡を既読にすること", "Orca の印を書き換えること"]
+excludes: ["本文の保存と表示（本文は Orca の自動の知らせかを見分けるためにその場で照らすだけで、値として持たない）", "統括の連絡を既読にすること", "Orca の印を書き換えること"]
 
 requirements: {
 	"R-01": {
-		title: "返事の付いた質問は対応が必要にしない"
+		title: "本当の返事の付いた質問は対応が必要にしない"
 		text: """
-			Dispatch D に attention input があるとき、その Dispatch の Run のやり取りを読み、D が送り手（`from_handle` が `dispatch:<D>`）で種類が `question` のメッセージのうち最も新しいものを Q とする。Q の `thread_id`（Q 自身の id）を持ち、Q より後に作られ、送り手が D でないメッセージが1つ以上あれば「返事済み」。
-			- 返事済みなら A3 の材料にしない。頂点の理由に `question_answered`（「質問の印あり（返事済み）」）を足す（対応が必要の段に入れない）。
-			- 返事がなければ今のとおり A3（activity working の除外も今のとおり）。
-			- やり取りを読めない（読みの失敗、Run が見つからない、D の質問がやり取りの中にない）ときは、今のとおり Orca の印を信じる。
+			Dispatch D に attention input があるとき、その Dispatch の Run のやり取りを読む。D が送り手（`from_handle` が `dispatch:<D>`）で種類が `question` のメッセージのうち最も新しいものを Q とする。次のすべてを満たすメッセージが1つ以上あれば「返事済み」とする。
+			- `thread_id` が Q の id で、id が Q と違い、`created_at` が Q より後
+			- 宛先（`to_handle`）が `dispatch:<D>`（質問した本人が別の名で Run に送る追いの発言は数えない）
+			- 本文が Orca の自動の知らせでない（R-05）
+			返事済みなら A3 の材料にしない。頂点の理由に `question_answered`（「質問の印あり（返事済み）」）を足すが、対応が必要の段には入れない。
+			返事がなければ、今のとおり A3 とする（activity working の除外も今のとおり）。
+			やり取りを読めないときは、今のとおり Orca の印を信じる。読めないとは、読みの失敗、Run が見つからない、形が違う、やり取りの中に D の質問がない、のどれか。
 			"""
 		acceptance: [
-			"attention input の Dispatch の最新の質問に別の送り手の返事があると、90 秒を過ぎても対応が必要にならず、理由 question_answered が付く",
-			"返事のない最新の質問なら、今のとおり 90 秒で対応が必要（question）",
+			"attention input の Dispatch の最新の質問に、本人あての自動の知らせでない返事があると、90 秒を過ぎても対応が必要にならず、理由 question_answered が付く",
+			"返事が Orca の自動の知らせだけ、または本人が Run に送った追いの発言だけなら、今のとおり 90 秒で対応が必要（question）",
 			"やり取りを読めないときは、今のとおり対応が必要（question）",
 		]
 	}
@@ -44,17 +47,29 @@ requirements: {
 		acceptance: ["attention approval でも、その task に pending の門がなければ対応が必要にならない"]
 	}
 	"R-03": {
-		title: "読む量を抑え、既読にしない"
-		text:  "やり取りと門の一覧は、attention input か approval のある Dispatch のいる Run だけを読む（今の実データでは数個）。orchestration の読みの世代ごとに1回で、同じ世代では読み直さない。読みは `orchestration inbox --run`（Orca の reads の RPC）と `gate-list --run` だけで、`check` や `--ack` を使わない。拾うのは id・type・from_handle・to_handle・thread_id・created_at だけで、本文・件名・payload を拾わない。`orca-web.state/v1` には出さない。"
+		title: "読む量を抑え、既読にせず、本文を持たない"
+		text:  "やり取りと門の一覧は、attention input か approval のある Dispatch のいる Run だけを読む（今の実データでは数個）。orchestration の読みの世代ごとに1回で、同じ世代では読み直さない。読みは `orchestration inbox --run … --full`（Orca の reads の RPC。getInbox を返すだけで既読にしない。`--full` がないと thread_id・created_at・生の from_handle が出ない）と `gate-list --run` だけで、`check` や `--ack` を使わない。読んだ行から持つのは id・type・from_handle・to_handle・thread_id・created_at と、本文が自動の知らせかの真偽だけ。本文・件名・payload は持たず、`orca-web.state/v1` にも出さない。"
 		acceptance: [
-			"ReadOnlyOrcaCli が `orchestration inbox` を `--run`・`--limit`・`--json` だけで通し、ほかの引数（`--terminal` を含む）を拒む",
-			"拾った値に body・subject・payload がない",
+			"ReadOnlyOrcaCli が `orchestration inbox` を `--run`・`--limit`・`--full`・`--json` だけで通し、ほかの引数（`--terminal` を含む）を拒む",
+			"読みの結果の値に body・subject・payload がない",
 		]
 	}
 	"R-04": {
 		title: "対応のカードに返事済みを示す"
 		text:  "questions の各項目に `answered: true|false|null`（null は確かめられない）。返事済みの ask と解決済みの gate はカードに「返事済み」「門は解決済み」と添え、対応が必要の色にしない。"
 		acceptance: ["返事済みの ask のカードに「返事済み」が付く"]
+	}
+	"R-05": {
+		title: "Orca の自動の知らせを返事に数えない"
+		text: """
+			Orca v1.4.272 の同梱のコード（orcad-server.js）は、質問に答えがないまま次のような知らせを、本物の答えと同じ送り手（`run:<id>`）・件名・種類・thread_id で入れる。
+			- 統括が答えずに止まった
+			- 統括が読む前に質問が取り下げられた
+			- Run を統括する者がいない
+			- ペアの相手の質問が答えられない
+			本文がこれらの文（文の型）に当たるメッセージは、返事に数えない。本文が文字列でないメッセージも返事に数えない。
+			"""
+		acceptance: ["4つの文のどれかに当たる本文の返事だけでは返事済みにならない", "本文のない返事は返事済みにしない"]
 	}
 }
 
@@ -66,4 +81,7 @@ constraints: ["AGENTS.md の守ること（統括の連絡を既読にする読�
 decisions: [
 	"信憑性の高い事実に基づいた情報を表示に使う（利用者、2026-11-26、会話）",
 	"`orchestration inbox` は Orca の同梱のコードで access が reads（getInbox を返すだけ）で既読にしないことを確かめた（タスク担当、2026-11-26）",
+	"inbox は新しい順に返る（sequence の降順）。1,000 件の窓の中にある質問なら、その後の返事も窓の中にある（タスク担当、2026-11-26、読むだけで確かめた）",
+	"実データでは、返事のスレッドに、質問した構造化 Chat の作業者が別の名（structworker_…）で Run に送る追いの発言が入る。そのため宛先で返事を見分ける（タスク担当、2026-11-26）",
+	"本文は自動の知らせの見分けにだけその場で使う。spec review round-1 の P1・P2 への対応（タスク担当、2026-11-26）",
 ]
