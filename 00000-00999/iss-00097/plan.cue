@@ -3,7 +3,7 @@ package spec
 goal: "配下のどのメンバーに対応が必要かが、内訳の木とチームの帯のその節に出ることがテストと常駐の画面で確かめられている。"
 
 steps: {
-	"S-01": {title: "印の決め方と、木と帯の表示（D-01、D-02）", text: "対象：新しい `web/apexes-attention-view.js`（STATIC_FILES）、`web/apexes-live-view.js`・`apexes-team-view.js`・`apexes-dom.js`・`apexes-team-dom.js`・`style.css`・`apexes.js`、テスト、README・AGENTS.md の該当の文。questions の answered（iss-00098）はなければ null として扱う。確かめ：T-01〜T-04。完了：lint・test・build。実装担当の最後の手順", realizes: ["R-01", "R-02"], session: "impl"}
+	"S-01": {status: "done", title: "印の決め方と、木と帯の表示（D-01、D-02）", text: "対象：新しい `web/apexes-attention-view.js`（STATIC_FILES）、`web/apexes-live-view.js`・`apexes-team-view.js`・`apexes-dom.js`・`apexes-team-dom.js`・`style.css`・`apexes.js`、テスト、README・AGENTS.md の該当の文。questions の answered（iss-00098）はなければ null として扱う。確かめ：T-01〜T-04。完了：lint・test・build。実装担当の最後の手順", realizes: ["R-01", "R-02"], session: "impl"}
 }
 
 tests: {
