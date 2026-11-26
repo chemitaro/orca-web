@@ -3,6 +3,7 @@
 // 終了コード：設定の誤りは 2、127.0.0.1 で待ち受けられないときは 1（launchd が起動し直す）、SIGTERM と SIGINT では 0。
 import { createMailReader } from '../orca/read-mail.ts';
 import { createStateReader } from '../orca/read-state.ts';
+import { createThreadReader } from '../orca/read-threads.ts';
 import { createTranscriptReader } from '../orca/read-transcript.ts';
 import { createSendAdapter } from '../orca/send.ts';
 import { wireOrca } from '../orca/wiring.ts';
@@ -31,6 +32,7 @@ const orca = wireOrca({ executable: config.orcaBin });
 const poller = new StatePoller({
   reader: createStateReader(orca.readCli, orca.readRpc),
   mailReader: createMailReader(orca.readCli),
+  threadReader: createThreadReader(orca.readCli),
   capabilities: () => orca.capabilities.get(),
 });
 const transcriptReader = createTranscriptReader({

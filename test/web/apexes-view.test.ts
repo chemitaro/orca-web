@@ -448,3 +448,10 @@ test('iss-00091 T-04: 理由 question_working の言葉は「質問あり（作�
   const { REASON_LABELS } = await import('../../web/apexes-view.js');
   assert.equal((REASON_LABELS as Record<string, unknown>).question_working, '質問あり（作業は継続中）');
 });
+
+test('iss-00098 T-06: 理由 question_answered・decision_resolved の言葉', async () => {
+  const { REASON_LABELS } = await import('../../web/apexes-view.js');
+  const labels = REASON_LABELS as Record<string, unknown>;
+  assert.equal(labels.question_answered, '質問の印あり（返事済み）');
+  assert.equal(labels.decision_resolved, '判断の印あり（門は解決済み）');
+});

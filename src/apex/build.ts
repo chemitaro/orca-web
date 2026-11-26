@@ -43,6 +43,8 @@ const REASONS: readonly ApexReason[] = [
   'question',
   'decision',
   'question_working',
+  'question_answered',
+  'decision_resolved',
   'stalled',
   'apex_closed',
   'failed',
@@ -79,6 +81,8 @@ const FRESH_ONLY: ReadonlySet<ApexReason> = new Set([
   'question',
   'decision',
   'question_working',
+  'question_answered',
+  'decision_resolved',
   'stalled',
   'apex_closed',
   'failed',
@@ -87,6 +91,23 @@ const FRESH_ONLY: ReadonlySet<ApexReason> = new Set([
 /** 作業者が作業を続けている（`projection.stage.activity` が working）。読めない・知らない値は続けていないとみなす（iss-00091 F-01）。 */
 function keepsWorking(worker: { activity: string | null } | undefined): boolean {
   return worker?.activity === 'working';
+}
+
+/**
+ * ask の最新の質問が、やり取りの事実で返事済みか（iss-00098 R-01）。null は確かめられない（Orca の印を信じる）。
+ * 読みの失敗・Run の読みがない・やり取りにその Dispatch の質問がない、のどれも null。
+ */
+function askAnswered(worker: WorkerState, extras: OrchestrationExtras): boolean | null {
+  const threads = worker.runId === null ? undefined : extras.threads.get(worker.runId);
+  if (!threads?.ok) return null;
+  return threads.questions.get(worker.dispatchId)?.answered ?? null;
+}
+
+/** gate の task に pending の門がない（解決済み）か（iss-00098 R-02）。null は確かめられない。 */
+function gateResolved(worker: WorkerState, extras: OrchestrationExtras): boolean | null {
+  const gates = worker.runId === null ? undefined : extras.gates.get(worker.runId);
+  if (!gates?.ok || worker.taskId === null) return null;
+  return !gates.pendingTasks.has(worker.taskId);
 }
 
 /** 親は「parentPaneKey に一致する、自分でない今あるエージェントがちょうど1つ」のときだけ。 */
@@ -216,13 +237,20 @@ function judgeWork(apex: AgentState, members: readonly AgentState[], work: Work,
     else found.add(reason);
   };
   // A3 問い：ask は頂点が動いていない、gate は頂点が monitoring を除く working でない。
+  // やり取りで返事済みの ask と、門の一覧で解決済みの gate は材料にせず、question_answered・decision_resolved で示す（iss-00098）。
   // 作業を続けている作業者の問いは材料にせず、question_working で示す（iss-00091。A4・A5 は元の asks・gates のまま）。
+  const answered = asks.filter((worker) => askAnswered(worker, work.extras) === true);
+  const resolved = gates.filter((worker) => gateResolved(worker, work.extras) === true);
+  if (answered.length > 0) found.add('question_answered');
+  if (resolved.length > 0) found.add('decision_resolved');
+  const openAsks = asks.filter((worker) => !answered.includes(worker));
+  const openGates = gates.filter((worker) => !resolved.includes(worker));
   const continuing = (worker: WorkerState) => keepsWorking(work.extras.workers.get(worker.dispatchId));
-  if ([...asks, ...gates].some(continuing)) found.add('question_working');
+  if ([...openAsks, ...openGates].some(continuing)) found.add('question_working');
   const busy = apexMoving && agentWorkingMode(apex) !== 'monitoring';
   for (const [list, reason, blocked] of [
-    [asks.filter((worker) => !continuing(worker)), 'question', apexMoving],
-    [gates.filter((worker) => !continuing(worker)), 'decision', busy],
+    [openAsks.filter((worker) => !continuing(worker)), 'question', apexMoving],
+    [openGates.filter((worker) => !continuing(worker)), 'decision', busy],
   ] as const) {
     if (blocked) continue;
     for (const worker of list) {
@@ -305,6 +333,7 @@ function questionsOf(
         taskTitle: title === null ? null : title.slice(0, OBJECTIVE_MAX),
         kind,
         working: keepsWorking(extra),
+        answered: kind === 'ask' ? askAnswered(worker, extras) : gateResolved(worker, extras),
       });
     }
   }

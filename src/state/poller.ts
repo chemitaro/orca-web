@@ -1,7 +1,12 @@
 // 共有のポーリング。Orca を読むのはここだけで、要求（/api/state）はキャッシュから正規化して返す。
 // 取得元を3つの組に分け、組ごとに間隔と次の時刻を持つ。見る人がいなければ間隔を遅くする。
 // 失敗しても、取得元ごとに最後に成功した値を残す。
-import { buildOrchestrationExtras, type OrchestrationExtras } from '../apex/extras.ts';
+import {
+  buildOrchestrationExtras,
+  type OrchestrationExtras,
+  type RunGatesExtra,
+  type RunThreadsExtra,
+} from '../apex/extras.ts';
 import type { InboxGate, InboxInputs, InboxMessage, MailSnapshot } from '../inbox/model.ts';
 import { selectMailRuns } from '../inbox/select-runs.ts';
 import type { CapabilityReport } from '../orca/capabilities.ts';
@@ -18,6 +23,7 @@ import type {
   StateReader,
 } from '../orca/read-state.ts';
 import { SOURCE_NAMES } from '../orca/read-state.ts';
+import type { ThreadReader } from '../orca/read-threads.ts';
 import type { Connection, StateDocument } from './model.ts';
 import {
   type NormalizeSources,
@@ -37,6 +43,8 @@ export const IDLE_INTERVALS: Intervals = { fast: 30_000, orchestration: 30_000, 
 export const VIEWER_WINDOW_MS = 60_000;
 const TICK_MS = 1_000;
 const CONCURRENCY = 4;
+/** やり取りと門の読み（iss-00098）の同時の数。 */
+const ATTENTION_CONCURRENCY = 2;
 const MAX_LAUNCH_READS_PER_CYCLE = 30;
 const MAX_LAUNCH_CACHE = 2_000;
 const SETTLED_TASK_STATES = new Set(['completed', 'failed', 'cancelled']);
@@ -64,6 +72,8 @@ export interface StateWithExtras {
 export interface StatePollerOptions {
   reader: StateReader;
   mailReader?: MailReader;
+  /** 頂点の一覧のための、Run のやり取りの読み（iss-00098）。なければ読まない（Orca の印を信じる）。 */
+  threadReader?: ThreadReader;
   /** 機能の確かめ（CapabilityCache.get など）。1回の読みの間に1回だけ呼ぶ。 */
   capabilities: () => Promise<CapabilityReport>;
   now?: () => number;
@@ -112,6 +122,10 @@ async function guard<T>(read: () => Promise<SourceRead<T>>): Promise<SourceRead<
 export class StatePoller {
   readonly #reader: StateReader;
   readonly #mailReader: MailReader | undefined;
+  readonly #threadReader: ThreadReader | undefined;
+  /** 最後の orchestration の読みの世代で読んだ、やり取りと門（iss-00098 D-02）。読むたびに置き換える。 */
+  #threads = new Map<string, RunThreadsExtra>();
+  #gates = new Map<string, RunGatesExtra>();
   #lastInboxViewerAt: number | null = null;
   readonly #runMail = new Map<string, { messages: InboxMessage[]; gates: InboxGate[] }>();
   #mail: MailSnapshot = {
@@ -148,6 +162,7 @@ export class StatePoller {
   constructor(options: StatePollerOptions) {
     this.#reader = options.reader;
     this.#mailReader = options.mailReader;
+    this.#threadReader = options.threadReader;
     this.#capabilities = options.capabilities;
     this.#now = options.now ?? Date.now;
     this.#active = options.activeIntervals ?? ACTIVE_INTERVALS;
@@ -211,6 +226,8 @@ export class StatePoller {
         runs: this.#sources.runs.data as OrcaRun[] | null,
         tasks: this.#sources.tasks.data as OrcaTask[] | null,
         workers: this.#sources.workers.data as OrcaWorker[] | null,
+        threads: this.#threads,
+        gates: this.#gates,
       }),
       generation: this.#generation,
     };
@@ -393,7 +410,42 @@ export class StatePoller {
     const [runs, workers] = await Promise.all([guard(() => this.#reader.runs()), guard(() => this.#reader.workers())]);
     this.#record('runs', at, runs);
     this.#record('workers', at, workers);
-    await Promise.all([this.#readTasks(at), this.#readLaunches(at)]);
+    await Promise.all([this.#readTasks(at), this.#readLaunches(at), this.#readAttention()]);
+  }
+
+  /**
+   * attention input の Dispatch のいる Run のやり取りと、approval の Dispatch のいる Run の門の一覧を読む（iss-00098 D-02）。
+   * orchestration の読みの世代ごとに1回。読めなければ ok 偽で持ち、判定は Orca の印を信じる。
+   */
+  async #readAttention(): Promise<void> {
+    const workers = (this.#sources.workers.data as OrcaWorker[] | null) ?? [];
+    const runsOf = (category: string) => [
+      ...new Set(
+        workers
+          .filter((w) => w.runId !== null && w.attentionCategories.includes(category))
+          .map((w) => w.runId as string),
+      ),
+    ];
+    const threadReader = this.#threadReader;
+    const mailReader = this.#mailReader;
+    const jobs: { kind: 'threads' | 'gates'; runId: string }[] = [
+      ...(threadReader ? runsOf('input').map((runId) => ({ kind: 'threads' as const, runId })) : []),
+      ...(mailReader ? runsOf('approval').map((runId) => ({ kind: 'gates' as const, runId })) : []),
+    ];
+    const threads = new Map<string, RunThreadsExtra>();
+    const gates = new Map<string, RunGatesExtra>();
+    await mapLimit(jobs, ATTENTION_CONCURRENCY, async ({ kind, runId }) => {
+      if (kind === 'threads' && threadReader) {
+        const r = await guard(() => threadReader.readThreads(runId));
+        threads.set(runId, r.ok ? { ok: true, questions: r.data.questions } : { ok: false, questions: new Map() });
+      } else if (kind === 'gates' && mailReader) {
+        const r = await guard(() => mailReader.readGates(runId));
+        const pending = r.ok ? r.data.filter((g) => g.status === 'pending' && g.taskId !== null) : [];
+        gates.set(runId, { ok: r.ok, pendingTasks: new Set(pending.map((g) => g.taskId as string)) });
+      }
+    });
+    this.#threads = threads;
+    this.#gates = gates;
   }
 
   async #readMail(at: number): Promise<void> {

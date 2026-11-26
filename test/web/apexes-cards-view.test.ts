@@ -140,3 +140,26 @@ test('iss-00091 T-04：working の質問のカードは「作業を続けなが�
     ],
   );
 });
+
+test('iss-00098 T-06：返事済みの ask のカードは「返事済み」、解決済みの gate は「門は解決済み」と添える', () => {
+  const cards = buildApexCards(
+    item({
+      reasons: ['question_answered', 'decision_resolved'],
+      questions: [
+        { dispatchId: 'd1', taskTitle: '調べる', kind: 'ask', working: false, answered: true },
+        { dispatchId: 'd2', taskTitle: '決める', kind: 'gate', working: true, answered: true },
+        { dispatchId: 'd3', taskTitle: '未回答', kind: 'ask', working: false, answered: false },
+        { dispatchId: 'd4', taskTitle: '不明', kind: 'ask', working: false, answered: null },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    cards.map((card) => [card.text, 'note' in card ? card.note : null]),
+    [
+      ['調べるの質問（ask）', '返事済み'],
+      ['決めるの判断（gate）', '門は解決済み'],
+      ['未回答の質問（ask）', null],
+      ['不明の質問（ask）', null],
+    ],
+  );
+});
