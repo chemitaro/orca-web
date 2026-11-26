@@ -1,23 +1,8 @@
 package spec
 
-// 設計（Issue）。型 specdock/v1。
-
-// 設計目標、今の状態と、この Issue の後の状態（任意）。
-// goals: ["..."]
-// current: "..."
-// target:  "..."
-
-// 設計の単位（責務、interface、data など）。番号（D-01、…）をキーにする。
-// title と satisfies（満たす要件・失敗の条件の番号）が必須。
-// standard 以上では、すべての要件に、それを満たす設計が要る。
 design: {
-	// "D-01": {
-	// 	title:     "〜の部品"
-	// 	text:      "責務と interface"
-	// 	satisfies: ["R-01"]
-	// }
+	"D-01": {title: "はみ出しの修正（`web/embed/agent.css`）", text: "`header`、`main`、`#send` に position: relative を足す（絶対配置の子の包む箱を巻きの箱にする）。", satisfies: ["R-01"]}
+	"D-02": {title: "head=compact（`web/embed/draft-receiver.js` の隣の判定、`agent-frame.js`、`agent.css`、`web/apexes-view.js`）", text: "判定 `isHeadCompact(params)`（`head` が `compact` のときだけ真。`isComposeOff` と同じ所に置く）。agent-frame は真なら `document.body.classList.add('head-compact')`。agent.css：`body.head-compact .title-row { display: none }`、`body.head-compact header { padding: 2px 12px }`。`frameSrc(id, {compose})` は `/embed/agent?id=…&head=compact` に、compose が偽なら `&compose=off` を続ける。", satisfies: ["R-02"]}
+	"D-03": {title: "詳細の切り替え（`web/apexes-view.js`・`apexes-dom.js`・`apexes.js`・`style.css`）", text: "純粋な関数 `paneExtrasToggle({ open, cards })` → `{ expanded, label: '詳細', badge: 畳んでいてカードが n>0 なら '対応 n' でなければ null, alert: 畳んでいて n>0 }`。純粋な関数 `initialExtrasOpen(compact)`（compact が真なら偽）。apexes.js は `extrasOpen`（null は未決め）を持ち、未決めなら `matchMedia('(max-width: 899.98px), (max-height: 700px)')` の matches から決める（例外なら開く）。renderPaneHead の options に `extras`（toggle の値）を足し、帯に `button.apex-extras-toggle`（data-action='extras'、aria-expanded、aria-controls='pane-extras'、文字は label と badge の span）を置く。チームの帯と対応のカードは `div#pane-extras.apex-pane-extras` に入れ、畳むときは hidden。押すと extrasOpen を反転して renderPane。描き直しでも同じ値を使う。", satisfies: ["R-03", "F-01"]}
+	"D-04": {title: "狭い幅の見出し（`web/style.css`）", text: "`@media (max-width: 899.98px)` で：`body.apexes-page.apexes--selected { padding: 0 }`、選んだときの `.apex-pane { height: 100dvh; border: 0; border-radius: 0 }`、`.apex-pane-bar { flex-wrap: nowrap; padding: 4px 8px }`、`.apex-pane-bar .apex-pane-title { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }`、`.apex-pane-open { margin-left: 0 }`。390px 以下の calc の高さの規則は 100dvh に合わせる。既存の『見出しの帯は折り返す』規則から `.apex-pane-bar` を外す。", satisfies: ["R-04"]}
 }
-
-// 移行・互換性、リスク（任意）。
-// compatibility: "..."
-// risks: ["..."]
