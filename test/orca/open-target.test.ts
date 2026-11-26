@@ -134,3 +134,28 @@ test('parseTabsSnapshot は worktree の食い違い、識別子の欠け、未�
   assert.equal(parseTabsSnapshot({ worktree: WT, tabs: [{ type: 'file' }] }, WT), null);
   assert.equal(parseTabsSnapshot({ worktree: WT, tabs: ['x'] }, WT), null);
 });
+
+const chat = (id: string, extra: Record<string, unknown> = {}) => ({
+  type: 'agent-session',
+  id,
+  isActive: false,
+  ...extra,
+});
+
+test('iss-00108 T-01：chat:<タブの id> の要求は、その構造化 Chat のタブを session.tabs.activate（leafId なし）で開く', () => {
+  const s = snap([term('a', '1', agent(9)), chat('agent-session:x'), chat('agent-session:y', { isActive: true })]);
+  assert.deepEqual(chooseTarget(s, 'chat:agent-session:x'), {
+    target: { route: 'tab-activate', tabId: 'agent-session:x', reason: 'requested-agent' },
+    requestedAgentFound: true,
+  });
+});
+
+test('iss-00108 T-01：chat: の要求のタブがなければ今の選び方で、見つからなかったことを返す。端末のタブの id とは当てない', () => {
+  const s = snap([term('a', '1', agent(9)), chat('agent-session:y')]);
+  const gone = chooseTarget(s, 'chat:agent-session:x');
+  assert.equal(gone.requestedAgentFound, false);
+  assert.equal(gone.target.reason, 'last-agent');
+  const sameId = chooseTarget(s, 'chat:a::1');
+  assert.equal(sameId.requestedAgentFound, false, '端末のタブは chat: の要求で選ばない');
+  assert.deepEqual(chooseTarget(s, 'a:1').target.reason, 'requested-agent', 'paneKey の要求は今のまま');
+});
