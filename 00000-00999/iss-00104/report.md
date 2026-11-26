@@ -24,3 +24,4 @@ ID: "iss-00104"
 - S-03（T-07）実物（試しの orca-web 8793、送信は無効、窓 607×975）：選んだとき見出しの帯 37px、会話の枠 938px（窓の 96%。前は会話が下の半分ほど）。詳細は畳んで始まり、ボタンは「詳細」と「対応 1」。押すと開いて aria-expanded true、フォーカスは新しいボタンに戻る。もう一度押すと畳む。高さ 200px の /embed/agent の文書は scrollHeight 200＝clientHeight（head=compact と単独の両方。前は 430）。単独では題名の行が今のまま出る。試しの orca-web は止めた。
 - 残りの危険：入力欄に長い文があるときや送る欄の帯があるとき、とても低い枠では header と送る欄が枠を超えうる（仕様レビューの P2。この Issue の外）。
 - 最終品質ゲート：合格（campaign iss-00104-fqg-1、f5fb5bb、レビュー P0〜P3 0、lint・test 1421・build 合格）。途中で Orca の再起動によりレビュアーが止まり、同じレビュアーを再開して結果を得た。
+- マージ：PR #105（2026-11-26、ed96d82、head f5fb5bb、CI OBSERVED_CI_PASS・READY）。本体の main を取り込み、常駐の orca-web が新しい画面（詳細の切り替え・head-compact）を配ることを確かめた。
