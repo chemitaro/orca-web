@@ -60,7 +60,27 @@ test('iss-00097 T-01：gate も同じで、対応が必要なら decision（「�
     { kind: 'decision', label: '対応が必要：判断', urgent: true },
   ]);
   assert.deepEqual(kinds(attentionFor(dispatchNode('g2'), table)), ['question_working']);
-  assert.deepEqual(kinds(attentionFor(dispatchNode('g3'), table)), ['question_answered']);
+  assert.deepEqual(kinds(attentionFor(dispatchNode('g3'), table)), ['decision_resolved']);
+});
+
+test('iss-00098：answered 真の ask は question_answered「質問の印あり（返事済み）」、gate は decision_resolved「判断の印あり（門は解決済み）」', () => {
+  const table = memberAttention(item([q('a1', 'ask', { answered: true }), q('g1', 'gate', { answered: true })]));
+  assert.deepEqual(attentionFor(dispatchNode('a1'), table), [
+    { kind: 'question_answered', label: '質問の印あり（返事済み）', urgent: false },
+  ]);
+  assert.deepEqual(attentionFor(dispatchNode('g1'), table), [
+    { kind: 'decision_resolved', label: '判断の印あり（門は解決済み）', urgent: false },
+  ]);
+  assert.equal(ATTENTION_LABELS.decision_resolved, '判断の印あり（門は解決済み）');
+});
+
+test('iss-00098：同じ Dispatch の decision と decision_resolved が重なれば decision だけ。控えめの並びは question_working・question_answered・decision_resolved', () => {
+  const overlap = memberAttention(item([q('d1', 'gate'), q('d1', 'gate', { answered: true })]));
+  assert.deepEqual(kinds(attentionFor(dispatchNode('d1'), overlap)), ['decision']);
+  const quiet = memberAttention(
+    item([q('d1', 'gate', { answered: true }), q('d1', 'ask', { answered: true }), q('d2', 'ask', { working: true })]),
+  );
+  assert.deepEqual(kinds(attentionFor(agentNode('x', 'd1'), quiet)), ['question_answered', 'decision_resolved']);
 });
 
 test('iss-00097 T-01：waitingMembers の blocked は「対応が必要：許可待ち」、waiting は「対応が必要：入力待ち」。知らない mark は印にしない', () => {
