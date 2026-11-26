@@ -119,3 +119,61 @@ test('iss-00080 T-04・T-05・F-01：カードの操作は枠の切り替えの�
   // メンバーは URL に出さない。
   assert.doesNotMatch(entry, /memberView[^\n]*selectionUrl|selectionUrl[^\n]*memberView/);
 });
+
+test('iss-00102 T-02：行の「Orca で開く」は板（createOpenBoard）を通し、見出しと同じ1つの送る口で /api/open に送る', () => {
+  const entry = read('apexes.js');
+  assert.match(entry, /const sendOpen = \(target\) => writer\.send\('\/api\/open', 'POST', target\);/);
+  assert.equal([...entry.matchAll(/writer\.send\(/g)].length, 1, '書き込みの口は1か所のまま');
+  assert.match(entry, /const rowOpenBoard = createOpenBoard\(\);/);
+  assert.match(entry, /onOpenMount: \(target, control\) => rowOpenBoard\.mount\(target\.agent, control\)/);
+  assert.match(entry, /rowOpenBoard\.open\(target\.agent, control, \(\) => sendOpen\(target\)\)/);
+  assert.match(
+    entry,
+    /renderSection\(document, section, \{ expanded: opened\.has\(section\.key\), \.\.\.rowOpenOptions \}\)/,
+  );
+  assert.match(entry, /runOpen\(openControl, \(\) => sendOpen\(target\)\)/, '見出しも同じ送る口');
+});
+
+/** media の塊の中の、選び手がちょうど selector の規則の中身。 */
+function ruleIn(block: string, selector: string): string {
+  const at = block.indexOf(`${selector} {`);
+  assert.ok(at >= 0, selector);
+  return block.slice(at, block.indexOf('}', at));
+}
+
+test('iss-00102 T-03：行の操作の箱は折り返し、390px 以下では行の Open を出さない', () => {
+  const css = withoutComments(readFileSync(new URL('../../web/style.css', import.meta.url), 'utf8'));
+  const actions = ruleIn(css, '.apexes-page .apex-actions');
+  assert.match(actions, /display: flex;/);
+  assert.match(actions, /flex-wrap: wrap;/);
+  assert.match(actions, /min-width: 0;/);
+  // 390px の塊は画面ごとにいくつかあるので、行の Open の規則を持つ塊を探す。
+  const tiny = css.split('@media (max-width: 390px) {').slice(1);
+  assert.ok(
+    tiny.some((block) =>
+      /\.apexes-page \.apex-actions \.orca-open \{\s*display: none;/.test(block.split('@media')[0] ?? ''),
+    ),
+  );
+});
+
+test('iss-00102 T-04：900px 以上はページを巻かず、一覧と右のペインがそれぞれの中で巻く', () => {
+  const css = withoutComments(readFileSync(new URL('../../web/style.css', import.meta.url), 'utf8'));
+  const wide = mediaBlock(css, '(min-width: 900px)');
+  const body = ruleIn(wide, 'body.apexes-page');
+  for (const decl of ['height: 100dvh;', 'overflow: hidden;', 'display: flex;', 'flex-direction: column;'])
+    assert.ok(body.includes(decl), `body: ${decl}`);
+  assert.match(ruleIn(wide, 'body.apexes-page > header'), /flex: none;/);
+  const layout = ruleIn(wide, '.apexes-page .apex-layout');
+  for (const decl of ['flex: 1 1 auto;', 'min-height: 0;', 'grid-template-rows: minmax(0, 1fr);'])
+    assert.ok(layout.includes(decl), `layout: ${decl}`);
+  const list = ruleIn(wide, '.apexes-page .apex-list');
+  for (const decl of ['overflow-y: auto;', 'overscroll-behavior: contain;', 'min-height: 0;'])
+    assert.ok(list.includes(decl), `list: ${decl}`);
+  const pane = ruleIn(wide, '.apexes-page .apex-pane');
+  assert.match(pane, /height: 100%;/);
+  assert.doesNotMatch(css, /position: sticky/, '右のペインを sticky にしない');
+  assert.doesNotMatch(wide, /100dvh - 32px/);
+  const head = ruleIn(wide, '.apexes-page .apex-pane-head');
+  assert.match(head, /overflow-y: auto;/);
+  assert.match(head, /max-height: 60%;/);
+});

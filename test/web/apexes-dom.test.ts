@@ -16,6 +16,7 @@ import {
   renderHeadline,
   renderMemberBand,
   renderPaneHead,
+  renderRow,
   renderSection,
   startApexPolling,
 } from '../../web/apexes-dom.js';
@@ -45,7 +46,9 @@ class FakeElement {
   target = '';
   open = false;
   type = '';
+  disabled = false;
   src = '';
+  readonly listeners: Record<string, ((event: unknown) => void)[]> = {};
   referrerPolicy = '';
   ownerDocument: unknown = null;
   parent: FakeElement | null = null;
@@ -77,11 +80,22 @@ class FakeElement {
     throw new Error('insertAdjacentHTML must not be used');
   }
 
-  /** 属性は SVG の要素と、HTML の要素の aria-label だけに付ける。 */
+  /** 属性は SVG の要素と、HTML の要素の aria-* と role（「Orca で開く」の部品）だけに付ける。 */
   setAttribute(name: string, value: string): void {
-    if (this.namespaceURI !== SVG_NS && name !== 'aria-label') throw new Error('setAttribute is not expected');
+    if (this.namespaceURI !== SVG_NS && !/^(aria-|role$)/.test(name)) throw new Error('setAttribute is not expected');
     if (name.toLowerCase().startsWith('on')) throw new Error(`event attribute ${name} must not be set`);
     this.attrs[name] = String(value);
+  }
+
+  addEventListener(type: string, fn: (event: unknown) => void): void {
+    this.listeners[type] ??= [];
+    this.listeners[type].push(fn);
+  }
+
+  click(): void {
+    // 親へ伝える（選ぶボタンが押されたかを確かめるため）。
+    for (let node: FakeElement | null = this; node; node = node.parent)
+      for (const fn of node.listeners.click ?? []) fn({});
   }
 
   append(...nodes: (FakeElement | string)[]): void {
@@ -977,4 +991,41 @@ test('iss-00098：attentionMarks は question_answered・decision_resolved を�
       ['判断の印あり（門は解決済み）', 'member-attention member-attention--quiet'],
     ],
   );
+});
+
+test('iss-00102 T-02：onOpen を渡すと、開く先のある頂点の行に「Orca で開く」が1つ、選ぶボタンの外に付く', () => {
+  const view = buildApexesView(dangerousView().doc, { now: NOW });
+  const opened: unknown[] = [];
+  const mounted: unknown[] = [];
+  const options = {
+    onOpen: (target: unknown, control: unknown) => opened.push([target, control]),
+    onOpenMount: (target: unknown, control: unknown) => mounted.push([target, control]),
+  };
+  // biome-ignore lint/suspicious/noExplicitAny: rows are untyped JS objects
+  const rows: any[] = view.sections.flatMap((s: { rows: unknown[] }) => s.rows);
+  const withOpen = rows.filter((r) => r.selectable && r.open);
+  assert.ok(withOpen.length > 0);
+  for (const row of rows) {
+    const li = renderRow(fakeDocument, row, options) as FakeElement;
+    const controls = li.all().filter((e) => e.className === 'orca-open');
+    if (!(row.selectable && row.open)) {
+      assert.equal(controls.length, 0, `${row.key} に開くボタンはない`);
+      continue;
+    }
+    assert.equal(controls.length, 1);
+    const control = controls[0] as FakeElement;
+    const select = li.all().find((e) => e.dataset.apex === row.key) as FakeElement;
+    assert.ok(!select.all().includes(control), '選ぶボタンの子ではない');
+    assert.equal(control.parent?.className, 'apex-actions');
+    const button = control.all().find((e) => e.tagName === 'BUTTON') as FakeElement;
+    const before = opened.length;
+    button.click();
+    assert.equal(opened.length, before + 1);
+    assert.deepEqual((opened.at(-1) as unknown[])[0], row.open);
+  }
+  assert.equal(mounted.length, withOpen.length, '作るたびに onOpenMount を呼ぶ');
+  const plain = view.sections.flatMap((s: unknown) => (renderSection(fakeDocument, s) as FakeElement).all());
+  assert.equal(plain.filter((e) => e.className === 'orca-open').length, 0, 'onOpen がなければ付けない');
+  const passed = view.sections.flatMap((s: unknown) => (renderSection(fakeDocument, s, options) as FakeElement).all());
+  assert.equal(passed.filter((e) => e.className === 'orca-open').length, withOpen.length, '段は options を行に渡す');
 });
