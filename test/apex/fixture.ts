@@ -1,5 +1,5 @@
 // 束のテストの仮の値。状態の文書の tasks・workers と、内部の値（extras）を一緒に作る。
-import type { OrchestrationExtras } from '../../src/apex/extras.ts';
+import { emptyExtras, type OrchestrationExtras } from '../../src/apex/extras.ts';
 import type { AgentState, TaskState, WorkerState } from '../../src/state/model.ts';
 import { agent, fact, task, worker } from '../inbox/fixture.ts';
 
@@ -37,7 +37,7 @@ export function orchestration(o: {
   tasks?: TaskSpec[];
   dispatches?: DispatchSpec[];
 }): Orchestration {
-  const extras: OrchestrationExtras = { runs: new Map(), tasks: new Map(), workers: new Map() };
+  const extras: OrchestrationExtras = emptyExtras();
   for (const [id, generation] of Object.entries(o.runs ?? {})) extras.runs.set(id, { generation });
   const tasks = (o.tasks ?? []).map((spec) => {
     extras.tasks.set(spec.id, { paneKey: spec.paneKey ?? null, generation: spec.generation ?? null });

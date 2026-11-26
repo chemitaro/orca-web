@@ -19,6 +19,10 @@ interface Case {
   stale?: ('tasks' | 'workers')[];
   memo?: ApexVerdictMemo | null;
   project?: string | null;
+  /** Run の id → やり取りの読み（iss-00098）。questions は Dispatch の id → answered。 */
+  threads?: Record<string, { ok: boolean; questions?: Record<string, boolean> }>;
+  /** Run の id → 門の読み（iss-00098）。pending は pending の門のある task の id。 */
+  gates?: Record<string, { ok: boolean; pending?: string[] }>;
 }
 
 const coordinator = (patch: Partial<AgentState> = {}) =>
@@ -28,6 +32,15 @@ function run(c: Case, o: Orchestration = orchestration(c)): ApexListDocument {
   const base = input({ agents: c.agents ?? [coordinator()], tasks: o.tasks, workers: o.workers, ...c.patch }).state;
   const sources = { ...base.sources };
   for (const name of c.stale ?? []) sources[name] = { ...sources[name], stale: true };
+  for (const [id, t] of Object.entries(c.threads ?? {})) {
+    const questions = Object.entries(t.questions ?? {}).map(
+      ([dispatchId, answered]) => [dispatchId, { latestId: `q-${dispatchId}`, latestAt: null, answered }] as const,
+    );
+    o.extras.threads.set(id, { ok: t.ok, questions: new Map(questions) });
+  }
+  for (const [id, g] of Object.entries(c.gates ?? {})) {
+    o.extras.gates.set(id, { ok: g.ok, pendingTasks: new Set(g.pending ?? []) });
+  }
   return buildApexList({
     state: { ...base, sources },
     now: NOW,
@@ -499,8 +512,102 @@ test('iss-00091 T-04: questions の各項目の working は activity から決�
     }),
   );
   assert.deepEqual(item.questions, [
-    { dispatchId: 'd1', taskTitle: '仮の題', kind: 'ask', working: true },
-    { dispatchId: 'd2', taskTitle: '仮の題2', kind: 'ask', working: false },
-    { dispatchId: 'd1', taskTitle: '仮の題', kind: 'gate', working: true },
+    { dispatchId: 'd1', taskTitle: '仮の題', kind: 'ask', working: true, answered: null },
+    { dispatchId: 'd2', taskTitle: '仮の題2', kind: 'ask', working: false, answered: null },
+    { dispatchId: 'd1', taskTitle: '仮の題', kind: 'gate', working: true, answered: null },
   ]);
+});
+
+// iss-00098：やり取りと門の一覧の事実で、A3 の ask・gate を確かめてから数える。
+test('iss-00098 T-03: input の Dispatch の最新の質問が返事済みなら、90 秒を過ぎても対応が必要にせず question_answered', () => {
+  const item = apex(run({ ...askCase(600), threads: { 'run-a': { ok: true, questions: { d1: true } } } }));
+  assert.notEqual(item.status, 'needs_action');
+  assert.ok(item.reasons.includes('question_answered'));
+  assert.ok(!item.reasons.includes('question'));
+  assert.deepEqual(
+    item.questions.map((q) => [q.kind, q.answered]),
+    [['ask', true]],
+  );
+});
+
+test('iss-00098 T-03: answered 偽・やり取りを読めない・その Dispatch の質問がない・読みがないなら、今のとおり question', () => {
+  for (const threads of [
+    { 'run-a': { ok: true, questions: { d1: false } } },
+    { 'run-a': { ok: false } },
+    { 'run-a': { ok: true, questions: { d9: true } } },
+    { 'run-b': { ok: true, questions: { d1: true } } },
+    undefined,
+  ]) {
+    const item = apex(run({ ...askCase(600), ...(threads ? { threads } : {}) }));
+    assert.equal(item.status, 'needs_action', JSON.stringify(threads));
+    assert.ok(item.reasons.includes('question'), JSON.stringify(threads));
+    assert.ok(!item.reasons.includes('question_answered'), JSON.stringify(threads));
+  }
+  const unread = apex(run({ ...askCase(600), threads: { 'run-a': { ok: false } } }));
+  assert.deepEqual(
+    unread.questions.map((q) => q.answered),
+    [null],
+  );
+  const no = apex(run({ ...askCase(600), threads: { 'run-a': { ok: true, questions: { d1: false } } } }));
+  assert.deepEqual(
+    no.questions.map((q) => q.answered),
+    [false],
+  );
+});
+
+test('iss-00098 T-03: 返事済みの ask は A4（止まった仕事）の数えでは今のとおり問いを待つ Dispatch として扱う', () => {
+  const item = apex(run({ ...askCase(600), threads: { 'run-a': { ok: true, questions: { d1: true } } } }));
+  assert.ok(!item.reasons.includes('stalled'));
+});
+
+test('iss-00098 T-04: approval の Dispatch の task に pending の門がなければ decision_resolved、あれば decision、読めなければ decision', () => {
+  const resolved = apex(run({ ...askCase(600, ['approval']), gates: { 'run-a': { ok: true, pending: ['t-other'] } } }));
+  assert.notEqual(resolved.status, 'needs_action');
+  assert.ok(resolved.reasons.includes('decision_resolved'));
+  assert.ok(!resolved.reasons.includes('decision'));
+  assert.deepEqual(
+    resolved.questions.map((q) => [q.kind, q.answered]),
+    [['gate', true]],
+  );
+  for (const gates of [{ 'run-a': { ok: true, pending: ['t-root'] } }, { 'run-a': { ok: false } }, undefined]) {
+    const item = apex(run({ ...askCase(600, ['approval']), ...(gates ? { gates } : {}) }));
+    assert.equal(item.status, 'needs_action', JSON.stringify(gates));
+    assert.ok(item.reasons.includes('decision'), JSON.stringify(gates));
+    assert.ok(!item.reasons.includes('decision_resolved'), JSON.stringify(gates));
+  }
+  const pending = apex(run({ ...askCase(600, ['approval']), gates: { 'run-a': { ok: true, pending: ['t-root'] } } }));
+  assert.deepEqual(
+    pending.questions.map((q) => q.answered),
+    [false],
+  );
+});
+
+test('iss-00098 T-03: 返事済みの ask と未回答の ask が並べば、question と question_answered の両方', () => {
+  const item = apex(
+    run({
+      tasks: [
+        { id: 't-root', paneKey: 'pane-c', createdAt: ago(600) },
+        { id: 't-2', paneKey: 'pane-c', createdAt: ago(600) },
+      ],
+      dispatches: [
+        { id: 'd1', task: 't-root', state: 'blocked', attention: ['input'] },
+        { id: 'd2', task: 't-2', state: 'blocked', attention: ['input'] },
+      ],
+      threads: { 'run-a': { ok: true, questions: { d1: true, d2: false } } },
+    }),
+  );
+  assert.equal(item.status, 'needs_action');
+  assert.deepEqual(
+    item.reasons.filter((r) => r.startsWith('question')),
+    ['question', 'question_answered'],
+  );
+});
+
+test('iss-00098 T-03: 鮮度が古い間も question_answered は memo から残る', () => {
+  const memo = new ApexVerdictMemo();
+  const threads = { 'run-a': { ok: true, questions: { d1: true } } };
+  assert.ok(apex(run({ ...askCase(600), threads, memo })).reasons.includes('question_answered'));
+  const item = apex(run({ ...askCase(600), stale: ['workers'], memo }));
+  assert.ok(item.reasons.includes('question_answered'));
+  assert.ok(!item.reasons.includes('question'));
 });

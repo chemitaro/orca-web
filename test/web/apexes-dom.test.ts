@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { buildApexList } from '../../src/apex/build.ts';
+import { attentionFor, memberAttention } from '../../web/apexes-attention-view.js';
 import { buildApexCards, buildDraftText, paneFrameTarget } from '../../web/apexes-cards-view.js';
 import {
+  attentionMarks,
   clearAgentFrame,
   createSeenStore,
   createSeenTracker,
@@ -956,4 +958,23 @@ test('iss-00097 T-04：内訳の木の、対応が必要の done の節は薄く
   assert.ok(at >= 0);
   assert.equal(classes[at + 1], 'member-attention member-attention--urgent');
   assert.equal(row.children[at + 1]?.textContent, '対応が必要：質問');
+});
+
+test('iss-00098：attentionMarks は question_answered・decision_resolved を控えめの印として文字だけで描く', () => {
+  const table = memberAttention({
+    questions: [
+      { dispatchId: 'a', kind: 'ask', working: false, answered: true },
+      { dispatchId: 'g', kind: 'gate', working: false, answered: true },
+    ],
+    waitingMembers: [],
+  });
+  const marks = ['a', 'g'].map((id) => attentionFor({ kind: 'dispatch', dispatchId: id }, table)[0]);
+  const nodes = attentionMarks(fakeDocument, marks) as FakeElement[];
+  assert.deepEqual(
+    nodes.map((node) => [node.textContent, node.className]),
+    [
+      ['質問の印あり（返事済み）', 'member-attention member-attention--quiet'],
+      ['判断の印あり（門は解決済み）', 'member-attention member-attention--quiet'],
+    ],
+  );
 });

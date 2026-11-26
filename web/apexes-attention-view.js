@@ -2,7 +2,7 @@
 // 頂点の文書（orca-web.apexes/v1）の questions と waitingMembers から、dispatchId と agentId で引く印の表を作る。
 // 稼働中の内訳の木（apexes-live-view.js）とチームの帯（apexes-team-view.js）が使う。DOM、時計、fetch に触らない。
 
-/** 印の言葉。urgent の印（対応が必要）と、控えめの印（作業を続けながらの問い・返事済みの問い）。 */
+/** 印の言葉。urgent の印（対応が必要）と、控えめの印（作業を続けながらの問い・返事済みの質問・解決済みの判断）。 */
 export const ATTENTION_LABELS = {
   question: '対応が必要：質問',
   decision: '対応が必要：判断',
@@ -10,11 +10,14 @@ export const ATTENTION_LABELS = {
   waiting: '対応が必要：入力待ち',
   question_working: '質問あり（作業は継続中）',
   question_answered: '質問の印あり（返事済み）',
+  decision_resolved: '判断の印あり（門は解決済み）',
 };
 
 /** 対応が必要の印の並び。控えめの印はこの後ろ。 */
 const URGENT_ORDER = ['question', 'decision', 'waiting'];
-const QUIET_ORDER = ['question_working', 'question_answered'];
+const QUIET_ORDER = ['question_working', 'question_answered', 'decision_resolved'];
+/** answered 真（iss-00098）の控えめの印。ask は返事済み、gate は門が解決済み。 */
+const SETTLED_OF_KIND = { ask: 'question_answered', gate: 'decision_resolved' };
 const URGENT_OF_KIND = { ask: 'question', gate: 'decision' };
 
 const list = (value) => (Array.isArray(value) ? value : []);
@@ -39,7 +42,8 @@ export function memberAttention(item) {
     const urgentKind = URGENT_OF_KIND[question?.kind];
     if (!dispatchId || !urgentKind) continue;
     // 控えめの印は、同じ種類の対応が必要の印と重なれば落とすため、元の種類（of）を持つ。
-    if (question.answered === true) add(byDispatch, dispatchId, { kind: 'question_answered', of: urgentKind });
+    if (question.answered === true)
+      add(byDispatch, dispatchId, { kind: SETTLED_OF_KIND[question.kind], of: urgentKind });
     else if (question.working === true) add(byDispatch, dispatchId, { kind: 'question_working', of: urgentKind });
     else add(byDispatch, dispatchId, { kind: urgentKind, of: urgentKind });
   }

@@ -153,3 +153,33 @@ test('check は peek だけを通し、既読や待機の指定を CLI を呼ば
   assert.ok((await cli.json(['orchestration', 'check', '--peek', '--terminal', 'run:r1', '--full'])).ok);
   assert.ok((await cli.json(['orchestration', 'gate-list', '--run', 'r1', '--full'])).ok);
 });
+
+test('iss-00098 T-01: inbox は --run・--limit・--full・--json だけを通し、ほかの引数を CLI を呼ばずに拒む', async () => {
+  const seen: string[][] = [];
+  const cli = new ReadOnlyOrcaCli(new OrcaCli(runnerReturning({ stdout: '{"ok":true,"result":{}}' }, seen)));
+  for (const invoke of [cli.json.bind(cli), cli.document.bind(cli)]) {
+    for (const args of [
+      ['orchestration', 'inbox'],
+      ['orchestration', 'inbox', '--limit', '10'],
+      ['orchestration', 'inbox', '--run', 'r1', '--terminal', 'run:r1'],
+      ['orchestration', 'inbox', '--run', 'r1', '--ack'],
+      ['orchestration', 'inbox', '--run', 'r1', '--unread'],
+      ['orchestration', 'inbox', '--run', 'r1', '--limit'],
+      ['orchestration', 'inbox', '--run', '--full'],
+      ['orchestration', 'inbox', '--run', 'r1', '--run', 'r2'],
+      ['orchestration', 'inbox', '--run=r1'],
+      ['orchestration', 'inbox', '--run', 'r1', 'extra'],
+    ]) {
+      await assert.rejects(invoke(args), /not a read-only command|not allowed/, args.join(' '));
+    }
+  }
+  assert.equal(seen.length, 0);
+  assert.ok((await cli.json(['orchestration', 'inbox', '--run', 'r1', '--limit', '1000', '--full'])).ok);
+  assert.ok((await cli.json(['orchestration', 'inbox', '--run', 'r1'])).ok);
+  assert.deepEqual(seen, [
+    ['orchestration', 'inbox', '--run', 'r1', '--limit', '1000', '--full', '--json'],
+    ['orchestration', 'inbox', '--run', 'r1', '--json'],
+  ]);
+  assert.ok((await cli.json(['orchestration', 'check', '--peek', '--terminal', 'run:r1', '--full'])).ok);
+  await assert.rejects(cli.json(['orchestration', 'check', '--peek', '--ack']), /not allowed/);
+});

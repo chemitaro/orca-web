@@ -118,6 +118,7 @@ export const READ_COMMANDS: readonly (readonly string[])[] = [
   ['orchestration', 'run-list'],
   ['orchestration', 'check'],
   ['orchestration', 'gate-list'],
+  ['orchestration', 'inbox'],
   ['orchestration', 'task-list'],
   ['orchestration', 'worker-list'],
   ['orchestration', 'worker-show'],
@@ -130,6 +131,27 @@ function isReadCommand(args: readonly string[]): boolean {
   return READ_COMMANDS.some((cmd) => cmd.every((word, i) => args[i] === word) && !args[cmd.length]?.match(/^[a-z]/));
 }
 
+/**
+ * `orchestration inbox` に許す引数。`--run <id>` は必ず1回、`--limit <n>` は多くて1回、`--full`・`--json` だけ。
+ * inbox は Orca で access が reads の RPC（getInbox を返すだけで既読にしない）。宛先を選ぶ `--terminal` などは通さない。
+ */
+function inboxAllowed(rest: readonly string[]): boolean {
+  const seen = new Set<string>();
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i] as string;
+    if (seen.has(arg)) return false;
+    seen.add(arg);
+    if (arg === '--run' || arg === '--limit') {
+      const value = rest[i + 1];
+      if (value === undefined || value.startsWith('-')) return false;
+      i++;
+    } else if (arg !== '--full' && arg !== '--json') {
+      return false;
+    }
+  }
+  return seen.has('--run');
+}
+
 function refuse(args: readonly string[]): Error | null {
   if (!isReadCommand(args)) return new Error(`orca ${args.slice(0, 2).join(' ')} is not a read-only command`);
   if (args[0] === 'orchestration' && args[1] === 'check') {
@@ -137,6 +159,9 @@ function refuse(args: readonly string[]): Error | null {
     if (!args.includes('--peek') || args.some((a) => forbidden.some((f) => a === f || a.startsWith(`${f}=`)))) {
       return new Error('only non-consuming check --peek is allowed; other check modes are not allowed');
     }
+  }
+  if (args[0] === 'orchestration' && args[1] === 'inbox' && !inboxAllowed(args.slice(2))) {
+    return new Error('only inbox --run [--limit] [--full] is allowed; other inbox arguments are not allowed');
   }
   if (args.some((a) => FORBIDDEN_FLAGS.some((f) => a === f || a.startsWith(`${f}=`)))) {
     return new Error('connection-changing flags are not allowed');

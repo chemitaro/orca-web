@@ -17,6 +17,8 @@ export type ApexReason =
   | 'question'
   | 'decision'
   | 'question_working'
+  | 'question_answered'
+  | 'decision_resolved'
   | 'stalled'
   | 'apex_closed'
   | 'failed'
@@ -93,6 +95,11 @@ export interface ApexQuestion {
   kind: 'ask' | 'gate';
   /** 作業者が作業を続けながら出した問い（`projection.stage.activity` が working）。対応が必要の材料にしない（iss-00091）。 */
   working: boolean;
+  /**
+   * やり取りと門の一覧で確かめた結果（iss-00098）。ask は最新の質問が返事済みなら真、gate は task に pending の門がなければ真。
+   * null は確かめられない（読めない、やり取りにその Dispatch の質問がない）。
+   */
+  answered: boolean | null;
 }
 
 export interface ApexItem {
