@@ -24,3 +24,4 @@ ID: "iss-00108"
 - S-02（T-03）実物（試しの orca-web 8793、このリポジトリの worktree の構造化 Chat の頂点）：クライアントの Chrome からの /api/open は 200・device client・tab-activate・requested-agent・requestedAgentFound 真（変更前の常駐では last-tab・偽）。ホスト（127.0.0.1）からは device host・requested-agent・真・raised 真で、ホストの Orca の画面の写しでその会話が前に出ていた。クライアントの画面は利用者に確かめてもらう。試しの orca-web は止めた。
 - 利用者の言う JavaScript のエラーの画面は再現できず、エラーの文と出したアプリを利用者に確かめる（Orca 1.4.277 の open-url は中身のない orca:// を扱わずアプリを前に出すだけ）。
 - 最終品質ゲート：合格（campaign iss-00108-fqg-1、50749c2、P0〜P2 0・P3 1（注釈の古い意味、情報のみ）、lint・test 1426・build 合格）
+- マージ：PR #109（2026-11-26、CI OBSERVED_CI_PASS・READY、head 50749c2）。本体の main を取り込んだ。常駐の orca-web の入れ替え（npm run service:restart）は AGENTS.md により利用者に頼んだ。
