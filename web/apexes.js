@@ -4,6 +4,8 @@
 // 頂点の行を押すと、右のペインに見出しと /embed/agent の枠を出し、?apex= で覚える（履歴は増やさない。iss-00077）。
 // 選びの移り変わりは apexes-view.js の reduceSelection、枠の作り直しと切り替えの確かめは apexes-dom.js。
 // 幅 900px 以上は2ペイン、狭い幅は1列で、選ぶと会話だけを出し「← 一覧」で戻る（CSS の apexes--selected）。
+// 詳細の切り替え（iss-00104）：チームの帯と対応のカードは見出しの「詳細」で出し入れする。狭い窓・低い窓では畳んで始める。
+// 枠は head=compact で作り、枠の中の題名と Open の行を隠す（見出しと重なるため）。
 // 行の「Orca で開く」（iss-00102）：開く先のある頂点の行ごとに共有の部品を置き、見出しと同じ1つの送る口で /api/open を呼ぶ。
 // 新着の点：選んだ頂点を 10 秒続けて出したら、見た時刻を localStorage に覚える（id と時刻だけ。使えなければ点を出さない）。
 // 対応が必要の知らせ（iss-00081）：favicon を印付きに替え、通知を許可したタブでは、隠れている間も 30 秒ごとに読み、
@@ -26,6 +28,7 @@ import {
   renderDraftNotice,
   renderHeadline,
   renderMemberBand,
+  renderPaneExtras,
   renderPaneHead,
   renderSection,
   startApexPolling,
@@ -40,7 +43,10 @@ import {
   apexFromSearch,
   buildApexesView,
   buildPane,
+  COMPACT_PANE_QUERY,
+  initialExtrasOpen,
   initialSelection,
+  paneExtrasToggle,
   pruneSeen,
   reduceSelection,
   SEEN_DWELL_MS,
@@ -84,6 +90,19 @@ let memberView = null;
 let draftResult = null;
 /** 今のカード（key ごと）。押したときに読む。 */
 let cardsByKey = new Map();
+/** 詳細（チームの帯と対応のカード）を開いているか。null は未決め（窓の条件で決める）。切り替えたらページの間は保つ。 */
+let extrasOpen = null;
+/** 今の詳細の開閉。未決めなら窓の条件（COMPACT_PANE_QUERY）で決め、読めなければ開く（iss-00104 F-01）。 */
+function currentExtrasOpen() {
+  if (extrasOpen === null) {
+    try {
+      extrasOpen = initialExtrasOpen(window.matchMedia(COMPACT_PANE_QUERY).matches);
+    } catch {
+      extrasOpen = true;
+    }
+  }
+  return extrasOpen;
+}
 /** 今の枠（作り直したら送り手に知らせる）。 */
 let mountedFrame = null;
 
@@ -177,13 +196,20 @@ function renderPane() {
   const cards = buildApexCards(pane.remember);
   cardsByKey = new Map(cards.map((card) => [card.key, card]));
   const target = paneFrameTarget(pane.header.id, memberView);
-  const parts = [
-    renderMemberBand(document, target.band),
-    team,
-    renderApexCards(document, cards),
-    renderDraftNotice(document, draftResult),
-  ].filter((part) => part !== null);
-  els.paneHead.replaceChildren(renderPaneHead(document, pane.header, { openRoot: openControl.root }), ...parts);
+  // 詳細（チームの帯と対応のカード）は切り替えで出し入れする。メンバーの帯と下書きの帯はいつも出す（iss-00104 D-03）。
+  const open = currentExtrasOpen();
+  const extras = renderPaneExtras(document, [team, renderApexCards(document, cards)], open);
+  const parts = [renderMemberBand(document, target.band), extras, renderDraftNotice(document, draftResult)].filter(
+    (part) => part !== null,
+  );
+  // 切り替えにフォーカスがあれば、描き直した後の新しいボタンへ戻す。
+  const refocus = els.paneHead.contains(document.activeElement) && document.activeElement?.dataset?.action === 'extras';
+  const toggle = extras ? paneExtrasToggle({ open, cards }) : null;
+  els.paneHead.replaceChildren(
+    renderPaneHead(document, pane.header, { openRoot: openControl.root, extras: toggle }),
+    ...parts,
+  );
+  if (refocus) /** @type {HTMLElement | null} */ (els.paneHead.querySelector('button[data-action="extras"]'))?.focus();
   noteFrame(mountAgentFrame(els.paneFrame, target.id, { compose: target.compose }));
 }
 
@@ -262,6 +288,14 @@ els.paneHead.addEventListener('click', (event) => {
   const button = /** @type {HTMLElement | null} */ (event.target)?.closest?.('button[data-action="back"]');
   if (!button) return;
   changeSelection({ type: 'clear' });
+});
+
+// 詳細の切り替え。開閉を反転して描き直す（頂点を替えても保つ）。
+els.paneHead.addEventListener('click', (event) => {
+  const button = /** @type {HTMLElement | null} */ (event.target)?.closest?.('button[data-action="extras"]');
+  if (!button) return;
+  extrasOpen = !currentExtrasOpen();
+  renderPane();
 });
 
 /** 右のペインの枠を頂点かメンバーに替える。枠の中に処理中か結果不明の表示があれば、先に確かめる。替えたら真。 */

@@ -203,6 +203,8 @@ a {
 
 /* 題名の行と、畳んだ詳細。 */
 header {
+  /* 絶対配置の子（.vh など）の包む箱をここにし、巻きの箱の外へはみ出して文書を伸ばさない（iss-00104 D-01）。 */
+  position: relative;
   flex: none;
   padding: 8px 12px;
   border-bottom: 1px solid var(--chat-border);
@@ -225,6 +227,15 @@ h1 {
   font-size: 15px;
   font-weight: 700;
   line-height: 1.4;
+}
+
+/* head=compact（指揮の画面の枠。iss-00104 D-02）：題名と Open の行を隠し、畳んだ詳細だけを出す。 */
+body.head-compact .title-row {
+  display: none;
+}
+
+body.head-compact header {
+  padding: 2px 12px;
 }
 
 /* 「Orca で開く」の置き場（題名の行の右端）。 */
@@ -312,6 +323,7 @@ dd .why {
 
 /* 会話。 */
 main {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -883,6 +895,7 @@ li.row.approval {
 
 /* 送る欄（D-05）。知らせの欄の下に、角の丸い入力の箱（入力欄と送るボタン）。幅 390px でも横にはみ出さない。 */
 #send {
+  position: relative;
   flex: none;
   min-width: 0;
   padding: 6px 12px 10px;

@@ -8,6 +8,7 @@ import {
   createDraftSender,
   DRAFT_MAX_LENGTH,
   isComposeOff,
+  isHeadCompact,
 } from '../../web/embed/draft-receiver.js';
 
 const SELF = 'http://127.0.0.1:8791';
@@ -324,4 +325,12 @@ test('T-01：送る欄を隠しても、承認のカードの手段は同じ sta
   });
   const part = { kind: 'approval', state: 'pending', answerable: true, prompt: { id: 'p' }, options: [] };
   assert.equal(approver.availability(part, status).ok, true);
+});
+
+test('iss-00104 T-02：isHeadCompact は head=compact のときだけ真。agent-frame は真なら body に head-compact を付ける', () => {
+  assert.equal(isHeadCompact(new URLSearchParams('id=a&head=compact')), true);
+  assert.equal(isHeadCompact(new URLSearchParams('id=a')), false);
+  assert.equal(isHeadCompact(new URLSearchParams('id=a&head=full')), false);
+  const frame = readFileSync(new URL('../../web/embed/agent-frame.js', import.meta.url), 'utf8');
+  assert.match(frame, /if \(isHeadCompact\(params\)\) document\.body\.classList\.add\('head-compact'\);/);
 });

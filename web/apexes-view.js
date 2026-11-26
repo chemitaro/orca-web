@@ -76,6 +76,25 @@ export const UNLINKED_LABELS = {
 export const APEX_PARAM = 'apex';
 /** これより広い幅で2ペインにし、?apex= なしに開いたときだけ対応が必要の先頭を選ぶ。 */
 export const WIDE_MIN_PX = 900;
+/** 右のペインの詳細（チームの帯と対応のカード）を畳んで始める窓（iss-00104 D-03）：幅 900px 未満か、高さ 700px 以下。 */
+export const COMPACT_PANE_QUERY = '(max-width: 899.98px), (max-height: 700px)';
+
+/** 詳細の始めの開閉。compact（COMPACT_PANE_QUERY に当たる）なら畳み、そうでなければ（読めないときも）開く。 */
+export function initialExtrasOpen(compact) {
+  return compact !== true;
+}
+
+/**
+ * 詳細の切り替えのボタンの表示。畳んでいて対応のカードが n > 0 なら「対応 n」を添え、対応が必要の色にする。
+ * @param {{ open: boolean, cards: unknown[] }} input
+ * @returns {{ expanded: boolean, label: string, badge: string | null, alert: boolean }}
+ */
+export function paneExtrasToggle({ open, cards }) {
+  const n = Array.isArray(cards) ? cards.length : 0;
+  const expanded = open === true;
+  const alert = !expanded && n > 0;
+  return { expanded, label: '詳細', badge: alert ? `対応 ${n}` : null, alert };
+}
 /** 枠の中に処理中か結果不明の表示があるときの、切り替えの前の確かめの文（D-04）。 */
 export const SWITCH_CONFIRM_TEXT = '送信の処理中か結果不明の表示があります。切り替えると表示を失います';
 export const PANE_GUIDE_TEXT = '一覧から頂点を選ぶと、ここに会話が出ます';
@@ -332,8 +351,10 @@ export function selectionUrl(currentSearch, id) {
 
 /** 右のペインの枠の src。 */
 export function frameSrc(id, { compose = true } = {}) {
+  // head=compact は枠の中の題名と Open の行を隠す（右のペインの見出しと重なるため。iss-00104 D-02）。
   // compose=off は送る欄を出さない答えるだけの枠（iss-00080 D-02）。
-  return compose ? detailHref(id) : `${detailHref(id)}&compose=off`;
+  const src = `${detailHref(id)}&head=compact`;
+  return compose ? src : `${src}&compose=off`;
 }
 
 /**

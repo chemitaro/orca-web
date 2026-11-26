@@ -15,6 +15,7 @@ import {
   renderDraftNotice,
   renderHeadline,
   renderMemberBand,
+  renderPaneExtras,
   renderPaneHead,
   renderRow,
   renderSection,
@@ -227,7 +228,7 @@ test('T-05：mountAgentFrame を別の id で3回呼ぶと iframe は1つで src
   const box = slot();
   const first = mountAgentFrame(box, 'a') as FakeElement;
   assert.equal(first.tagName, 'IFRAME');
-  assert.equal(first.src, '/embed/agent?id=a');
+  assert.equal(first.src, '/embed/agent?id=a&head=compact');
   assert.equal(first.referrerPolicy, 'same-origin');
   assert.ok(first.title.length > 0);
   const second = mountAgentFrame(box, 'b c') as FakeElement;
@@ -239,8 +240,8 @@ test('T-05：mountAgentFrame を別の id で3回呼ぶと iframe は1つで src
     ['IFRAME'],
   );
   assert.equal(box.children[0], third);
-  assert.equal(third.src, '/embed/agent?id=d');
-  assert.equal(second.src, '/embed/agent?id=b%20c', '外した枠の src は書き換えない');
+  assert.equal(third.src, '/embed/agent?id=d&head=compact');
+  assert.equal(second.src, '/embed/agent?id=b%20c&head=compact', '外した枠の src は書き換えない');
   assert.equal(mountAgentFrame(box, 'd'), third, '同じ id では作り直さない');
   clearAgentFrame(box, '案内');
   assert.deepEqual(
@@ -673,15 +674,15 @@ test('T-11: 札は理由の後に chip badge で描き、結べない束の行�
 test('iss-00080 T-04：compose が偽なら &compose=off の枠に作り直し、頂点に戻ると頂点の枠に作り直す', () => {
   const box = slot();
   const apex = mountAgentFrame(box, 'apex') as FakeElement;
-  assert.equal(apex.src, '/embed/agent?id=apex');
+  assert.equal(apex.src, '/embed/agent?id=apex&head=compact');
   const member = mountAgentFrame(box, 'm 1', { compose: false }) as FakeElement;
   assert.notEqual(member, apex);
-  assert.equal(member.src, '/embed/agent?id=m%201&compose=off');
+  assert.equal(member.src, '/embed/agent?id=m%201&head=compact&compose=off');
   assert.equal(mountAgentFrame(box, 'm 1', { compose: false }), member, '同じ id と compose では作り直さない');
   const back = mountAgentFrame(box, 'apex') as FakeElement;
   assert.notEqual(back, apex, '頂点に戻ると新しい枠');
-  assert.equal(back.src, '/embed/agent?id=apex');
-  assert.equal(member.src, '/embed/agent?id=m%201&compose=off', '外した枠の src は書き換えない');
+  assert.equal(back.src, '/embed/agent?id=apex&head=compact');
+  assert.equal(member.src, '/embed/agent?id=m%201&head=compact&compose=off', '外した枠の src は書き換えない');
   assert.deepEqual(
     box.children.map((c) => c.tagName),
     ['IFRAME'],
@@ -748,7 +749,11 @@ test('iss-00080 T-04：メンバーの枠の間の［頂点に伝える］は頂
   assert.deepEqual(posted, [], '前の枠の ready では送らない');
   sender.handleMessage({ origin: 'http://127.0.0.1:8791', source: apexWin, data: { type: 'orca-web:ready' } });
   assert.deepEqual(posted, [
-    { frame: '/embed/agent?id=apex', message: { type: 'orca-web:draft', text }, origin: 'http://127.0.0.1:8791' },
+    {
+      frame: '/embed/agent?id=apex&head=compact',
+      message: { type: 'orca-web:draft', text },
+      origin: 'http://127.0.0.1:8791',
+    },
   ]);
   sender.frameCreated(null);
 });
@@ -1028,4 +1033,34 @@ test('iss-00102 T-02：onOpen を渡すと、開く先のある頂点の行に�
   assert.equal(plain.filter((e) => e.className === 'orca-open').length, 0, 'onOpen がなければ付けない');
   const passed = view.sections.flatMap((s: unknown) => (renderSection(fakeDocument, s, options) as FakeElement).all());
   assert.equal(passed.filter((e) => e.className === 'orca-open').length, withOpen.length, '段は options を行に渡す');
+});
+
+test('iss-00104 T-05：見出しの詳細の切り替えは aria-expanded・aria-controls・data-action を持ち、詳細の欄は畳むと hidden', () => {
+  const header = { mark: 'working', markLabel: '作業中', monitoring: false, title: '題', missingLabel: null };
+  const closed = renderPaneHead(fakeDocument, header, {
+    extras: { expanded: false, label: '詳細', badge: '対応 1', alert: true },
+  }) as FakeElement;
+  const toggle = closed.all().find((e) => e.dataset.action === 'extras') as FakeElement;
+  assert.equal(toggle.tagName, 'BUTTON');
+  assert.equal(toggle.type, 'button');
+  assert.equal(toggle.attrs['aria-expanded'], 'false');
+  assert.equal(toggle.attrs['aria-controls'], 'pane-extras');
+  assert.match(toggle.className, /apex-extras-toggle--alert/);
+  assert.equal(toggle.textContent, '詳細対応 1');
+  const opened = renderPaneHead(fakeDocument, header, {
+    extras: { expanded: true, label: '詳細', badge: null, alert: false },
+  }) as FakeElement;
+  const shown = opened.all().find((e) => e.dataset.action === 'extras') as FakeElement;
+  assert.equal(shown.attrs['aria-expanded'], 'true');
+  assert.equal(shown.className, 'apex-extras-toggle');
+  const none = renderPaneHead(fakeDocument, header) as FakeElement;
+  assert.equal(none.all().filter((e) => e.dataset.action === 'extras').length, 0, 'extras がなければ置かない');
+
+  const team = fakeDocument.createElement('div');
+  const box = renderPaneExtras(fakeDocument, [team, null], false) as FakeElement & { id: string; hidden: boolean };
+  assert.equal(box.id, 'pane-extras');
+  assert.equal(box.hidden, true);
+  assert.deepEqual(box.children, [team]);
+  assert.equal((renderPaneExtras(fakeDocument, [team], true) as unknown as { hidden: boolean }).hidden, false);
+  assert.equal(renderPaneExtras(fakeDocument, [null, null], true), null, '中身がなければ欄を出さない');
 });
