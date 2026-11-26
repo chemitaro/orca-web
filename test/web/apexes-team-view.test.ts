@@ -36,6 +36,7 @@ type Row = {
   rows?: Row[];
   elapsed?: string | null;
   href?: string | null;
+  marks?: unknown;
 };
 type Band = { summary: string; rows: Row[]; history: { target: string; status: string }[] };
 
@@ -183,4 +184,37 @@ test('T-02: 120 節の束でも、出す行（まとめを含む）は上限を�
   assert.ok(band.rows.length <= TEAM_VISIBLE_MAX, `rows ${band.rows.length}`);
   assert.equal(band.history.length, 120);
   assert.equal(band.summary, 'チーム 120（作業中 3・待ち 0・完了 116・失敗 1）');
+});
+
+test('iss-00097 T-03：未回答の ask の done の節と許可待ちの節はいつも出す節に入り、祖先も出て、「完了 n」にまとめられない', () => {
+  const team = [
+    node('dispatch:p', { status: 'done' }),
+    node('dispatch:q', { status: 'done', parentKey: 'dispatch:p', depth: 2 }),
+    node('dispatch:r', { status: 'done', parentKey: 'dispatch:p', depth: 2 }),
+    node('agent:m', { status: 'done' }),
+    node('dispatch:s', { status: 'done' }),
+  ];
+  const band = buildTeamBand(
+    {
+      team,
+      questions: [
+        { dispatchId: 'q', taskTitle: null, kind: 'ask', working: false, answered: null },
+        { dispatchId: 's', taskTitle: null, kind: 'gate', working: true },
+      ],
+      waitingMembers: [{ id: 'm', title: null, mark: 'waiting' }],
+    },
+    NOW,
+  ) as Band;
+  assert.ok(band);
+  assert.deepEqual(keys(band.rows), ['dispatch:p', 'dispatch:q', 'done:dispatch:p(1)', 'agent:m', 'done:apex(1)']);
+  const q = band.rows.find((row) => row.key === 'dispatch:q');
+  assert.deepEqual(q?.marks, [{ kind: 'question', label: '対応が必要：質問', urgent: true }]);
+  assert.deepEqual(band.rows.find((row) => row.key === 'agent:m')?.marks, [
+    { kind: 'waiting', label: '対応が必要：入力待ち', urgent: true },
+  ]);
+  // 控えめの印だけの節はまとめの中に入り、印は持つ。
+  const group = band.rows.find((row) => row.key === 'done:apex') as Row & { rows: Row[] };
+  assert.deepEqual(group.rows[0]?.marks, [
+    { kind: 'question_working', label: '質問あり（作業は継続中）', urgent: false },
+  ]);
 });

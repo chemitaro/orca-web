@@ -39,6 +39,16 @@ export function newTabLink(doc, href, text, className) {
   return a;
 }
 
+/**
+ * 対応が必要の印の札（iss-00097 D-02）。状態の言葉の横に置く。対応が必要は urgent、控えめは quiet の class。
+ * チームの帯（apexes-team-dom.js）も使う。
+ */
+export function attentionMarks(doc, marks) {
+  return (Array.isArray(marks) ? marks : []).map((mark) =>
+    make(doc, 'span', mark.label, `member-attention member-attention--${mark.urgent ? 'urgent' : 'quiet'}`),
+  );
+}
+
 /** 稼働中の内訳の木（iss-00092 D-02）。選ぶボタンの中に置くので span だけで組む。字下げは --depth。 */
 export function renderLiveTeam(doc, live) {
   const box = make(doc, 'span', null, 'apex-live');
@@ -53,6 +63,7 @@ export function renderLiveTeam(doc, live) {
       kind,
       make(doc, 'span', row.title, 'apex-live-title'),
       make(doc, 'span', row.statusLabel, `apex-live-mark apex-live-mark--${row.status}`),
+      ...attentionMarks(doc, row.marks),
     );
     if (row.elapsed) node.append(make(doc, 'span', row.elapsed, 'apex-live-elapsed'));
     box.append(node);

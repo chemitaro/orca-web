@@ -5,6 +5,7 @@
 // 新着の点（D-06）：見た時刻の写し seen（{ [頂点の id]: ISO 時刻 }、保存が使えなければ null）から isUnseen で決め、
 // pruneSeen で古い記録を捨てる。見出しの数（D-09）は文書の counts ではなく、作った段の件数から出す。
 
+import { memberAttention } from './apexes-attention-view.js';
 import { buildLiveTeam } from './apexes-live-view.js';
 import { iconKey, STATE_ICONS } from './embed/agent-marks-icons.js';
 import { MARK_LABELS } from './embed/agent-marks-view.js';
@@ -192,8 +193,8 @@ function apexRow(item, now, selectedId = null, seen = null) {
     members: total > 0 ? `${num(counts.working)}/${total}` : null,
     membersLabel: total > 0 ? `配下 ${total} のうち ${num(counts.working)} が作業中` : null,
     elapsed: formatElapsed(item.lastActivityAt, now, { clampFuture: true }),
-    // 稼働中のメンバーの内訳の木（iss-00092）。稼働中がなければ null。
-    live: buildLiveTeam(item.team, { now, members: list(item.members) }),
+    // 稼働中のメンバーの内訳の木（iss-00092）。対応が必要の印（iss-00097）の節も出す。どちらもなければ null。
+    live: buildLiveTeam(item.team, { now, members: list(item.members), attention: memberAttention(item) }),
   };
 }
 

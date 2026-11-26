@@ -163,3 +163,33 @@ test('T-03: 開いた帯とまとめは描き直しても開いたまま。履�
   );
   assert.equal(revealTeamNode(second, 'dispatch:none'), null);
 });
+
+test('iss-00097 T-04：節の印は状態の言葉の横に textContent の札で描き、対応が必要は urgent、控えめは quiet の class', () => {
+  const team = [node('dispatch:q', {}), node('dispatch:w', { status: 'working' })];
+  const root = renderTeamBand(
+    fakeDocument,
+    buildTeamBand(
+      {
+        team,
+        questions: [
+          { dispatchId: 'q', taskTitle: DANGER, kind: 'ask', working: false },
+          { dispatchId: 'w', taskTitle: null, kind: 'ask', working: true },
+        ],
+        waitingMembers: [],
+      },
+      NOW,
+    ),
+  ) as FakeElement;
+  const allowed = new Set(['DETAILS', 'SUMMARY', 'DIV', 'UL', 'LI', 'SPAN', 'A', 'BUTTON']);
+  for (const el of root.all()) assert.ok(allowed.has(el.tagName), `unexpected ${el.tagName}`);
+  const q = root.all().find((el) => el.dataset.teamKey === 'dispatch:q');
+  assert.ok(q);
+  assert.deepEqual(
+    q.children.map((el) => el.className),
+    ['team-mark team-mark--done', 'member-attention member-attention--urgent', 'team-title', 'team-elapsed'],
+  );
+  assert.equal(q.children[1]?.textContent, '対応が必要：質問');
+  const w = root.all().find((el) => el.dataset.teamKey === 'dispatch:w');
+  assert.equal(w?.children[1]?.className, 'member-attention member-attention--quiet');
+  assert.equal(w?.children[1]?.textContent, '質問あり（作業は継続中）');
+});

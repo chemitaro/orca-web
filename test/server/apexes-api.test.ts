@@ -165,6 +165,7 @@ test('R-05: /apexes を index と同じ CSP で配り、部品の JS を配り�
       '/apexes-team-view.js',
       '/apexes-team-dom.js',
       '/apexes-live-view.js',
+      '/apexes-attention-view.js',
       '/apexes-cards-view.js',
       '/embed/draft-receiver.js',
     ]) {

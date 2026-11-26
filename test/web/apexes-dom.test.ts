@@ -912,3 +912,48 @@ test('iss-00092 T-03：上限を超えた木は「ほか n」を添える', () =
     ['ほか 4'],
   );
 });
+
+test('iss-00097 T-04：内訳の木の、対応が必要の done の節は薄くせず、印の札を textContent で状態の言葉の横に描く', () => {
+  const item = {
+    id: 'apex',
+    group: 'working',
+    mark: 'working',
+    reasons: [],
+    tags: [],
+    badges: [],
+    counts: {},
+    members: [],
+    team: [
+      {
+        key: 'dispatch:owner',
+        kind: 'dispatch',
+        agentId: null,
+        dispatchId: 'owner',
+        parentKey: null,
+        depth: 1,
+        title: SHORT_DANGER,
+        status: 'done',
+        createdAt: null,
+        completedAt: null,
+        stateStartedAt: null,
+      },
+    ],
+    questions: [{ dispatchId: 'owner', taskTitle: SHORT_DANGER, kind: 'ask', working: false }],
+    waitingMembers: [],
+  };
+  const view = buildApexesView({ items: [item], unlinked: [], counts: {}, stale: false, project: null }, { now: NOW });
+  const section = renderSection(
+    fakeDocument,
+    view.sections.find((s: { key: string }) => s.key === 'working'),
+  ) as FakeElement;
+  const nodes = section.all();
+  for (const tag of new Set(nodes.map((e) => e.tagName))) assert.ok(ALLOWED.has(tag), `unexpected element ${tag}`);
+  const row = nodes.find((e) => e.dataset.liveKey === 'dispatch:owner');
+  assert.ok(row);
+  assert.equal(row.className, 'apex-live-node');
+  const classes = row.children.map((e) => e.className);
+  const at = classes.indexOf('apex-live-mark apex-live-mark--done');
+  assert.ok(at >= 0);
+  assert.equal(classes[at + 1], 'member-attention member-attention--urgent');
+  assert.equal(row.children[at + 1]?.textContent, '対応が必要：質問');
+});

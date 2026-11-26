@@ -1,7 +1,7 @@
 // 指揮の画面の「チームの帯」（iss-00079 D-02）を DOM の要素にする。組み立ては apexes-team-view.js の buildTeamBand。
 // 文字はすべて textContent で入れ、HTML として解かない（innerHTML を使わない）。開閉は <details>。
 // 履歴の帯の四角は button（data-team-target）で、押すと revealTeamNode がまとめを開いてその節を返す。
-import { newTabLink } from './apexes-dom.js';
+import { attentionMarks, newTabLink } from './apexes-dom.js';
 
 /** 字下げの段の上限（それより深い節は同じ字下げ）。 */
 const DEPTH_MAX = 6;
@@ -20,7 +20,10 @@ function depthClass(depth) {
 function renderNode(doc, row) {
   const li = make(doc, 'li', null, `team-node ${depthClass(row.depth)}`);
   li.dataset.teamKey = row.key;
-  li.append(make(doc, 'span', row.statusLabel, `team-mark team-mark--${row.status}`));
+  li.append(
+    make(doc, 'span', row.statusLabel, `team-mark team-mark--${row.status}`),
+    ...attentionMarks(doc, row.marks),
+  );
   li.append(row.href ? newTabLink(doc, row.href, row.title, 'team-title') : make(doc, 'span', row.title, 'team-title'));
   if (row.elapsed) li.append(make(doc, 'span', row.elapsed, 'team-elapsed'));
   return li;
