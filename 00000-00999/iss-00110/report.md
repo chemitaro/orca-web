@@ -23,3 +23,4 @@ ID: "iss-00110"
 - S-01 はコミット 622ca4a。build の後の install --dry-run に ProcessType Interactive が ThrottleInterval の後に出る。
 - 最終品質ゲート：合格（campaign iss-00110-fqg-1、622ca4a、レビュー P0〜P3 0、lint・test 1426・build 合格）。
 - S-02 は利用者の install の後に行う。
+- マージ：PR #111（2026-11-27、CI OBSERVED_CI_PASS・READY、head 622ca4a）。本体の main を取り込んだ。入れ替え（npm run service:install）は利用者の許しを待つ。
