@@ -126,6 +126,8 @@ test('renderPlist は決めたキーと値だけを持ち、XML の特殊な文�
   <true/>
   <key>ThrottleInterval</key>
   <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Interactive</string>
   <key>StandardOutPath</key>
   <string>/home/u/Library/Logs/orca-web/service&apos;s.log</string>
   <key>StandardErrorPath</key>
