@@ -11,6 +11,11 @@ export const SERVICE_PATH_ENV = '/usr/bin:/bin:/usr/sbin:/sbin';
 export const LAUNCHCTL = '/bin/launchctl';
 export const TAILSCALE_APP = '/Applications/Tailscale.app/Contents/MacOS/Tailscale';
 const THROTTLE_SECONDS = 10;
+/**
+ * アプリと同じ優先度で動かす（iss-00110）。ProcessType がないと常駐とその子の Orca の CLI が低い優先度（PRI 20）で動き、
+ * Mac の負荷が高いときに Orca の読みが時間切れになって、指揮の画面の判定が古いまま残る。
+ */
+const PROCESS_TYPE = 'Interactive';
 const MIN_NODE_MAJOR = 24;
 const DEFAULT_WAIT_MS = 15_000;
 const POLL_MS = 250;
@@ -138,6 +143,8 @@ export function renderPlist(def: ServiceDefinition): string {
     '  <true/>',
     '  <key>ThrottleInterval</key>',
     `  <integer>${THROTTLE_SECONDS}</integer>`,
+    '  <key>ProcessType</key>',
+    str(PROCESS_TYPE, '  '),
     '  <key>StandardOutPath</key>',
     str(def.logPath, '  '),
     '  <key>StandardErrorPath</key>',
