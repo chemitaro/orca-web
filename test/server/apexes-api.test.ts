@@ -239,10 +239,10 @@ test('T-11: snapshotWithExtras があれば、内部の値で束を結び、対�
       assert.deepEqual(first.items[0]?.counts, { total: 2, working: 2, waiting: 0, done: 0 });
       const second = (await send()).json<ApexListDocument>();
       assert.deepEqual(second.items[0]?.counts, { total: 2, working: 2, waiting: 0, done: 0 }, 'タブが閉じた後も結ぶ');
-      assert.equal(second.items[0]?.status, 'needs_action');
+      assert.equal(second.items[0]?.status, 'working');
       assert.ok(second.items[0]?.reasons.includes('question'));
       const third = (await send()).json<ApexListDocument>();
-      assert.equal(third.items[0]?.status, 'needs_action', '鮮度が偽の間は memo の理由を使う');
+      assert.ok(third.items[0]?.reasons.includes('question'), '鮮度が偽の間は memo の理由を使う');
       assert.equal(plainReads, 0);
     },
   );

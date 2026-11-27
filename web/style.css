@@ -1014,6 +1014,12 @@ a {
     overscroll-behavior: contain;
   }
 
+  /* 列の間の縦の線（iss-00112 D-02）。gap の 16px は線の外、padding の 16px は線と中身の間。 */
+  body.apexes-page:not(.apexes--selected) .apex-column + .apex-column {
+    border-left: 1px solid var(--line);
+    padding-left: 16px;
+  }
+
   body.apexes-page:not(.apexes--selected) .apex-column > .stage:first-child {
     margin-top: 0;
   }

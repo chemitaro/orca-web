@@ -62,19 +62,19 @@ const askCase = (createdSecondsAgo: number, attention = ['input']): Case => ({
   dispatches: [{ id: 'd1', task: 't-root', state: 'blocked', attention }],
 });
 
-test('T-06: 未回答の ask の Dispatch と done の頂点で、89 秒は作業中（grace）、90 秒で needs_action（question）', () => {
+test('T-06: 未回答の ask の Dispatch と done の頂点で、89 秒は作業中（grace）、90 秒で question（配下の問いは作業中、iss-00112）', () => {
   const early = apex(run(askCase(89)));
   assert.equal(early.status, 'working');
   assert.ok(early.reasons.includes('grace'));
   const late = apex(run(askCase(90)));
-  assert.equal(late.status, 'needs_action');
+  assert.equal(late.status, 'working');
   assert.ok(late.reasons.includes('question'));
 });
 
 test('T-06: gate（approval）は頂点が monitoring でも 90 秒で decision。ask は monitoring の間は作業中', () => {
   const monitoring = { agents: [coordinator({ state: fact('working'), workingMode: fact('monitoring') })] };
   const gate = apex(run({ ...askCase(90, ['approval']), ...monitoring }));
-  assert.equal(gate.status, 'needs_action');
+  assert.equal(gate.status, 'working');
   assert.ok(gate.reasons.includes('decision'));
   const ask = apex(run({ ...askCase(90, ['input']), ...monitoring }));
   assert.equal(ask.status, 'working');
@@ -104,7 +104,7 @@ const liveCase = (patch: Partial<AgentState> = {}): Case => ({
 
 test('T-07: 生きた Dispatch があり誰も動いていない状態が 90 秒続くと stalled、89 秒は grace', () => {
   const late = apex(run(liveCase({ stateStartedAt: fact(ago(90)) })));
-  assert.equal(late.status, 'needs_action');
+  assert.equal(late.status, 'working');
   assert.ok(late.reasons.includes('stalled'));
   const early = apex(run(liveCase({ stateStartedAt: fact(ago(89)) })));
   assert.equal(early.status, 'working');
@@ -167,7 +167,8 @@ const failCase = (completedSecondsAgo: number | null, state = 'failed', apexStar
 
 test('T-08: 頂点の stateStartedAt より後の failed は 90 秒で failed、前の failed は当たらない', () => {
   const late = apex(run(failCase(90)));
-  assert.equal(late.status, 'needs_action');
+  // 新しい失敗は status を決めない。完了の段に残り、札で示す（iss-00112 T-03）。
+  assert.deepEqual([late.status, late.group], ['done', 'done_recent']);
   assert.ok(late.reasons.includes('failed'));
   const early = apex(run(failCase(89)));
   assert.equal(early.status, 'working');
@@ -211,23 +212,23 @@ test('T-09: tasks か workers が stale なら A3〜A6 を新しく判定しな�
   }
 });
 
-test('T-14: 鮮度が偽になった直後、A6・A3 で needs_action だった頂点は memo で needs_action のまま。F が真に戻ると新しく判定する', () => {
+test('T-14: 鮮度が偽になった直後、A6・A3 の理由は memo で残る（status は作業中、iss-00112）。F が真に戻ると新しく判定する', () => {
   const memo = new ApexVerdictMemo();
   const failed = failCase(600 - 1);
   failed.agents = [coordinator({ stateStartedAt: fact(ago(600)) })];
   assert.ok(apex(run({ ...failed, memo })).reasons.includes('failed'));
   const stale = apex(run({ ...askCase(10), stale: ['workers'], memo }));
-  assert.equal(stale.status, 'needs_action');
+  assert.equal(stale.status, 'working');
   assert.ok(stale.reasons.includes('failed'));
   const ask = apex(run({ ...askCase(600), memo }));
   assert.ok(ask.reasons.includes('question'));
   assert.ok(!ask.reasons.includes('failed'), 'F が真なら新しく判定する');
   const staleAgain = apex(run({ tasks: [{ id: 't-root', paneKey: 'pane-c' }], stale: ['tasks'], memo }));
-  assert.equal(staleAgain.status, 'needs_action');
+  assert.equal(staleAgain.status, 'working');
   assert.deepEqual(staleAgain.reasons, ['question']);
 });
 
-test('T-14: ?project=A の判定の後に F が偽になっても、B の頂点の memo が残り needs_action のまま', () => {
+test('T-14: ?project=A の判定の後に F が偽になっても、B の頂点の memo の理由が残る', () => {
   const memo = new ApexVerdictMemo();
   const two: Case = {
     agents: [coordinator({ worktreeId: 'wt-b' }), agent('other', { paneKey: 'pane-o', state: fact('done') })],
@@ -245,7 +246,7 @@ test('T-14: ?project=A の判定の後に F が偽になっても、B の頂点�
     ['other'],
   );
   const staleB = run({ ...two, project: 'repo-b', stale: ['tasks'] });
-  assert.equal(apex(staleB).status, 'needs_action');
+  assert.equal(apex(staleB).status, 'working');
   assert.ok(apex(staleB).reasons.includes('question'));
 });
 
@@ -449,11 +450,11 @@ test('iss-00091 T-02: input で activity working の Dispatch だけなら、90 
 test('iss-00091 T-02: activity done・読めない・知らない値の Dispatch は、今のとおり 90 秒で question・decision', () => {
   for (const activity of ['done', 'idle', null, 'novel']) {
     const ask = apex(run(workingAsk(['input'], activity, 'blocked')));
-    assert.equal(ask.status, 'needs_action', String(activity));
+    assert.equal(ask.status, 'working', String(activity));
     assert.ok(ask.reasons.includes('question'), String(activity));
     assert.ok(!ask.reasons.includes('question_working'), String(activity));
     const gate = apex(run(workingAsk(['approval'], activity, 'blocked')));
-    assert.equal(gate.status, 'needs_action', String(activity));
+    assert.equal(gate.status, 'working', String(activity));
     assert.ok(gate.reasons.includes('decision'), String(activity));
   }
 });
@@ -471,7 +472,7 @@ test('iss-00091 T-02: working と done の Dispatch が並ぶと、done の問�
       ],
     }),
   );
-  assert.equal(item.status, 'needs_action');
+  assert.equal(item.status, 'working');
   assert.deepEqual(item.reasons, ['question', 'question_working', 'live_work']);
 });
 
@@ -539,7 +540,7 @@ test('iss-00098 T-03: answered 偽・やり取りを読めない・その Dispat
     undefined,
   ]) {
     const item = apex(run({ ...askCase(600), ...(threads ? { threads } : {}) }));
-    assert.equal(item.status, 'needs_action', JSON.stringify(threads));
+    assert.equal(item.status, 'working', JSON.stringify(threads));
     assert.ok(item.reasons.includes('question'), JSON.stringify(threads));
     assert.ok(!item.reasons.includes('question_answered'), JSON.stringify(threads));
   }
@@ -571,7 +572,7 @@ test('iss-00098 T-04: approval の Dispatch の task に pending の門がなけ
   );
   for (const gates of [{ 'run-a': { ok: true, pending: ['t-root'] } }, { 'run-a': { ok: false } }, undefined]) {
     const item = apex(run({ ...askCase(600, ['approval']), ...(gates ? { gates } : {}) }));
-    assert.equal(item.status, 'needs_action', JSON.stringify(gates));
+    assert.equal(item.status, 'working', JSON.stringify(gates));
     assert.ok(item.reasons.includes('decision'), JSON.stringify(gates));
     assert.ok(!item.reasons.includes('decision_resolved'), JSON.stringify(gates));
   }
@@ -596,7 +597,7 @@ test('iss-00098 T-03: 返事済みの ask と未回答の ask が並べば、que
       threads: { 'run-a': { ok: true, questions: { d1: true, d2: false } } },
     }),
   );
-  assert.equal(item.status, 'needs_action');
+  assert.equal(item.status, 'working');
   assert.deepEqual(
     item.reasons.filter((r) => r.startsWith('question')),
     ['question', 'question_answered'],

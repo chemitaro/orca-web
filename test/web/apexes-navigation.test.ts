@@ -202,6 +202,15 @@ test('iss-00104 T-05：詳細はチームの帯と対応のカードを1つの�
   assert.match(entry, /querySelector\('button\[data-action="extras"\]'\)\)\?\.focus\(\)/);
 });
 
+test('iss-00112 T-04：900px 以上・選んでいないときだけ、2列目と3列目の左に縦の線を引き、線と中身の間を空ける', () => {
+  const css = withoutComments(readFileSync(new URL('../../web/style.css', import.meta.url), 'utf8'));
+  const wide = mediaBlock(css, '(min-width: 900px)');
+  const rule = ruleIn(wide, 'body.apexes-page:not(.apexes--selected) .apex-column + .apex-column');
+  assert.match(rule, /border-left: 1px solid var\(--line\);/);
+  assert.match(rule, /padding-left: 16px;/);
+  assert.ok(!css.replace(wide, '').includes('.apex-column + .apex-column'), '900px 以上の塊の外では引かない');
+});
+
 test('iss-00106 T-04：900px 以上・選んでいないときは3列で右のペインを隠し、列がそれぞれ巻く', () => {
   const css = withoutComments(readFileSync(new URL('../../web/style.css', import.meta.url), 'utf8'));
   const wide = mediaBlock(css, '(min-width: 900px)');
