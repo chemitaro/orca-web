@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>説明資料</title>
+<link rel="stylesheet" href="../../../design-system/ds.css">
+<!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
+<script type="text/markdown" id="ds-source">
+---
+title: 常駐の orca-web の優先度
+lead: 負荷が高いとき、低い優先度の常駐が Orca を読めず判定が古いまま残る問題を、LaunchAgent の ProcessType で直します。
+category: 説明資料
+audience: 本日チームに加わった新メンバー
+status: 下書き
+---
+
+## この資料で分かること
+
+:::summary
+- 判定のずれは判定の誤りでなく、読みの時間切れで古い値が残ったこと。
+- ProcessType Interactive で、常駐とその子の CLI をアプリと同じ優先度で動かすこと。
+:::
+</script>
+<script src="../../../design-system/ds.js"></script>
+</head>
+<body></body>
+</html>
