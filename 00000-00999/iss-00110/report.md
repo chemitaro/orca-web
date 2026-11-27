@@ -24,3 +24,10 @@ ID: "iss-00110"
 - 最終品質ゲート：合格（campaign iss-00110-fqg-1、622ca4a、レビュー P0〜P3 0、lint・test 1426・build 合格）。
 - S-02 は利用者の install の後に行う。
 - マージ：PR #111（2026-11-27、CI OBSERVED_CI_PASS・READY、head 622ca4a）。本体の main を取り込んだ。入れ替え（npm run service:install）は利用者の許しを待つ。
+
+## 入れ替えの後の確かめ（S-02・T-03、2026-11-27 03:05Z、利用者の許しを受けてタスク担当が npm run service:install を実行）
+
+- 登録の plist に ProcessType Interactive、launchd の spawn type は interactive (4)。常駐の pid の PRI は 31（タスク担当のシェルと同じ。前は 20）。
+- 確かめた時の負荷：load average 212〜224（前の 240〜270 より少し低いが、高い負荷のまま）。
+- 入れ替えの約1分後、/api/state の runs・tasks・workers・worktreePs がどれも 03:05Z に成功し、時間切れなし（前は workers が 01:54Z から時間切れを続けた）。/api/apexes は stale 偽。
+- 指先の頂点：questions は空（iss-00065 の質問の印は Orca の新しい読みで外れた）、group working、理由 members_working・live_work（対応が必要でない）。answered の値は、印が外れたため出ない。
