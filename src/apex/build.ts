@@ -57,18 +57,17 @@ const REASONS: readonly ApexReason[] = [
   'done',
   'sleeping',
 ];
-const NEEDS_ACTION: ReadonlySet<ApexReason> = new Set([
-  'apex_blocked',
-  'apex_waiting',
+/**
+ * 頂点を対応が必要にする理由は、頂点自身の待ちと、頂点の端末のタブが閉じたのに仕事が残ることだけ（iss-00112）。
+ * 配下の待ち・問い・止まった仕事は統括が扱うので作業中にし、新しい失敗は status を決めない（完了の札に残る）。
+ */
+const NEEDS_ACTION: ReadonlySet<ApexReason> = new Set(['apex_blocked', 'apex_waiting', 'apex_closed']);
+const WORKING: ReadonlySet<ApexReason> = new Set([
   'member_blocked',
   'member_waiting',
   'question',
   'decision',
   'stalled',
-  'apex_closed',
-  'failed',
-]);
-const WORKING: ReadonlySet<ApexReason> = new Set([
   'working',
   'monitoring',
   'members_working',

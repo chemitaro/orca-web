@@ -130,10 +130,11 @@ test('T-04: メンバーの猶予は 20 秒。stateStartedAt がなければす�
   const at = (ms: number | null) =>
     only([root, child('k', 'r', { state: fact('blocked'), stateStartedAt: fact(ms === null ? null : ago(ms)) })]);
   assert.deepEqual([at(19_000).status, at(19_000).reasons], ['working', ['member_grace']]);
-  assert.deepEqual([at(20_000).status, at(20_000).reasons], ['needs_action', ['member_blocked']]);
-  assert.deepEqual([at(null).status, at(null).reasons], ['needs_action', ['member_blocked']]);
+  // 配下の待ちは統括が扱う。頂点を対応が必要にせず作業中にする（iss-00112 R-01）。
+  assert.deepEqual([at(20_000).status, at(20_000).reasons], ['working', ['member_blocked']]);
+  assert.deepEqual([at(null).status, at(null).reasons], ['working', ['member_blocked']]);
   const waiting = only([root, child('k', 'r', { state: fact('waiting'), stateStartedAt: fact(ago(60_000)) })]);
-  assert.deepEqual([waiting.status, waiting.reasons], ['needs_action', ['member_waiting']]);
+  assert.deepEqual([waiting.status, waiting.reasons], ['working', ['member_waiting']]);
 });
 
 test('T-04: 復元待ちの端末のメンバーの blocked は数えず、構造化 Chat は terminal を問わない', () => {
@@ -152,7 +153,7 @@ test('T-04: 復元待ちの端末のメンバーの blocked は数えず、構�
       terminal: fact(null, 'no-source'),
     }),
   ]);
-  assert.deepEqual([chat.status, chat.reasons], ['needs_action', ['member_blocked']]);
+  assert.deepEqual([chat.status, chat.reasons], ['working', ['member_blocked']]);
 });
 
 test('T-05: state null・配下なし・プロセスのある頂点は working・unverified・段 unknown で done に数えない', () => {
@@ -361,4 +362,28 @@ test('配下の数は印ごとに数え、理由はすべてを決めた順で�
   ]);
   assert.deepEqual(item.counts, { total: 3, working: 1, waiting: 1, done: 1 });
   assert.deepEqual(item.reasons, ['member_waiting', 'working']);
+});
+
+test('iss-00112 T-01・T-02：対応が必要は頂点自身の待ちだけ。配下の待ちは作業中で、数にも段にも出ない', () => {
+  for (const state of ['blocked', 'waiting'] as const) {
+    const result = build([agent('r', { state: fact(state), stateStartedAt: fact(ago(HOUR)) })]);
+    assert.equal(result.items[0]?.status, 'needs_action', state);
+    assert.equal(result.items[0]?.group, 'needs_action', state);
+  }
+  const result = build([
+    agent('r', { state: fact('done') }),
+    child('k', 'r', { state: fact('blocked'), stateStartedAt: fact(ago(HOUR)) }),
+    child('g', 'k', { state: fact('waiting'), stateStartedAt: fact(ago(HOUR)) }),
+  ]);
+  const item = result.items[0] as ApexItem;
+  assert.deepEqual(
+    [item.status, item.group, item.reasons],
+    ['working', 'working', ['member_blocked', 'member_waiting']],
+  );
+  assert.equal(result.counts.needs_action, 0);
+  assert.deepEqual(
+    item.waitingMembers.map((member) => member.id),
+    ['k', 'g'],
+    '対応のカードの材料は今のまま',
+  );
 });
